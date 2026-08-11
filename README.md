@@ -1,6 +1,6 @@
 # RobotRacers 2026
 
-Robot velocista de seguimiento de línea, con dos ruedas motrices y turbina de succión. Este repositorio contiene la PCB, el firmware, las piezas mecánicas y las pruebas del proyecto.
+Robot velocista de seguimiento de línea, con dos ruedas y turbina de succión. Este repositorio contiene la PCB, el firmware, las piezas mecánicas y las pruebas del proyecto.
 
 ## Arquitectura actual
 
