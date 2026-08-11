@@ -2,15 +2,6 @@
 
 Robot velocista de seguimiento de línea, con dos ruedas y turbina de succión. Este repositorio contiene la PCB, el firmware, las piezas mecánicas y las pruebas del proyecto. (si no estan los archivos estan en producción xd)
 
-## Arquitectura actual
-
-```text
-LiPo 3S
-├── 2 × ProFast 12 V ── 2 × DRV8874 ──┐
-├── Buck 3,3 V ──────── ESP32-S3 ──────┤ control
-├── Buck 5 V ────────── XLINE 16 V2 ───┘ sensado
-└── Buck FAN_V ─────── turbina 1020 + MOSFET PWM
-```
 
 ## Componentes elegidos
 
