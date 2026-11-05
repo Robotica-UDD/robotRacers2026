@@ -37,5 +37,5 @@ DEF REFERENCE_TAG_1 Group { children [Pose { translation -1.05 0.75 9.9999999999
 DEF ROBOT RobotRacers { }
 DEF ARENA_SUPERVISOR Robot { name "arena_camera" controller "arena_camera" supervisor TRUE synchronization TRUE children [
   DEF OVERHEAD_CAMERA Camera { translation 0 0 2.6 rotation -.577350269 .577350269 .577350269 2.09439510239
-    name "overhead_camera" width 1280 height 960 fieldOfView .98 near .02 far 20 antiAliasing TRUE }
+    name "overhead_camera" width 1920 height 1440 fieldOfView .98 near .02 far 20 antiAliasing TRUE }
 ] }

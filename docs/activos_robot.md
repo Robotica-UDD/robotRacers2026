@@ -38,6 +38,10 @@ La batería, su montaje, la turbina 1020, el impulsor, el patín y los recorrido
 de cable se ilustran de manera dimensional y **no se consideran mediciones del
 robot ensamblado**. La batería visual mide 36 × 20 × 13 mm y se coloca elevada
 para dejar espacio sobre los componentes; no determina la masa de la física.
+El patín visual se sitúa delante, con su contacto en X=65 mm respecto al eje de
+las ruedas, para coincidir con el apoyo físico de la simulación. El disco está
+entre Z=0 y 2 mm. Su posición, lengüeta y fijación siguen siendo estimaciones;
+no certifican el montaje de un patín en la placa real.
 
 Los dos sensores Pololu #4401 se representan mirando al suelo. Son sensores de
 reflectancia, no sensores de distancia de largo alcance. La regleta delantera

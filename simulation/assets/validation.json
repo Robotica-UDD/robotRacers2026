@@ -33,9 +33,9 @@
   "failed": 0,
   "exported_geometry": {
     "body": {
-      "triangle_count": 32060,
+      "triangle_count": 32140,
       "minimum_twice_triangle_area_m2": 8.750000000001542e-10,
-      "sha256": "963fd5499be41ddc366ddafff79da1424178b52620e1a56e46d6682d94bb600f"
+      "sha256": "050943b524a99e21bff0e52d25d2799a538893f5ea7c0746313bf326a5c0cb33"
     },
     "wheel": {
       "triangle_count": 4840,

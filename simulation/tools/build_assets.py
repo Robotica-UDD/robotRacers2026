@@ -431,10 +431,16 @@ def additions(mesh):
     for k in range(10):
         y=(k-4.5)*.0008;mesh.tube([(.033,y,.010),(.042,y,.014),(.055,y,.010)],.00023,'black')
     mesh.end_part(kind='provisional custom sensor bar visual',channels=16,source='Pololu4415 is a dimensional/electrical reference only',not_actual_manufacturer_part=True,multiplexer='external on bar; model not identified')
-    mesh.start_part('Rear_skid_estimated')
-    mesh.box((-.039,0,.0040),(.028,.013,.002),'black')
-    mesh.cylinder((-.049,0,.0016),.0045,.0026,'white',segments=28)
-    mesh.end_part(kind='estimated low-friction support visual',not_measured=True,contact_centre_m=[-.049,0,.0003])
+    mesh.start_part('Front_skid_estimated')
+    # Provisional forward support, aligned to the physical support at base X=.065.
+    # Its attachment and height have not been measured on the assembled robot.
+    contact_x=.05185
+    mesh.box((contact_x-.010,0,.0040),(.028,.013,.002),'black')
+    mesh.cylinder((contact_x,0,.0026),.0018,.0012,'black',segments=20)
+    mesh.cylinder((contact_x,0,.0010),.0045,.0020,'white',segments=28)
+    mesh.end_part(kind='estimated low-friction support visual',not_measured=True,
+                  contact_centre_m=[contact_x,0,0],physical_base_contact_centre_m=[.065,0,0],
+                  mounting='provisional forward support; not measured assembled CAD')
 
 
 def wheel():
@@ -568,7 +574,7 @@ def main():
         'wheel_placement_in_body_frame_m':{'left':[AXLE_X,.095,AXLE_Z],'right':[AXLE_X,-.095,AXLE_Z]},
         'wheel_axis':[0,1,0],'wheel_radius_m':.0115,'wheel_width_m':.040,
         'body_translation_for_axle_origin_m':[.01315,0,0],
-        'marker_platform':{'generated_by':'supervisor/world, not body mesh','centre_in_body_frame_m':[-.040,0,.023],'size_m':.040},
+        'marker_platform':{'generated_by':'supervisor/world, not body mesh','centre_in_body_frame_m':[-.040,0,.023],'size_m':.040,'carrier_size_m':.052},
         'physical_colliders':'NONE: visual only; root simulator owns separate simplified collision geometry',
         'clearances':{'battery_bottom_m':.020,'maximum_PCB_component_top_m':max(d['bounds_m'][1][2]for d in body.parts.values()if d.get('kind')=='PCB component'),'wheel_inner_edges_y_m':[-.075,.075],'motor_case_inner_edge_abs_y_m':.033,'motor_case_bottom_m':.0065},
         'source_files':sources,

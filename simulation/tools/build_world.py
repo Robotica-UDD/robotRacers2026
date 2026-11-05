@@ -60,12 +60,12 @@ def generate():
     line_sensors='\n'.join(f'''DistanceSensor {{ translation .079 {(.028-i*.003733333):.8f} .0045 rotation 0 1 0 1.57079632679 name "line_reflectance_{i}" type "infra-red" lookupTable [0 1000 0,.01 500 .02,.03 0 .05] }}''' for i in range(16))
     proto=f'''#VRML_SIM R2025a utf8
 # Copyright Robotica UDD. MIT. Generated from RevQ; dynamics are provisional.
-PROTO RobotRacers [ field SFVec3f translation -.6 .55 0 field SFRotation rotation 0 0 1 -1.57079632679 field SFFloat bodyMass {p['mass_kg']-2*wheel_mass} field MFVec3f bodyInertia [{inertia},0 0 0] ] {{
+PROTO RobotRacers [ field SFVec3f translation -.6 .55 0 field SFRotation rotation 0 0 1 -1.57079632679 field SFFloat bodyMass {p['mass_kg']-2*wheel_mass} field MFVec3f bodyInertia [{inertia},0 0 0] field SFVec3f markerShift 0 0 0 ] {{
   Robot {{ translation IS translation rotation IS rotation name "RobotRacers" controller "robot_driver"
     contactMaterial "skid" synchronization TRUE
     children [
       Pose {{ translation .01315 0 0 children [ {body} ] }}
-      DEF ROBOT_MARKER Pose {{ children [{tag}] }}
+      DEF ROBOT_MARKER Pose {{ translation IS markerShift children [{tag}] }}
       LED {{ translation -.018 .039 .012 name "status_rgb" color [] children [ Shape {{ appearance PBRAppearance {{ baseColor .02 .15 .04 emissiveColor .01 .8 .1 metalness 0 roughness .5 }} geometry Sphere {{ radius .0016 subdivision 1 }} }} ] }}
       DistanceSensor {{ translation .052 .055 .005 rotation 0 1 0 1.57079632679 name "reflectance_left" type "infra-red" lookupTable [0 1000 0,.01 500 .02,.03 0 .05] numberOfRays 3 aperture .15 }}
       DistanceSensor {{ translation .052 -.055 .005 rotation 0 1 0 1.57079632679 name "reflectance_right" type "infra-red" lookupTable [0 1000 0,.01 500 .02,.03 0 .05] numberOfRays 3 aperture .15 }}
@@ -75,8 +75,8 @@ PROTO RobotRacers [ field SFVec3f translation -.6 .55 0 field SFRotation rotatio
     boundingObject Group {{ children [
       # Conservative envelope of PCB, motors, connectors, battery and sensor bar.
       # Its lower surface stays above the floor: only wheels and skid support weight.
-      Pose {{ translation .0214 0 .01965 children [Box {{ size .1235 .15 .0313 }}] }}
-      Pose {{ translation .065 0 .001 children [Box {{ size .008 .04 .002 }}] }}
+      Pose {{ translation .01515 0 .01965 children [Box {{ size .136 .15 .0313 }}] }}
+      Pose {{ translation .065 0 .001 children [Cylinder {{ radius .0045 height .002 subdivision 16 }}] }}
     ] }}
     physics Physics {{ density -1 mass IS bodyMass centerOfMass [{center}] inertiaMatrix IS bodyInertia }}
   }}
@@ -114,7 +114,7 @@ DEF FLOOR Solid {{ translation 0 0 -.025 children [Shape {{ appearance PBRAppear
 DEF ROBOT RobotRacers {{ }}
 DEF ARENA_SUPERVISOR Robot {{ name "arena_camera" controller "arena_camera" supervisor TRUE synchronization TRUE children [
   DEF OVERHEAD_CAMERA Camera {{ translation 0 0 2.6 rotation -.577350269 .577350269 .577350269 2.09439510239
-    name "overhead_camera" width 1280 height 960 fieldOfView .98 near .02 far 20 antiAliasing TRUE }}
+    name "overhead_camera" width 1920 height 1440 fieldOfView .98 near .02 far 20 antiAliasing TRUE }}
 ] }}
 '''
     (SIM/'webots/worlds/robotracers.wbt').write_text(world)

@@ -1,0 +1,165 @@
+{
+  "units": "m, kg, s",
+  "frame": "Robot base at drive axle; X forward, Y left, Z up",
+  "scope": "Bounds and configuration consistency only. Not measured assembled CAD, PCBA clearance certification or a calibrated digital twin.",
+  "source_sha256": {
+    "simulation/assets/robot/body.obj": "13773c205012ab6a911c12e781623cca0943d9011e054a60de4c8697beea66b0",
+    "simulation/assets/manifest.json": "6e5f9f63476bb9efa35fd5b684943adb37f0b489d2bf42c0e31a182b2882095a",
+    "simulation/config/robot.json": "ec9e0e5fae49599392d312b68e9654203886827f8681a1f9e6228fe632d6050f",
+    "simulation/tools/build_world.py": "6a647d5f02ffac4aa534c2fd2fbeaed3230c4f35267e21a09c075152db6a1a29"
+  },
+  "collision_boxes_from_generator_m": {
+    "main": [
+      [
+        -0.05285000000000001,
+        -0.075,
+        0.004
+      ],
+      [
+        0.08315,
+        0.075,
+        0.0353
+      ]
+    ],
+    "front_support": [
+      [
+        0.060500000000000005,
+        -0.0045,
+        0.0
+      ],
+      [
+        0.0695,
+        0.0045,
+        0.002
+      ]
+    ]
+  },
+  "visual_marker_carrier_bounds_m": [
+    [
+      -0.05285,
+      -0.026000000000000002,
+      0.0222
+    ],
+    [
+      -0.0008499999999999966,
+      0.026000000000000002,
+      0.0228
+    ]
+  ],
+  "marker_carrier_inside_main_box": true,
+  "visual_parts_not_fully_inside_main_box": [
+    "Front_skid_estimated"
+  ],
+  "body_visual_bounds_in_base_m": [
+    [
+      -0.02835,
+      -0.075,
+      0.0
+    ],
+    [
+      0.08315,
+      0.075,
+      0.035006002
+    ]
+  ],
+  "front_support_visual_bounds_in_base_m": [
+    [
+      0.041,
+      -0.0065,
+      0.0
+    ],
+    [
+      0.06949999999999999,
+      0.0065,
+      0.005
+    ]
+  ],
+  "front_support_contact_in_base_m": [
+    0.065,
+    0,
+    0
+  ],
+  "nominal_clearances_m": {
+    "wheel_inner_surface_to_PCB_edge": 0.009999999999999995,
+    "wheel_inner_surface_to_motor_case_outer_surface": 0.01,
+    "wheel_inner_surface_to_bracket_outer_surface": 0.009,
+    "battery_case_bottom_above_highest_PCB_component": 0.0034600000000000013,
+    "battery_case_bottom_above_motor_encoder_top": 0.0032499999999999994,
+    "marker_carrier_to_turbine_housing_longitudinal": 0.0019999999999999966,
+    "marker_carrier_to_battery_strap_lateral": 0.0024999999999999988,
+    "shaft_axial_engagement_in_wheel_mesh": 0.0,
+    "support_disc_outside_support_collider_longitudinal_each_side": 0.0
+  },
+  "PCB_parametric_bounds_overlap_candidates": [
+    {
+      "parts": [
+        "L11",
+        "C119"
+      ],
+      "axis_overlap_m": [
+        0.0008850380000000012,
+        0.0005711159999999965,
+        0.0014967499999999998
+      ],
+      "distance_lower_bound_m": 0.0,
+      "interpretation": "Bounds of parametric substitute meshes overlap; real-part interference not established."
+    },
+    {
+      "parts": [
+        "C210",
+        "L20"
+      ],
+      "axis_overlap_m": [
+        0.0001611160000000028,
+        0.0007450379999999965,
+        0.0014967499999999998
+      ],
+      "distance_lower_bound_m": 0.0,
+      "interpretation": "Bounds of parametric substitute meshes overlap; real-part interference not established."
+    },
+    {
+      "parts": [
+        "L20",
+        "C224"
+      ],
+      "axis_overlap_m": [
+        2.6000000000001716e-05,
+        0.0015059999999999935,
+        0.0006424999999999998
+      ],
+      "distance_lower_bound_m": 0.0,
+      "interpretation": "Bounds of parametric substitute meshes overlap; real-part interference not established."
+    }
+  ],
+  "estimates": {
+    "mass_kg": "estimated",
+    "wheel_mass_kg": "estimated per assembled wheel",
+    "body_center_of_mass_m": "estimated; body only, wheels separate",
+    "body_inertia_kg_m2": "estimated diagonal at 156g body mass; scales with body mass",
+    "track_width_m": "inferred from user outer width 230 mm minus wheel width 40 mm",
+    "friction": "estimated",
+    "skid_friction": "estimated",
+    "fan_force_n": "unmeasured; disabled"
+  },
+  "inertia_snapshot_kg_m2": [
+    0.00015,
+    0.00012,
+    0.00026
+  ],
+  "inertia_triangle_margins_kg_m2": [
+    0.00023,
+    0.00029,
+    1.0000000000000026e-05
+  ],
+  "inertia_positive_and_triangle_consistent": true,
+  "limitations": [
+    "Motor/support locations follow board coordinates; wheel track is inferred, not a mounting measurement.",
+    "Shaft meets wheel inner plane with no modelled insertion. Shaft extension, hub offset and attachment require assembled measurements.",
+    "Battery case clears electronics; battery leads intentionally terminate at the XT30 region. Cable routes are illustrative.",
+    "The main collision box fills cutouts and gaps conservatively; it is not a triangle-accurate collision mesh.",
+    "The support collider, tongue and disc are approximate; thin attachment geometry is not exactly covered by both collision boxes.",
+    "Marker carrier has no measured mounting legs; its actual support and sensor-bar mounting remain unspecified.",
+    "Parametric solder terminals and nominal component boxes can overlap despite a functional assembled board; bounds do not establish real interference.",
+    "Reflectance sensor poses and bar dimensions are provisional; visual lens positions are not a calibration of the simulated sensor origins."
+  ]
+}

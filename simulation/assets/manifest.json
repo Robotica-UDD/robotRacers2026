@@ -30,20 +30,20 @@
       "robot/body.wrl",
       "robot/body.inc.wbt"
     ],
-    "vertices": 96180,
-    "faces": 32060,
+    "vertices": 96420,
+    "faces": 32140,
     "geometry_stats": {
-      "input_polygons": 17398,
-      "triangulated_polygons": 14662,
+      "input_polygons": 17458,
+      "triangulated_polygons": 14682,
       "degenerate_triangles_dropped": 0,
       "crossed_quad_projections": 0,
       "crossed_quad_details": []
     },
     "bounds_m": [
       [
-        -0.0535,
+        -0.0415,
         -0.075,
-        0.0003
+        0.0
       ],
       [
         0.07,
@@ -5776,24 +5776,30 @@
           ]
         ]
       },
-      "Rear_skid_estimated": {
+      "Front_skid_estimated": {
         "first_vertex": 95808,
         "kind": "estimated low-friction support visual",
         "not_measured": true,
         "contact_centre_m": [
-          -0.049,
+          0.05185,
           0,
-          0.0003
+          0
         ],
-        "vertex_count": 372,
+        "physical_base_contact_centre_m": [
+          0.065,
+          0,
+          0
+        ],
+        "mounting": "provisional forward support; not measured assembled CAD",
+        "vertex_count": 612,
         "bounds_m": [
           [
-            -0.0535,
+            0.02785,
             -0.0065,
-            0.0003
+            0.0
           ],
           [
-            -0.025,
+            0.05635,
             0.0065,
             0.005
           ]
@@ -5903,7 +5909,8 @@
       0,
       0.023
     ],
-    "size_m": 0.04
+    "size_m": 0.04,
+    "carrier_size_m": 0.052
   },
   "physical_colliders": "NONE: visual only; root simulator owns separate simplified collision geometry",
   "clearances": {

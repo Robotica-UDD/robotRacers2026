@@ -66,7 +66,8 @@ int main() {
   auto *le=robot.getPositionSensor("left_encoder"), *re=robot.getPositionSensor("right_encoder");
   if(!left||!right||!le||!re) {std::cerr<<"Missing wheel devices\n";return 1;}
   webots::Motor *motors[]={left,right}; webots::PositionSensor *enc[]={le,re};
-  for(int i=0;i<2;i++){enc[i]->enable(2);motors[i]->setPosition(INFINITY);motors[i]->setVelocity(0);}
+  constexpr int driver_step_ms=10;
+  for(int i=0;i<2;i++){enc[i]->enable(driver_step_ms);motors[i]->setPosition(INFINITY);motors[i]->setVelocity(0);}
   auto *rgb=robot.getLED("status_rgb");
   webots::DistanceSensor *reflectance[]={robot.getDistanceSensor("reflectance_left"),robot.getDistanceSensor("reflectance_right")};
   for(auto *sensor:reflectance)if(sensor)sensor->enable(10);
@@ -89,7 +90,10 @@ int main() {
   double vision_stamp=0,command_stamp=0,applied_stamp=0,applied_latency=-1;
   std::uint64_t seq=0,last_seq=0; bool have_sequence=false;
   std::string mode="idle";
-  while(robot.step(2)!=-1) {
+  // The ODE world still advances at 2 ms. Commands, measured encoders and the
+  // zero-order-held DC motor torque update at the local controller's 100 Hz.
+  // Avoid 500 IPC round trips/s for a controller that only changes at 100 Hz.
+  while(robot.step(driver_step_ms)!=-1) {
     const double now=robot.getTime(), wall=monotonic();
     char packet[2048];ssize_t length;
     while((length=recv(sock,packet,sizeof(packet)-1,0))>0) {
@@ -109,7 +113,7 @@ int main() {
     if(wall-last_command>.25){drive.stop();mode="idle";have_sequence=false;}
     for(int i=0;i<2;i++) {
       const double a=enc[i]->getValue();
-      angular[i]=(a-previous_angle[i])/.002; previous_angle[i]=a;
+      angular[i]=(a-previous_angle[i])/(driver_step_ms/1000.); previous_angle[i]=a;
       drive.observe(i,a,now);
     }
     if(now-last_control>=.009999) {

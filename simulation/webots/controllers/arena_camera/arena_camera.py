@@ -10,7 +10,7 @@ runtime.mkdir(parents=True,exist_ok=True)
 physical=json.loads((Path(__file__).resolve().parents[3]/'config/robot.json').read_text())
 camera=robot.getDevice('overhead_camera');camera.enable(20)
 body=robot.getFromDef('ROBOT')
-marker=body.getFromProtoDef('ROBOT_MARKER')
+marker_shift=body.getField('markerShift')
 cam_node=robot.getFromDef('OVERHEAD_CAMERA')
 sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
 destination=('127.0.0.1',int(os.environ.get('ROBOTRACERS_TELEMETRY_PORT','9201')))
@@ -81,7 +81,7 @@ def configure(command):
             for k,p in enumerate([[x*scale-s,y*scale+s,.0006],[x*scale+s,y*scale+s,.0006],[x*scale+s,y*scale-s,.0006],[x*scale-s,y*scale-s,.0006]]):coords.setMFVec3f(k,p)
         cam_node.getField('translation').setSFVec3f([0,0,2.6*scale])
         # Resolution is fixed in Webots at world load; moving the camera and
-        # recalibrating preserves the native 1280 x 960 stream at every scale.
+        # recalibrating preserves the native 1920 x 1440 stream at every scale.
         calibration()
     mass=max(.05,min(.6,float(command.get('robot_mass_kg',.18))))
     # PROTO field updates also update the Physics node.
@@ -111,7 +111,7 @@ try:
                 fault=json.loads(fault_path.read_text()) if fault_path.exists() else {}
                 occluded=bool(fault.get('occluded',False))
                 if occluded!=diagnostics['occluded']:
-                    marker.getField('translation').setSFVec3f([0,0,-.15 if occluded else 0])
+                    marker_shift.setSFVec3f([0,0,-.15 if occluded else 0])
                 diagnostics.update(occluded=occluded,image_delay_ms=max(0,min(2000,float(fault.get('image_delay_ms',0)))))
                 path=runtime/'scene_command.json'
                 if path.exists():
