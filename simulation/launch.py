@@ -24,7 +24,8 @@ def available(port):
 def main():
     parser=argparse.ArgumentParser(description='RobotRacers — simulación local')
     parser.add_argument('--no-browser',action='store_true')
-    parser.add_argument('--visible-webots',action='store_true')
+    parser.add_argument('--visible-webots',action='store_true',
+        help='Abre la ventana de Webots y activa también su vista 3D local.')
     parser.add_argument('--debug-camera',action='store_true')
     args=parser.parse_args()
     RUNTIME.mkdir(exist_ok=True)
@@ -62,8 +63,8 @@ def main():
     try:
         for name,command in [
             ('service',[sys.executable,'-m','simulation.service']),
-            ('webots',[str(executable),'--batch','--stdout','--stderr','--mode=realtime','--no-rendering','--stream=w3d','--port=1234']
-             +([] if args.visible_webots else ['--minimize'])+[str(ROOT/'simulation/webots/worlds/robotracers.wbt')])]:
+            ('webots',[str(executable),'--batch','--stdout','--stderr','--mode=realtime','--stream=w3d','--port=1234']
+             +([] if args.visible_webots else ['--no-rendering','--minimize'])+[str(ROOT/'simulation/webots/worlds/robotracers.wbt')])]:
             log=open(RUNTIME/f'{name}.log','w');files.append(log)
             child=subprocess.Popen(command,cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT)
             children.append(child)

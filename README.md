@@ -14,6 +14,12 @@ Abre http://127.0.0.1:8000. Iniciar ejecuta A → B → C → D en el laberinto 
 Webots R2025a realiza la física y genera las imágenes. Python estima la posición desde esas imágenes y los encoders. El control C++ aplica par a las ruedas; el visor web muestra esa simulación. La posición verdadera solo se utiliza para evaluar errores.
 
 Para cerrar una sesión iniciada en Terminal, pulsa **Ctrl+C** en esa terminal.
+Para mostrar también la escena 3D en la ventana de Webots, inicia una sesión con
+`./simulation/run.command --visible-webots`. El modo habitual utiliza el visor
+web y desactiva la vista local de Webots para ahorrar recursos; por eso esa
+ventana puede indicar **No Rendering**, aunque la física y la cámara sigan
+activas. El modo visible activa ambas vistas y puede consumir más recursos.
+
 El lanzador cierra sus procesos de Webots y Python. Los registros están en
 `simulation/.runtime/`. Si el puerto 8000 está ocupado, cierra la sesión anterior
 antes de iniciar otra. Los requisitos de compilación y uso sin conexión se
