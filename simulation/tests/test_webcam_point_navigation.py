@@ -45,7 +45,7 @@ class FakeRobot:
         self.value = {"connected": True, "ready": True, "moving": False,
                       "navigation_active": False, "control_session": None,
                       "stop_reason": "idle", "boot_id": "boot-1",
-                      "velocity_control": True, "encoder_ready": True}
+                      "velocity_control": True, "encoder_ready": True, "max_velocity_mm_s": 100}
         self.starts = 0
         self.drives = []
         self.stops = 0
@@ -55,6 +55,7 @@ class FakeRobot:
         self.reject_resume = False
         self.resume_calls = []
         self.velocity_requirements = []
+        self.required_caps = []
 
     def state(self):
         with self.lock:
@@ -64,10 +65,13 @@ class FakeRobot:
         with self.lock:
             self.value.update(values)
 
-    def start_navigation(self, *, resume=False, require_velocity=False):
+    def start_navigation(self, *, resume=False, require_velocity=False, required_velocity_mm_s=100):
         with self.lock:
             self.resume_calls.append(resume)
             self.velocity_requirements.append(require_velocity)
+            self.required_caps.append(required_velocity_mm_s)
+            if required_velocity_mm_s > self.value.get("max_velocity_mm_s", 100):
+                raise NavigationError("Actualiza el firmware para usar esta velocidad.")
             if resume and self.reject_resume:
                 raise NavigationError("D48 detectado en el estado fresco antes de armar.", 423)
             self.starts += 1
@@ -242,7 +246,7 @@ def test_commands_are_bounded_physical_wheel_velocities(bearing):
 def test_speed_reduces_with_distance_and_angle_continuously():
     assert Navigation._wheel_commands("advancing", 0, .3, .3) == (100, 100)
     near = Navigation._wheel_commands("advancing", 0, .03, .3)
-    assert near == (60, 60)
+    assert near == (50, 50)
     assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-53, 53)
     assert Navigation._wheel_commands("turning", math.radians(10), .3, .3) == (-20, 20)
 
@@ -512,7 +516,8 @@ def test_routes_require_panel_header_and_bounded_exact_json(rig):
 
 @pytest.mark.parametrize("goal", [(.18, 0.), (0., .15), (0., -.15), (-.18, 0.),
                                   (-.14, .12), (-.14, -.12)])
-def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal):
+@pytest.mark.parametrize("profile", [(100, 32), (300, 100)])
+def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, profile):
     camera = FakeCamera()
     robot = ClosedLoopRobot(camera)
     nav = Navigation(camera, robot)
@@ -523,6 +528,8 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal):
     nav.SPEED_RISE_MM_S2 = 2400.
     nav.SPEED_FALL_MM_S2 = 3600.
     try:
+        robot.update(max_velocity_mm_s=300)
+        nav.set_speeds(*profile)
         calibrate(nav)
         selected = target(nav, 640 + goal[0] * 2000, 480 - goal[1] * 2000)
         initial_bearing = selected["bearing_deg"]
@@ -542,7 +549,8 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal):
             assert 0 < first_left <= 53 and -53 <= first_right < 0
         assert any(left > 0 and right > 0 for left, right in robot.drives)
         assert robot.drives[-1] == (0, 0) and robot.stops == 1 and robot.starts == 1
-        assert all(abs(left) <= 100 and abs(right) <= 100 for left, right in robot.drives)
+        assert all(abs(left) <= profile[0] and abs(right) <= profile[0] for left, right in robot.drives)
+        assert robot.required_caps == [max(profile[0], math.ceil(95 * math.radians(profile[1])))]
         assert result["last_left"] == 0 and result["last_right"] == 0
         assert result["elapsed_ms"] > 0 and result["sequence"] > 1
     finally:
@@ -669,11 +677,12 @@ def test_cancel_during_delayed_rearm_stops_new_ack_without_drive(rig):
         entered = threading.Event()
         release = threading.Event()
 
-        def start_navigation(self, *, resume=False, require_velocity=False):
+        def start_navigation(self, *, resume=False, require_velocity=False, required_velocity_mm_s=100):
             if self.starts:
                 self.entered.set()
                 self.release.wait(2.)
-            return super().start_navigation(resume=resume, require_velocity=require_velocity)
+            return super().start_navigation(resume=resume, require_velocity=require_velocity,
+                                             required_velocity_mm_s=required_velocity_mm_s)
 
     robot = DelayedRobot()
     nav = Navigation(camera, robot)
@@ -1011,8 +1020,8 @@ def test_moderate_speed_increase_keeps_precision_floor():
 
 def test_forward_floor_does_not_clamp_inner_wheel_and_distort_steering():
     left, right = Navigation._wheel_commands("advancing", .3, .03, 0.)
-    assert (left, right) == (40, 80)  # Centro a60 mm/s, corrección diferencial conservada.
-    assert left < 50 and (left + right) / 2 == 60
+    assert (left, right) == (30, 70)  # Centro a50 mm/s, corrección diferencial conservada.
+    assert left < 50 and (left + right) / 2 == 50
     for bearing in (-.4, -.1, 0., .1, .4):
         left, right = Navigation._wheel_commands("advancing", bearing, .6, 0.)
         assert 0 <= left <= 100 and 0 <= right <= 100
@@ -1029,3 +1038,185 @@ def test_speed_floor_never_applies_to_arrival_or_manual_stop(rig):
     assert nav.state()["left_target_mm_s"] == nav.state()["right_target_mm_s"] == 0
     nav.stop()
     assert nav.state()["left_target_mm_s"] == nav.state()["right_target_mm_s"] == 0
+
+
+@pytest.mark.parametrize("forward,turn", [(49, 32), (301, 32), (100, 11), (100, 101),
+                                          (True, 32), (100, False), (100., 32),
+                                          (100, float("nan"))])
+def test_speed_settings_reject_invalid_values_without_changing_state(rig, forward, turn):
+    _, robot, nav = rig
+    calibrate(nav)
+    target(nav)
+    before = nav.state()
+    with pytest.raises(NavigationError):
+        nav.set_speeds(forward, turn)
+    after = nav.state()
+    assert after["speeds"] == before["speeds"] and after["speed_revision"] == 0
+    assert after["target_px"] == before["target_px"] and after["calibrated"] is True
+    assert robot.starts == robot.stops == 0 and robot.drives == []
+
+
+def test_speed_settings_persist_separately_without_starting_or_resetting_geometry(tmp_path):
+    camera, robot = FakeCamera(), FakeRobot()
+    robot.update(max_velocity_mm_s=300)
+    path = tmp_path / "navigation-state.json"
+    nav = Navigation(camera, robot, path)
+    calibrate(nav)
+    target(nav)
+    geometry = path.read_bytes()
+    result = nav.set_speeds(220, 75)
+    assert result["speeds"] == {"forward_mm_s": 220, "turn_deg_s": 75}
+    assert result["speed_revision"] == 1 and result["active"] is False
+    assert path.read_bytes() == geometry
+    assert json.loads(path.with_name("navigation-speeds.json").read_text()) == {
+        **result["speeds"], "speed_revision": 1}
+    restored = Navigation(camera, robot, path)
+    try:
+        assert restored.get_speeds() == result["speeds"]
+        assert restored.state()["calibrated"] is True and restored.state()["target_px"] == [900., 480.]
+        assert restored.state()["active"] is False and restored.state()["speed_revision"] == 1
+        assert robot.starts == robot.stops == 0 and robot.drives == []
+        copy = restored.get_speeds()
+        copy["forward_mm_s"] = 50
+        assert restored.get_speeds()["forward_mm_s"] == 220
+        assert restored.set_speeds(200, 50)["speed_revision"] == 2
+    finally:
+        nav.close()
+        restored.close()
+
+
+def test_speed_settings_old_firmware_rejects_connected_but_allows_offline_configuration(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    target(nav)
+    with pytest.raises(NavigationError, match="firmware"):
+        nav.set_speeds(300, 100)
+    with pytest.raises(NavigationError, match="firmware"):
+        nav.set_speeds(50, 100)  # El giro requiere166 mm/s aunque el avance sea50.
+    assert nav.state()["speed_revision"] == 0
+    robot.update(connected=False, ready=False)
+    nav.set_speeds(300, 100)
+    assert nav.state()["speed_revision"] == 1
+    robot.update(connected=True, ready=True)
+    with pytest.raises(NavigationError, match="firmware"):
+        nav.start()
+    assert robot.starts == robot.stops == 0 and robot.drives == []
+
+
+def test_speed_change_during_motion_keeps_mission_and_uses_slew_without_direct_commands(rig):
+    _, robot, nav = rig
+    robot.update(max_velocity_mm_s=300)
+    samples = []
+    original = robot.drive_velocity_navigation
+
+    def record(left, right):
+        samples.append((time.monotonic(), left, right, threading.current_thread().name))
+        original(left, right)
+
+    robot.drive_velocity_navigation = record
+    calibrate(nav)
+    target(nav)
+    nav.start()
+    wait_for(lambda: any(left >= 10 for left, _ in robot.drives))
+    result = nav.set_speeds(300, 100)
+    assert result["active"] is True and result["speed_revision"] == 1
+    assert result["target_px"] == [900., 480.] and result["calibrated"] is True
+    time.sleep(.06)
+    assert robot.starts == 1 and all(sample[3] == "webcam-point-navigation" for sample in samples)
+    for previous, current in zip(samples, samples[1:]):
+        assert current[1] - previous[1] <= 120 * (current[0] - previous[0]) + 2
+
+
+def test_capacity_loss_pauses_without_clipping_then_recovers_or_manual_stop_cancels(rig):
+    camera, robot, nav = rig
+    robot.update(max_velocity_mm_s=300)
+    nav.set_speeds(300, 100)
+    calibrate(nav)
+    target(nav)
+    nav.start()
+    wait_for(lambda: bool(robot.drives))
+    robot.update(max_velocity_mm_s=100)
+    wait_for(lambda: nav.state()["phase"] == "paused_connection")
+    count = len(robot.drives)
+    time.sleep(.03)
+    assert len(robot.drives) == count and nav.state()["speeds"]["forward_mm_s"] == 300
+    assert robot.stops == 0 and robot.abandons == 1
+    robot.update(max_velocity_mm_s=300)
+    stable_vision(camera, nav)
+    wait_for(lambda: nav.state()["phase"] == "advancing")
+    assert robot.required_caps == [300, 300]
+    robot.update(max_velocity_mm_s=100, resume_blocked=True, stop_reason="button_stop")
+    wait_for(lambda: not nav.state()["active"])
+    assert nav.state()["pending_mission"] is False
+
+
+def test_high_speed_profiles_brake_from_geometry_before_the_fixed_approach_zone():
+    high_far = Navigation._wheel_commands("advancing", 0., .6, 0., forward_mm_s=300, turn_deg_s=100)
+    high_mid = Navigation._wheel_commands("advancing", 0., .3, 0., forward_mm_s=300, turn_deg_s=100)
+    high_near = Navigation._wheel_commands("advancing", 0., .1, 0., forward_mm_s=300, turn_deg_s=100)
+    assert high_far == (300, 300)
+    assert 100 < high_near[0] < high_mid[0] < high_far[0]  # Frenado antes de150 mm.
+    assert Navigation._wheel_commands("advancing", 0., .03, 0., forward_mm_s=300) == (50, 50)
+    far_turn = Navigation._wheel_commands("turning", math.pi / 2, .3, 0., turn_deg_s=100)
+    mid_turn = Navigation._wheel_commands("turning", math.radians(40), .3, 0., turn_deg_s=100)
+    near_turn = Navigation._wheel_commands("turning", math.radians(9), .3, 0., turn_deg_s=100)
+    assert 20 <= abs(near_turn[0]) < abs(mid_turn[0]) < abs(far_turn[0]) <= 166
+    for mode in ("turning", "advancing"):
+        for angle in (-math.pi, -.3, 0., .3, math.pi):
+            assert all(abs(value) <= 300 for value in Navigation._wheel_commands(
+                mode, angle, .6, 0., forward_mm_s=300, turn_deg_s=100))
+
+
+def test_speed_routes_exact_json_header_revision_and_no_go(rig):
+    _, robot, nav = rig
+    robot.update(max_velocity_mm_s=300)
+    app = FastAPI()
+    app.include_router(make_navigation_router(nav))
+    headers = {"X-Requested-With": "XMLHttpRequest"}
+    with TestClient(app) as client:
+        initial = client.get("/api/navigation/state").json()
+        assert initial["speeds"] == {"forward_mm_s": 100, "turn_deg_s": 32}
+        assert initial["speed_limits"] == {"forward_min_mm_s": 50, "forward_max_mm_s": 300,
+                                            "turn_min_deg_s": 12, "turn_max_deg_s": 100}
+        assert client.post("/api/navigation/speeds", json=initial["speeds"]).status_code == 403
+        for payload in ({"forward_mm_s": True, "turn_deg_s": 32}, {"forward_mm_s": 300},
+                        {"forward_mm_s": 301, "turn_deg_s": 32},
+                        {"forward_mm_s": 100, "turn_deg_s": 32, "extra": 0}):
+            assert client.post("/api/navigation/speeds", json=payload, headers=headers).status_code == 422
+        assert client.post("/api/navigation/speeds", content='{"forward_mm_s":NaN,"turn_deg_s":32}',
+                           headers=headers).status_code == 422
+        first = client.post("/api/navigation/speeds", json={"forward_mm_s": 300, "turn_deg_s": 100},
+                            headers=headers).json()
+        second = client.post("/api/navigation/speeds", json={"forward_mm_s": 50, "turn_deg_s": 12},
+                             headers=headers).json()
+        assert (first["speed_revision"], second["speed_revision"]) == (1, 2)
+        assert first["speeds"] == {"forward_mm_s": 300, "turn_deg_s": 100}
+        assert second["speeds"] == {"forward_mm_s": 50, "turn_deg_s": 12}
+        assert first["active"] is False and second["active"] is False
+    assert robot.starts == robot.stops == 0 and robot.drives == []
+
+
+def test_loading_legacy_speed_configuration_and_getters_never_touch_robot(tmp_path):
+    class NoHardware:
+        def __getattr__(self, name):
+            raise AssertionError(f"El constructor o el getter intentó acceder al robot: {name}")
+
+    path = tmp_path / "navigation-state.json"
+    speed_path = path.with_name("navigation-speeds.json")
+    speed_path.write_text(json.dumps({"forward_mm_s": 300, "turn_deg_s": 100}))
+    nav = Navigation(FakeCamera(), NoHardware(), path)
+    assert nav.get_speeds() == {"forward_mm_s": 300, "turn_deg_s": 100}
+    assert nav.state()["speed_revision"] == 0 and nav.state()["active"] is False
+    # No crea hilos ni recursos del robot que deban cerrarse en este caso.
+    assert nav._thread is None and nav._arm_thread is None
+
+
+def test_old_firmware_capacity_fallback_and_turn_conversion_are_explicit(rig):
+    _, robot, nav = rig
+    with robot.lock:
+        robot.value.pop("max_velocity_mm_s")
+    nav.set_speeds(50, 60)  # 60°/s requiere aproximadamente99,5 mm/s por rueda.
+    with pytest.raises(NavigationError, match="firmware"):
+        nav.set_speeds(50, 61)
+    assert nav.get_speeds() == {"forward_mm_s": 50, "turn_deg_s": 60}
+    assert robot.starts == robot.stops == 0 and robot.drives == []

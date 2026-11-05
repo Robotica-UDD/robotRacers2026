@@ -40,6 +40,11 @@ def _numeric_pair(value, *, integers=False):
     return list(value)
 
 
+def _velocity_limit(status):
+    value = status.get("max_velocity_mm_s", 100)
+    return value if type(value) is int and 1 <= value <= 300 else 0
+
+
 class RobotLinkError(RuntimeError):
     def __init__(self, message: str, status_code: int = 503):
         super().__init__(message)
@@ -181,7 +186,7 @@ class RobotLink:
                        "navigation_active": False, "control_session": None, "control_seq": 0,
                        "boot_id": None, "resume_blocked": False, "velocity_control": False,
                        "encoder_ready": False, "encoder_counts": None, "speed_mm_s": None,
-                       "applied_pwm": None, "startup": None}
+                       "applied_pwm": None, "startup": None, "max_velocity_mm_s": 100}
         self._load_pair()
 
     def _load_pair(self):
@@ -291,6 +296,7 @@ class RobotLink:
                                resume_blocked=status.get("resume_blocked") is True,
                                velocity_control=status.get("velocity_control") is True,
                                encoder_ready=status.get("encoder_ready") is True,
+                               max_velocity_mm_s=_velocity_limit(status),
                                encoder_counts=_numeric_pair(status.get("encoder_counts", status.get("count")), integers=True),
                                speed_mm_s=_numeric_pair(status.get("speed_mm_s")),
                                applied_pwm=_numeric_pair(status.get("applied_pwm"), integers=True),
@@ -468,8 +474,10 @@ class RobotLink:
     def set_navigation_cancel_callback(self, callback):
         self._navigation_cancel_callback = callback
 
-    def start_navigation(self, *, resume=False, require_velocity=False):
+    def start_navigation(self, *, resume=False, require_velocity=False, required_velocity_mm_s=0):
         """Arma una sesión nueva sin aplicar velocidad ni reintentar órdenes."""
+        if type(required_velocity_mm_s) is not int or not 0 <= required_velocity_mm_s <= 300:
+            raise RobotLinkError("El límite de velocidad requerido no es válido.", 422)
         if not self._io_lock.acquire(timeout=self.http_timeout_s + .2):
             raise RobotLinkError("El enlace está ocupado; vuelve a intentarlo.", 409)
         try:
@@ -481,8 +489,10 @@ class RobotLink:
                 pair = dict(self._pair)
             remote, elapsed = self._read_status(pair)
             self._apply_status(remote, elapsed)
-            if require_velocity and (remote.get("velocity_control") is not True or remote.get("encoder_ready") is not True):
+            if (require_velocity or required_velocity_mm_s) and (remote.get("velocity_control") is not True or remote.get("encoder_ready") is not True):
                 raise RobotLinkError("Falta cargar el firmware de velocidad con encoders o los encoders no están listos.", 409)
+            if _velocity_limit(remote) < required_velocity_mm_s:
+                raise RobotLinkError("La velocidad seleccionada supera el límite del firmware. Actualiza la ESP32 por USB.", 409)
             if resume and (remote.get("resume_blocked") is True or remote.get("stop_reason") in
                            {"button_stop", "driver_fault", "encoder_stall", "encoder_fault", "encoder_error", "remote", "remote_stop", "manual_stop"}):
                 raise RobotLinkError("El robot recibió una parada. El recorrido requiere un nuevo inicio explícito.", 423)
@@ -514,14 +524,17 @@ class RobotLink:
         return self._drive_command("velocity", left_mm_s, right_mm_s)
 
     def _drive_command(self, command, left, right):
-        if any(type(value) is not int or not -100 <= value <= 100 for value in (left, right)):
-            raise RobotLinkError("Las velocidades deben ser enteros entre -100 y 100.", 422)
+        maximum = 300 if command == "velocity" else 100
+        if any(type(value) is not int or not -maximum <= value <= maximum for value in (left, right)):
+            raise RobotLinkError(f"Las velocidades deben ser enteros entre {-maximum} y {maximum}.", 422)
         with self._udp_lock:
             with self._lock:
                 if self._closed.is_set() or not self._navigation_session or not self._pair:
                     raise RobotLinkError("El recorrido no tiene una sesión activa.", 409)
                 if command == "velocity" and (not self._state["velocity_control"] or not self._state["encoder_ready"]):
                     raise RobotLinkError("El control por encoders no está disponible; el robot debe detenerse.", 409)
+                if command == "velocity" and max(abs(left), abs(right)) > self._state["max_velocity_mm_s"]:
+                    raise RobotLinkError("La consigna supera el límite anunciado por el firmware.", 409)
                 pair = dict(self._pair)
                 session = self._navigation_session
                 self._navigation_sequence = (self._navigation_sequence + 1) & 0xffffffff

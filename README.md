@@ -56,6 +56,10 @@ continúa hacia el mismo destino cuando recupera el seguimiento y la conexión.
 D48 y las paradas manuales cancelan el recorrido. Consulta
 [navegación con webcam y sus límites](docs/navegacion-webcam.md).
 
+Dos sliders ajustan por separado las máximas de avance (50–300 mm/s) y giro
+(12–100°/s), también durante el recorrido. Los valores se guardan y se aplican
+con rampas; el robot desacelera al acercarse al destino.
+
 Para cargar el firmware con arranque por encoders, conecta el robot por USB,
 déjalo detenido y ejecuta [`upload_robot.command`](simulation/webcam/upload_robot.command).
 El actualizador compila, comprueba el reposo y carga sin borrar la red guardada.

@@ -41,9 +41,9 @@ void reset_and_idle() {
   CHECK(rig.control.reference() == 0.);
   CHECK(!rig.control.stalled());
   rig.control.setTarget(1000);
-  CHECK(rig.control.target() == 100);
+  CHECK(rig.control.target() == 300);
   rig.control.setTarget(-1000);
-  CHECK(rig.control.target() == -100);
+  CHECK(rig.control.target() == -300);
 }
 
 void startup_ramp() {
@@ -266,6 +266,50 @@ void quantized_friction_plant() {
     CHECK(mean_pwm < 125.);  // No conservar el esfuerzo estático como velocidad de crucero.
   }
 }
+
+void velocity_300_control_stop_and_reverse() {
+  CHECK(WheelVelocityControl::MAX_VELOCITY_MM_S == 300);
+  CHECK(WheelVelocityControl::PWM_MAX == 160);
+  for (const int desired : {300, -300}) {
+    Rig rig;
+    FrictionPlant plant;
+    rig.control.setTarget(desired);
+    CHECK(rig.control.target() == desired);
+    double mean_speed = 0.;
+    for (int i = 0; i < 2500; ++i) {
+      const int pwm = rig.step(plant.counts());
+      plant.step(pwm, .01);
+      CHECK(pwm * desired >= 0 && !rig.control.stalled());
+      CHECK(std::abs(rig.control.reference()) <= 300.);
+      if (i >= 2000) mean_speed += plant.velocity / 500.;
+    }
+    CHECK(!rig.control.startup());
+    CHECK(std::abs(mean_speed - desired) <= 30.);
+    rig.control.setTarget(0);
+    CHECK(rig.control.pwm() == 0 && rig.control.reference() == 0.);
+    for (int i = 0; i < 5; ++i) {
+      CHECK(rig.step(plant.counts()) == 0);
+      plant.step(0, .01);
+    }
+    CHECK(std::abs(rig.control.speed()) > 5.);
+    rig.control.setTarget(-desired);
+    CHECK(rig.step(plant.counts()) == 0);  // Frenar la inercia antes de invertir.
+    plant.step(0, .01);
+    mean_speed = 0.;
+    bool reverse_started = false;
+    for (int i = 0; i < 2500; ++i) {
+      const int pwm = rig.step(plant.counts());
+      plant.step(pwm, .01);
+      CHECK(pwm * desired <= 0 && !rig.control.stalled());
+      reverse_started |= pwm * desired < 0;
+      if (i >= 2000) mean_speed += plant.velocity / 500.;
+    }
+    CHECK(reverse_started && !rig.control.startup());
+    CHECK(std::abs(mean_speed + desired) <= 30.);
+    rig.control.setTarget(0);
+    CHECK(rig.control.pwm() == 0);
+  }
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -282,5 +326,6 @@ int main(int argc, char** argv) {
   else if (scenario == "zero_then_reverse_waits_for_rest") zero_then_reverse_waits_for_rest();
   else if (scenario == "pi_limits_and_antiwindup") pi_limits_and_antiwindup();
   else if (scenario == "quantized_friction_plant") quantized_friction_plant();
+  else if (scenario == "velocity_300_control_stop_and_reverse") velocity_300_control_stop_and_reverse();
   else CHECK(false);
 }

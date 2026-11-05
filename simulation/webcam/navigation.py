@@ -39,7 +39,7 @@ def _finite(value, label: str) -> float:
 
 
 def _velocity_mm_s(value: float) -> int:
-    return round(max(-100., min(100., value)))
+    return round(max(-300., min(300., value)))
 
 
 class Navigation:
@@ -60,11 +60,14 @@ class Navigation:
     MAX_DISTANCE_M = .60
     ARRIVAL_M = .025
     SETTLED_M = .04
+    SPEED_LIMITS = {"forward_min_mm_s": 50, "forward_max_mm_s": 300,
+                    "turn_min_deg_s": 12, "turn_max_deg_s": 100}
 
     def __init__(self, camera, robot, runtime_path: Path | None = None):
         self.camera = camera
         self.robot = robot
         self._runtime_path = Path(runtime_path) if runtime_path is not None else None
+        self._speeds_path = self._runtime_path.with_name("navigation-speeds.json") if self._runtime_path else None
         self._lock = threading.RLock()
         self._persistence_lock = threading.Lock()
         self._calibration: Calibration | None = None
@@ -90,7 +93,74 @@ class Navigation:
         self._vision_hold = False
         self._vision_gap_ms = 0.
         self._vision_pauses = self._brief_vision_gaps = self._mode_switches = 0
+        self._speeds = {"forward_mm_s": 100, "turn_deg_s": 32}
+        self._speed_revision = 0
         self._load_calibration()
+        self._load_speeds()
+
+    @staticmethod
+    def _validated_speeds(forward_mm_s, turn_deg_s):
+        if type(forward_mm_s) is not int or not 50 <= forward_mm_s <= 300:
+            raise NavigationError("La velocidad de avance debe ser un entero entre 50 y 300 mm/s.", 422)
+        if type(turn_deg_s) is not int or not 12 <= turn_deg_s <= 100:
+            raise NavigationError("La velocidad de giro debe ser un entero entre 12 y 100 grados/s.", 422)
+        return {"forward_mm_s": forward_mm_s, "turn_deg_s": turn_deg_s}
+
+    @staticmethod
+    def _required_velocity(speeds):
+        return max(speeds["forward_mm_s"], math.ceil(95. * math.radians(speeds["turn_deg_s"])))
+
+    @staticmethod
+    def _remote_velocity_limit(remote):
+        value = remote.get("max_velocity_mm_s", 100)
+        return min(300, value) if type(value) is int and value > 0 else 100
+
+    def get_speeds(self):
+        with self._lock:
+            return dict(self._speeds)
+
+    def _load_speeds(self):
+        if self._speeds_path is None:
+            return
+        try:
+            if self._speeds_path.stat().st_size > 4096:
+                return
+            value = json.loads(self._speeds_path.read_text(encoding="utf-8"))
+            fields = {"forward_mm_s", "turn_deg_s"}
+            if isinstance(value, dict) and set(value) in (fields, fields | {"speed_revision"}):
+                self._speeds = self._validated_speeds(value["forward_mm_s"], value["turn_deg_s"])
+                revision = value.get("speed_revision", 0)
+                self._speed_revision = max(0, revision) if type(revision) is int else 0
+        except (OSError, ValueError, TypeError, NavigationError):
+            pass
+
+    def _save_speeds(self):
+        if self._speeds_path is None:
+            return
+        with self._persistence_lock:
+            with self._lock:
+                value = {**self._speeds, "speed_revision": self._speed_revision}
+            try:
+                self._speeds_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = self._speeds_path.with_name(self._speeds_path.name + ".tmp")
+                temporary.write_text(json.dumps(value, allow_nan=False), encoding="utf-8")
+                temporary.chmod(0o600)
+                temporary.replace(self._speeds_path)
+            except OSError:
+                pass
+
+    def set_speeds(self, forward_mm_s, turn_deg_s):
+        speeds = self._validated_speeds(forward_mm_s, turn_deg_s)
+        remote = self.robot.state()
+        if remote.get("connected") and self._required_velocity(speeds) > self._remote_velocity_limit(remote):
+            raise NavigationError("Actualiza el firmware para usar estas velocidades; el robot conectado admite un máximo menor.")
+        with self._lock:
+            if self._closed:
+                raise NavigationError("El servicio de navegación está cerrado.")
+            self._speeds = speeds
+            self._speed_revision += 1
+        self._save_speeds()
+        return self.state()
 
     def _load_calibration(self):
         if self._runtime_path is None:
@@ -291,6 +361,8 @@ class Navigation:
                     "vision_grace_active": self._vision_hold, "vision_gap_ms": self._vision_gap_ms,
                     "vision_pauses": self._vision_pauses, "brief_vision_gaps": self._brief_vision_gaps,
                     "mode_switches": self._mode_switches,
+                    "speeds": dict(self._speeds), "speed_limits": dict(self.SPEED_LIMITS),
+                    "speed_revision": self._speed_revision,
                     "center_px": observation["center_px"] if observation else None,
                     "front_px": observation["front_px"] if observation else None,
                     "bearing_deg": (round(math.degrees(observation["bearing_rad"]), 2)
@@ -340,6 +412,9 @@ class Navigation:
                 raise NavigationError("Conecta el robot y comprueba que esté listo antes de iniciar.")
             if remote.get("velocity_control") is not True or remote.get("encoder_ready") is not True:
                 raise NavigationError("Se requiere el firmware de control de velocidad y encoders disponibles.")
+            required_velocity = self._required_velocity(self._speeds)
+            if required_velocity > self._remote_velocity_limit(remote):
+                raise NavigationError("Actualiza el firmware antes de iniciar con las velocidades configuradas.")
             if remote.get("moving") or remote.get("navigation_active"):
                 raise NavigationError("El robot ya tiene un movimiento en curso.")
             self._active = True
@@ -361,7 +436,7 @@ class Navigation:
             boot_id = remote.get("boot_id")
         launched = False
         try:
-            ack = self.robot.start_navigation(require_velocity=True)
+            ack = self.robot.start_navigation(require_velocity=True, required_velocity_mm_s=required_velocity)
             session = ack.get("session") if isinstance(ack, dict) else None
             if not isinstance(session, str) or not session or len(session) > 128:
                 raise NavigationError("El robot no confirmó la sesión. No se reenviará automáticamente.", 502)
@@ -491,12 +566,13 @@ class Navigation:
             self._vision_hold = False
             self._vision_gap_ms = 0.
 
-    def _launch_rearm(self):
+    def _launch_rearm(self, required_velocity):
         cancel = self._cancel
 
         def arm():
             try:
-                ack = self.robot.start_navigation(resume=True, require_velocity=True)
+                ack = self.robot.start_navigation(resume=True, require_velocity=True,
+                                                  required_velocity_mm_s=required_velocity)
                 session = ack.get("session") if isinstance(ack, dict) else None
                 if not isinstance(session, str) or not session or len(session) > 128:
                     raise NavigationError("No se confirmó la nueva sesión.")
@@ -546,19 +622,22 @@ class Navigation:
                 self._phase, self._message = phase, message
 
     @staticmethod
-    def _wheel_commands(mode, bearing, distance, mode_elapsed):
+    def _wheel_commands(mode, bearing, distance, mode_elapsed, *, forward_mm_s=100, turn_deg_s=32):
         """Consignas físicas por rueda en mm/s; el firmware regula con encoders."""
         if mode == "turning":
             angle = abs(math.degrees(bearing))
-            target_rate = min(32., max(12., angle * .8))
-            magnitude = max(20., min(53., 95. * math.radians(target_rate)))
+            braking_rate = math.sqrt(2. * 70. * max(0., angle - 8.))
+            target_rate = max(12., min(turn_deg_s, angle * turn_deg_s / 40., braking_rate))
+            magnitude = max(20., min(95. * math.radians(turn_deg_s), 95. * math.radians(target_rate)))
             sign = 1 if bearing > 0 else -1
             return _velocity_mm_s(-sign * magnitude), _velocity_mm_s(sign * magnitude)
-        speed = 50. + 50. * min(1., max(0., distance) / .15)
+        base_speed = 50. + (forward_mm_s - 50.) * min(1., max(0., distance) / .15)
+        braking_speed = math.sqrt(2. * 120. * max(0., distance * 1000. - 25.))
+        speed = max(50., min(base_speed, braking_speed))
         angular_rate = max(-math.radians(12), min(math.radians(12), bearing * 1.5))
         correction = 95. * angular_rate
         left, right = speed - correction, speed + correction
-        scale = min(1., 100. / max(abs(left), abs(right)))
+        scale = min(1., forward_mm_s / max(abs(left), abs(right)))
         return _velocity_mm_s(left * scale), _velocity_mm_s(right * scale)
 
     def _run(self, calibration, target, session, boot_id):
@@ -614,6 +693,8 @@ class Navigation:
                 stable = (observation is not None and stable_frames >= self.RESUME_FRAMES
                           and stable_since is not None and tick - stable_since >= self.RESUME_STABLE_SECONDS)
                 remote = self.robot.state()  # Snapshot; el refresco HTTP se hace fuera de este hilo.
+                speeds = self.get_speeds()
+                required_velocity = self._required_velocity(speeds)
                 if remote.get("connected") and (remote.get("velocity_control") is not True
                                                 or remote.get("encoder_ready") is not True):
                     raise NavigationError("El control de velocidad con encoders dejó de estar disponible.")
@@ -628,6 +709,15 @@ class Navigation:
                     messages = {"button_stop": "Se pulsó D48. Recorrido cancelado.",
                                 "driver_fault": "El driver de un motor notificó un fallo. Recorrido cancelado."}
                     raise NavigationError(messages.get(reason, "El robot recibió una parada manual. Recorrido cancelado."))
+
+                if remote.get("connected") and required_velocity > self._remote_velocity_limit(remote):
+                    if session is not None or remote.get("navigation_active"):
+                        self._abandon()
+                    session, session_seen = None, False
+                    waiting_vision = True
+                    self._set_phase("paused_connection", "Actualiza el firmware para continuar con estas velocidades.")
+                    self._cancel.wait(self.CONTROL_INTERVAL)
+                    continue
 
                 with self._lock:
                     arm_result = self._arm_result
@@ -680,7 +770,7 @@ class Navigation:
                     self._set_phase("paused_connection", "Esperando conexión y seguimiento. El destino se conserva.")
                     if (connected and stable and not arming and tick >= next_arm
                             and not remote.get("moving") and not remote.get("navigation_active")):
-                        self._launch_rearm()  # HTTP en otro trabajador, sin bloquear la parada de este bucle.
+                        self._launch_rearm(required_velocity)  # HTTP en otro trabajador, sin bloquear el control.
                         next_arm = tick + self.RESUME_RETRY_SECONDS
                     self._cancel.wait(self.CONTROL_INTERVAL)
                     continue
@@ -797,7 +887,8 @@ class Navigation:
                     if mode == "adjusting":
                         left = right = 0
                     else:
-                        left, right = self._wheel_commands(mode, bearing, distance, active_seconds - mode_started)
+                        left, right = self._wheel_commands(mode, bearing, distance, active_seconds - mode_started,
+                                                           **speeds)
                 try:
                     self._ramp_drive(left, right)
                     was_controlling = True
@@ -868,6 +959,12 @@ def make_navigation_router(navigation: Navigation) -> APIRouter:
         data = await action_body(request, {"x", "y", "frame_width", "frame_height", "camera_id"})
         return await asyncio.to_thread(perform, navigation.select_target, data["x"], data["y"],
                                        data["frame_width"], data["frame_height"], data["camera_id"])
+
+    @router.post("/speeds")
+    async def speeds(request: Request):
+        data = await action_body(request, {"forward_mm_s", "turn_deg_s"})
+        return await asyncio.to_thread(perform, navigation.set_speeds,
+                                       data["forward_mm_s"], data["turn_deg_s"])
 
     @router.post("/start")
     async def start(request: Request):

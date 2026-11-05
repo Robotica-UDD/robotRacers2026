@@ -1,4 +1,4 @@
-// Última modificación: 2026-11-05 16:25 | America/Santiago (UTC-03).
+// Última modificación: 2026-11-05 19:56 | America/Santiago (UTC-03).
 // ESP32-S3, Arduino-ESP32 2.0.14. HTTP/UDP y control local de encoders a 100 Hz.
 // La duración se cumple en un temporizador local; el encendido nunca mueve motores.
 #include <Arduino.h>
@@ -25,6 +25,7 @@ const uint8_t ENC_A[] = {15, 17}, ENC_B[] = {16, 18};
 const int8_t SIGNO_ENCODER[] = {-1, 1};
 const uint8_t STOP_PIN = 48, TURBINA_PIN = 12;
 const int PULSE_PWM = 100;
+const int MAX_VELOCITY_MM_S = robotracers::WheelVelocityControl::MAX_VELOCITY_MM_S;
 const uint32_t PULSE_MS = 1000;
 const uint32_t NAV_LEASE_MS = 300, NAV_INITIAL_MS = 1000;
 const uint16_t NAV_UDP_PORT = 4210;
@@ -226,6 +227,7 @@ void buildStatus(JsonDocument &doc, bool includeToken) {
   doc["ready"] = readyLocked(); doc["moving"] = moving;
   doc["resume_blocked"] = resumeBlocked;
   doc["velocity_control"] = true; doc["encoder_ready"] = encoderReady;
+  doc["max_velocity_mm_s"] = MAX_VELOCITY_MM_S;
   for (int i = 0; i < 2; i++) {
     doc["count"][i] = encoderCount[i];
     doc["speed_mm_s"][i] = wheelControl[i].speed();
@@ -442,7 +444,8 @@ void serviceNavigationUDP() {
     const bool velocity = strcmp(command, "velocity") == 0;
     if (!stopping && !velocity && strcmp(command, "drive") != 0) continue;
     const int left = request["left"].as<int>(), right = request["right"].as<int>();
-    if (left < -100 || left > 100 || right < -100 || right > 100 ||
+    const int commandLimit = velocity ? MAX_VELOCITY_MM_S : 100;
+    if (left < -commandLimit || left > commandLimit || right < -commandLimit || right > commandLimit ||
         request["lease_ms"].as<int>() != int(NAV_LEASE_MS) || (stopping && (left != 0 || right != 0))) continue;
     applyNavigationPacket(session, request["seq"].as<uint32_t>(), stopping, velocity, left, right);
   }

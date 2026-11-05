@@ -266,6 +266,44 @@ def test_physical_firmware_count_alias_is_exposed(harness):
     assert harness.link._snapshot()["encoder_counts"] == [-30, 42]
 
 
+def test_velocity_uses_advertised_extended_limit(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True, max_velocity_mm_s=300)
+    harness.link.start_navigation(require_velocity=True, required_velocity_mm_s=300)
+    harness.link.drive_velocity_navigation(300, -166)
+    assert harness.udp.commands("velocity")[-1]["left"] == 300
+    assert harness.udp.commands("velocity")[-1]["right"] == -166
+    assert harness.link._snapshot()["max_velocity_mm_s"] == 300
+
+
+def test_old_firmware_cannot_silently_accept_high_slider_speed(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True)
+    with pytest.raises(RobotLinkError) as error:
+        harness.link.start_navigation(require_velocity=True, required_velocity_mm_s=300)
+    assert error.value.status_code == 409
+    assert harness.http.actions("/navigation/start") == []
+    harness.link.start_navigation(require_velocity=True, required_velocity_mm_s=100)
+    with pytest.raises(RobotLinkError):
+        harness.link.drive_velocity_navigation(101, 100)
+    assert harness.udp.packets == []
+
+
+@pytest.mark.parametrize("limit", [0, -1, 301, True, 100.5, "300"])
+def test_invalid_advertised_limits_do_not_allow_velocity_packets(harness, limit):
+    harness.http.status.update(velocity_control=True, encoder_ready=True, max_velocity_mm_s=limit)
+    with pytest.raises(RobotLinkError):
+        harness.link.start_navigation(require_velocity=True, required_velocity_mm_s=50)
+    assert harness.udp.packets == []
+
+
+def test_raw_pwm_keeps_its_previous_bound_with_new_velocity_firmware(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True, max_velocity_mm_s=300)
+    harness.link.start_navigation()
+    with pytest.raises(RobotLinkError) as error:
+        harness.link.drive_navigation(101, 0)
+    assert error.value.status_code == 422
+    assert harness.udp.packets == []
+
+
 def test_constructing_saved_link_and_closing_never_sends_commands(harness):
     assert harness.http.calls == []
     assert harness.udp.packets == []

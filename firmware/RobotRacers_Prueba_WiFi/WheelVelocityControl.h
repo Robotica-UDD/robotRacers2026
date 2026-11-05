@@ -9,6 +9,7 @@ namespace robotracers {
 struct WheelVelocityControl {
   static constexpr double MM_PER_COUNT = 3.14159265358979323846 * 23.0 / 59.94;
   static constexpr int PWM_MAX = 160;
+  static constexpr int MAX_VELOCITY_MM_S = 300;
 
   void reset(int64_t count, double now_s) {
     target_ = 0; reference_ = speed_ = eventSpeed_ = integral_ = 0;
@@ -19,7 +20,8 @@ struct WheelVelocityControl {
   }
 
   void setTarget(int mm_s) {
-    target_ = mm_s > 100 ? 100 : mm_s < -100 ? -100 : mm_s;
+    target_ = mm_s > MAX_VELOCITY_MM_S ? MAX_VELOCITY_MM_S :
+              mm_s < -MAX_VELOCITY_MM_S ? -MAX_VELOCITY_MM_S : mm_s;
     if (target_ == 0) {
       reference_ = integral_ = 0; pwm_ = 0;
       active_ = starting_ = reversing_ = waitingForRest_ = false;

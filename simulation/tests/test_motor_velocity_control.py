@@ -22,6 +22,7 @@ SCENARIOS = (
     "zero_then_reverse_waits_for_rest",
     "pi_limits_and_antiwindup",
     "quantized_friction_plant",
+    "velocity_300_control_stop_and_reverse",
 )
 
 

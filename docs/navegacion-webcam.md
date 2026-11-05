@@ -106,6 +106,26 @@ debes comprobar que todo el robot permanezca dentro del área de prueba.
 No puedes cambiar el destino ni recalibrar mientras un recorrido esté activo.
 La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegación.
 
+## Ajustar las velocidades
+
+La tarjeta **Navegación** incluye dos sliders independientes:
+
+- **Avance:** velocidad máxima entre 50 y 300 mm/s; inicialmente 100 mm/s.
+- **Giro:** velocidad máxima entre 12 y 100°/s; inicialmente 32°/s.
+
+Puedes cambiarlos antes de iniciar o durante el recorrido. El servicio aplica
+las consignas gradualmente, conserva el destino y guarda los valores para la
+próxima sesión en `simulation/.runtime/navigation-speeds.json`. Cambiar un
+slider no inicia un recorrido. El robot reduce su velocidad al acercarse al
+punto o terminar de alinearse, por lo que el número mostrado es una máxima,
+no una velocidad constante garantizada durante todo el movimiento.
+
+La interfaz agrupa los movimientos del slider y confirma el valor guardado con
+el servicio. Si falla una actualización, muestra un aviso y recupera el último
+valor confirmado. La versión anterior del firmware admite hasta 100 mm/s;
+para superar ese límite se requiere la versión que anuncia
+`max_velocity_mm_s: 300`. Cada inicio comprueba el límite real del robot.
+
 ## Límites del control y de la medición
 
 | Parámetro del programa | Valor configurado |
@@ -114,8 +134,10 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
 | Distancia máxima al seleccionar o iniciar | 600 mm |
 | Paso de giro a avance | Error de orientación de hasta 8° |
 | Volver a girar durante el avance | Error mayor de 25° |
-| Velocidad de avance | Base de 50 a 100 mm/s según la distancia, con corrección diferencial; ninguna rueda supera 100 mm/s |
-| Velocidad de giro | Ruedas opuestas entre 20 y 53 mm/s, aproximadamente de 12 a 32°/s con separación de 190 mm |
+| Velocidad máxima de avance | Slider de 50 a 300 mm/s; valor inicial de 100 mm/s y base mínima de marcha de 50 mm/s |
+| Velocidad máxima de giro | Slider de 12 a 100°/s; valor inicial de 32°/s, con separación de ruedas estimada en 190 mm |
+| Aproximación al destino | Reduce la consigna según distancia de frenado; usa 120 mm/s² para anticipar la parada |
+| Fin del giro | Reduce según el ángulo pendiente; usa 70°/s² como referencia de frenado |
 | Subida y bajada de consigna en Python | 120 y 180 mm/s², respectivamente |
 | Cambio de sentido o de movimiento | Pasa por cero antes de invertir; frena ambas ruedas antes de cambiar entre giro y avance |
 | Control local de velocidad | 100 Hz en la ESP32, con realimentación de ambos encoders |
@@ -245,8 +267,8 @@ la captura de imagen hasta la aplicación de una consigna.
 ## Comprobaciones realizadas
 
 - El firmware con encoders se compiló con Arduino-ESP32 **2.0.14**:
-  **764925 bytes de programa y 50432 bytes de RAM**. Se cargó por USB y se
-  verificaron `velocity_control: true`, `encoder_ready: true`, ambos PWM a cero
+  **765001 bytes de programa y 50432 bytes de RAM**. Se cargó por USB y se
+  verificaron `max_velocity_mm_s: 300`, `velocity_control: true`, `encoder_ready: true`, ambos PWM a cero
   y ninguna sesión de movimiento activa. La prueba de movimiento sigue pendiente.
 - Con la versión anterior del robot físico se enviaron consignas UDP **0/0** para verificar
   la caducidad local de 300 ms y el rechazo de paquetes posteriores. Esta
