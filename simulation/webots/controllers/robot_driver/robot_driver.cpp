@@ -133,9 +133,9 @@ int main() {
         <<",\"right_current\":"<<drive.current(drive.wheels[1].pwm,angular[1])
         <<",\"command_seq\":"<<last_seq<<",\"command_stamp\":"<<command_stamp<<",\"applied_stamp\":"<<applied_stamp
         <<",\"command_latency_ms\":"<<(applied_latency>=0?std::to_string(applied_latency):"null")
-        <<",\"battery_voltage\":7.4,\"reflectance\":["<<(reflectance[0]?reflectance[0]->getValue()/1000:0)
-        <<","<<(reflectance[1]?reflectance[1]->getValue()/1000:0)<<"],\"line_reflectance\":[";
-      for(int i=0;i<16;i++)out<<(i?",":"")<<(line_reflectance[i]?line_reflectance[i]->getValue()/1000:0);
+        <<",\"battery_voltage\":7.4,\"reflectance\":["<<(reflectance[0]?robotracers::limit(reflectance[0]->getValue()/1000,0.,1.):0)
+        <<","<<(reflectance[1]?robotracers::limit(reflectance[1]->getValue()/1000,0.,1.):0)<<"],\"line_reflectance\":[";
+      for(int i=0;i<16;i++)out<<(i?",":"")<<(line_reflectance[i]?robotracers::limit(line_reflectance[i]->getValue()/1000,0.,1.):0);
       out<<"]}";
       const auto json=out.str();sendto(sock,json.data(),json.size(),0,reinterpret_cast<sockaddr*>(&destination),sizeof(destination));
       if(test_port)sendto(sock,json.data(),json.size(),0,reinterpret_cast<sockaddr*>(&test_destination),sizeof(test_destination));

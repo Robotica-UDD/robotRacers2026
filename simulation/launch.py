@@ -34,6 +34,10 @@ def main():
     home=Path(os.environ.get('WEBOTS_HOME','/Applications/Webots.app/Contents'))
     executable=home/'MacOS/webots' if sys.platform=='darwin' else home/'webots'
     if not executable.exists():raise SystemExit('Falta Webots. Ejecuta simulation/setup.sh.')
+    required_viewer=['WebotsView.js','webots.js','wrenjs.js','dependencies/assimpjs.js',
+                     'dependencies/assimpjs.wasm','images/missing_texture.png','images/webots-logo.png']
+    if any(not (RUNTIME/'wwi'/name).is_file() for name in required_viewer):
+        raise SystemExit('El visor local está incompleto. Ejecuta simulation/setup.sh antes de iniciar.')
     # A fresh session uses defaults; preserve downloaded viewer resources.
     for path in ('scene_command.json','camera.frame','camera_calibration.json','diagnostics.json'):
         (RUNTIME/path).unlink(missing_ok=True)

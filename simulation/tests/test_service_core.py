@@ -330,3 +330,12 @@ def test_service_vision_multiscale_combines_ids_and_restores_native_pixels(tmp_p
     # Una vez calibrada, el marcador nativo basta: no se repiten los escalados de inicialización.
     second=vision.process(frame)
     assert second.visible and second.detection_scale==1.
+
+
+def test_service_reflectance_sensor_values_and_invalid_packets(tmp_path):
+    service=RobotService(tmp_path);now=time.monotonic()
+    service.receive(telemetry(now,reflectance=[.8,.7],line_reflectance=[.75]*16),now)
+    assert service.state(now)['robot']['reflectance']==[.8,.7]
+    assert len(service.state(now)['robot']['line_reflectance'])==16
+    with pytest.raises(ValueError):service.receive(telemetry(now,seq=2,reflectance=[float('nan')]),now)
+    assert service.telemetry_seq==1

@@ -94,7 +94,7 @@ export default function App() {
           <div><span className="rr-eyebrow">ENTORNO</span><h1>Laberinto de doble T<span className="rr-environment-size">{formatNumber(geometry.width, 1)} × {formatNumber(geometry.height, 1)} m</span></h1></div>
           <div className="rr-view-switch" role="group" aria-label="Vista de la simulación">
             {([{ id: 'orbital', label: 'Orbital', icon: 'orbit' }, { id: 'top', label: 'Cenital', icon: 'top' }, { id: 'camera', label: 'Cámara', icon: 'camera' }] as const).map(item =>
-              <button key={item.id} className={viewMode === item.id ? 'rr-view-active' : ''} aria-pressed={viewMode === item.id} onClick={() => setViewMode(item.id)}><Icon name={item.icon} size={15} /><span>{item.label}</span></button>)}
+              <button key={item.id} className={viewMode === item.id ? 'rr-view-active' : ''} aria-label={`Vista ${item.label.toLowerCase()}`} aria-pressed={viewMode === item.id} onClick={() => setViewMode(item.id)}><Icon name={item.icon} size={15} /><span>{item.label}</span></button>)}
           </div>
         </div>
 
@@ -106,7 +106,7 @@ export default function App() {
             <button className="rr-start-button" disabled={!connected || Boolean(busy) || sceneUpdating} onClick={() => void runOrPause()}><Icon name={moving ? 'pause' : 'play'} size={17} />{busy === 'start' || busy === 'pause' || sceneUpdating ? 'Aplicando…' : moving ? 'Pausar' : paused ? 'Reanudar' : 'Iniciar recorrido'}</button>
             <button className="rr-icon-button rr-stop-button" title="Detener recorrido" aria-label="Detener recorrido" disabled={!online} onClick={() => void simulation.mission('stop')}><Icon name="stop" size={17} /></button>
             <span className="rr-control-divider" />
-            <button className="rr-reset-button" disabled={!online || Boolean(busy) || sceneUpdating} onClick={() => void simulation.mission('reset')}><Icon name="reset" size={16} /><span>Reiniciar</span></button>
+            <button className="rr-reset-button" aria-label="Reiniciar recorrido" disabled={!online || Boolean(busy) || sceneUpdating} onClick={() => void simulation.mission('reset')}><Icon name="reset" size={16} /><span>Reiniciar</span></button>
           </div>
         </div>
 

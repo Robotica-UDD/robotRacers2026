@@ -85,6 +85,11 @@ class RobotService:
             for key in ("left_count","right_count"):
                 if not isinstance(message[key],int):raise ValueError("Cuenta incorrecta")
             for key in ("left_velocity","right_velocity","battery_voltage"):finite(message[key])
+            for key,maximum in (("reflectance",2),("line_reflectance",16)):
+                values=message.get(key,[])
+                if not isinstance(values,list) or len(values)>maximum:raise ValueError("Sensores incorrectos")
+                for value in values:
+                    if not 0<=finite(value)<=1:raise ValueError("Reflectancia fuera de rango")
             self.telemetry=message.copy();self.telemetry_time=now;self.telemetry_seq=seq;self.sim_time=sim_time
             self.telemetry_latency_ms=max(0.,(now-stamp)*1000)
             self.estimator.predict(message["left_count"],message["right_count"],stamp)
@@ -263,6 +268,7 @@ class RobotService:
                 "left_speed":t.get("left_velocity",0.),"right_speed":t.get("right_velocity",0.),
                 "battery_voltage":t.get("battery_voltage",self.robot_config["battery_voltage"]),
                 "left_count":t.get("left_count",0),"right_count":t.get("right_count",0),
+                "reflectance":t.get("reflectance",[]),"line_reflectance":t.get("line_reflectance",[]),
                 "command_latency_ms":t.get("command_latency_ms")},
             "mission":self.navigation.public(self.goals,pose),"settings":self.settings.copy(),
             "vision":{"visible":self.visual_ready(now),"latency_ms":None if not self.last_vision else self.last_vision.latency_ms,

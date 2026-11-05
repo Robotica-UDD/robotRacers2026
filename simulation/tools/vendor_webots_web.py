@@ -141,7 +141,13 @@ def main():
                         local=patch_logo_urls(local)
                     (DEST/path).write_text(local)
             print(f'Visor local: {len(records)} recursos, {len(pending)} pendientes',flush=True)
-    manifest={'version':'R2025a','source':BASE,'resources':records,'missing_optional':missing}
+    # Integrity is over the locally runnable bytes, after the documented
+    # patches. Upstream URLs identify provenance, not unmodified file hashes.
+    for record in records:
+        data=(DEST/record['path']).read_bytes()
+        record.update(bytes=len(data),sha256=hashlib.sha256(data).hexdigest())
+    manifest={'version':'R2025a','source':BASE,'hash_scope':'local bytes after documented patches',
+              'resources':records,'missing_optional':missing}
     (DEST.parent/'wwi-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     required=['WebotsView.js','webots.js','wrenjs.js','dependencies/assimpjs.js','dependencies/assimpjs.wasm',
               'images/missing_texture.png','images/webots-logo.png']
