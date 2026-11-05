@@ -12,3 +12,8 @@ simulation/webots/controllers/robot_driver/robot_driver
 simulation/webots/controllers/robot_driver/build/
 *.o
 *.dylib
+
+*.egg-info/
+*.tsbuildinfo
+*.wbproj
+simulation/webots/controllers/arena_camera/runtime.ini
