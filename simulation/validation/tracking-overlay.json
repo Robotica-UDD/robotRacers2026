@@ -1,0 +1,21 @@
+{
+  "camera_tracking_samples": 72,
+  "detected_samples": 72,
+  "active_goals_observed": [
+    "A",
+    "B"
+  ],
+  "max_contacts": 0,
+  "frame_sequences_monotonic": true,
+  "robot_pixel_motion": 380.2393897048467,
+  "latency_p95_ms": 54.861209,
+  "views_checked": [
+    "orbital",
+    "top",
+    "camera"
+  ],
+  "frontend_tests": 24,
+  "backend_tests": 71,
+  "source_images_modified": false,
+  "scope": "Additional visual overlay smoke test; the original ten-minute performance report is unchanged."
+}

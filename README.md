@@ -30,6 +30,11 @@ imagen → orden aplicada: percentil 95 de 43,64 ms. Cámara: mediana 42,73 imá
 visor visible: 49,24 fotogramas/s. Los objetivos de 50/60 siguen pendientes de
 optimización. Consulta [resultados y límites](docs/validacion-simulacion.md).
 
+El recuadro verde y la línea hacia el objetivo muestran el seguimiento del robot
+en las vistas Orbital, Cenital y Cámara. Durante una misión la línea sigue el
+objetivo activo; en espera sigue el destino seleccionado. [Cómo funciona el
+seguimiento visual](docs/seguimiento-visual.md).
+
 ## Referencia física
 
 | Parámetro | Valor | Procedencia |
