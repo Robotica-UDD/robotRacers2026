@@ -1,0 +1,31 @@
+{
+  "cpu": "Apple M5",
+  "memory_bytes": 25769803776,
+  "macos": "26.6.2",
+  "architecture": "arm64",
+  "python": "3.12.14",
+  "webots": "R2025a",
+  "benchmark_revision": "bd27319",
+  "visible_viewport": {
+    "browser": "ChatGPT in-app browser",
+    "width": 319,
+    "height": 853
+  },
+  "reference_files_sha256": {
+    "simulation/control/drive.hpp": "a4e90891515e4f3b3d70ed7bf93602d84b38cc652252755c6b4145aac34827e3",
+    "simulation/tools/build_world.py": "6a647d5f02ffac4aa534c2fd2fbeaed3230c4f35267e21a09c075152db6a1a29",
+    "simulation/service/navigation.py": "587036ef4bc829dc1f0a398002d8c1f467dce08d6051fb441fb1e8be2f7c41f1",
+    "simulation/service/vision.py": "47527ec641c944113995a3d68f40c3953d86855b8ea434ff5954ac540b358925"
+  },
+  "final_checks": {
+    "python_cpp_tests_passed": 52,
+    "ui_tests_passed": 8,
+    "asset_checks_passed": 28,
+    "ui_controls_manually_verified": [
+      "speed .30 \u2192 .35 \u2192 .30",
+      "goal B .55 \u2192 .525 \u2192 .55",
+      "scale 1.0 \u2192 1.05 \u2192 1.0"
+    ],
+    "final_state": "idle; all defaults restored; 2 lateral + 16 line reflectance channels received"
+  }
+}

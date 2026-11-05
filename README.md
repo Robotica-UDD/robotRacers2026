@@ -13,6 +13,17 @@ Abre http://127.0.0.1:8000. Iniciar ejecuta A → B → C → D en el laberinto 
 
 Webots R2025a realiza la física y genera las imágenes. Python estima la posición desde esas imágenes y los encoders. El control C++ aplica par a las ruedas; el visor web muestra esa simulación. La posición verdadera solo se utiliza para evaluar errores.
 
+Para cerrar una sesión iniciada en Terminal, pulsa **Ctrl+C** en esa terminal.
+El lanzador cierra sus procesos de Webots y Python. Los registros están en
+`simulation/.runtime/`. Si el puerto 8000 está ocupado, cierra la sesión anterior
+antes de iniciar otra. Los requisitos de compilación y uso sin conexión se
+explican en [Dependencias](docs/dependencias.md).
+
+La validación completó seis misiones en diez minutos sin colisiones. Latencia
+imagen → orden aplicada: percentil 95 de 43,64 ms. Cámara: mediana 42,73 imágenes/s;
+visor visible: 49,24 fotogramas/s. Los objetivos de 50/60 siguen pendientes de
+optimización. Consulta [resultados y límites](docs/validacion-simulacion.md).
+
 ## Referencia física
 
 | Parámetro | Valor | Procedencia |
@@ -34,6 +45,11 @@ La dinámica es provisional hasta medir masa, centro de gravedad, fricción y re
 
 - [Comparación de simuladores](docs/comparativa-simuladores.md)
 - [Arquitectura y contratos](simulation/CONTRACT.md)
+- [Modelos y procedencia](docs/activos_robot.md)
+- [Revisión geométrica](docs/activos_revision_geometrica.md)
+- [Calibración física](docs/calibracion-fisica.md)
+- [ROS 2 y hardware](docs/ros2-y-hardware.md)
+- [Validación y rendimiento](docs/validacion-simulacion.md)
 - [PCB final](hardware/RevQ)
 - [Firmware físico de referencia](firmware/reference)
 - [README histórico](docs/historial/README-original.md)
@@ -43,3 +59,8 @@ El servicio Python separa cámara, navegación y transporte para incorporar una 
 ## Licencias
 
 Código del proyecto: MIT. Webots y los modelos mantienen sus propias licencias. La licencia MIT del repositorio no reemplaza las condiciones de los fabricantes.
+
+Los dos sensores laterales y la regleta provisional de 16 canales exponen
+reflectancias normalizadas mediante `/api/state`. No participan en la navegación
+por cámara de esta entrega. El multiplexor de la regleta no se añade a la PCB
+principal.

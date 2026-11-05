@@ -1,0 +1,16 @@
+{
+  "local_viewer_resources_verified": 168,
+  "project_textures_verified": 6,
+  "hash_failures": [],
+  "external_document_resources_blocked": true,
+  "scope": "Local hashes, HTTP resources and CSP. Fresh offline-proxy startup is recorded separately.",
+  "passed": true,
+  "fresh_start_proxy_test": {
+    "external_http_proxy": "unavailable loopback port 9",
+    "local_hosts_bypassed": true,
+    "service_ready": true,
+    "driver_connected": true,
+    "camera_localized": true,
+    "physical_network_disabled": false
+  }
+}

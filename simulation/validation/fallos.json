@@ -1,0 +1,40 @@
+{
+  "checks": [
+    {
+      "test": "occlusion_100ms",
+      "status": "running",
+      "passed": true
+    },
+    {
+      "test": "occlusion_950ms",
+      "status": "paused",
+      "speed": 0.00446475061682,
+      "passed": true
+    },
+    {
+      "test": "recovery_does_not_restart",
+      "passed": true
+    },
+    {
+      "test": "stale_image_900ms",
+      "status": "paused",
+      "passed": true
+    },
+    {
+      "test": "pause",
+      "passed": true
+    },
+    {
+      "test": "stop",
+      "passed": true
+    },
+    {
+      "test": "driver_watchdog_250ms",
+      "samples": 45,
+      "max_abs_pwm": 0,
+      "max_abs_velocity": 0.0241096533309,
+      "passed": true
+    }
+  ],
+  "passed": true
+}
