@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from .detector import AprilTagDetector, Detection, annotate_frame
 from .devices import discover_cameras, _manual_options
+from .robot_link import RobotLink, make_robot_router
 
 LOGGER = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -264,19 +265,25 @@ class StartRequest(BaseModel):
 
 def create_app(capture_factory: Callable | None = None, detector=None,
                clock: Callable = time.monotonic, stale_after_s: float = 0.75,
-               camera_discovery: Callable | None = None) -> FastAPI:
+               camera_discovery: Callable | None = None, robot_link=None) -> FastAPI:
     camera = CaptureSession(capture_factory, detector, clock, stale_after_s)
     # Una cámara inyectada no corresponde al hardware del equipo de pruebas.
     choices = camera_discovery or (discover_cameras if capture_factory is None
                                   else lambda force=False: _manual_options())
+    robot = robot_link if robot_link is not None else RobotLink(
+        runtime_path=Path(__file__).resolve().parents[1] / ".runtime/robot-link.json"
+        if capture_factory is None else None)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         yield
         await asyncio.to_thread(camera.stop)
+        await asyncio.to_thread(robot.close)
 
     application = FastAPI(title="RobotRacers · Cámara", lifespan=lifespan)
     application.state.camera = camera
+    application.state.robot = robot
+    application.include_router(make_robot_router(robot))
 
     @application.middleware("http")
     async def uncached(request: Request, call_next):

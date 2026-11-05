@@ -42,6 +42,10 @@ Para probar una webcam real sin simulador ni ROS 2, ejecuta
 http://127.0.0.1:8010/ con detección del marcador y orientación del robot.
 Consulta [montaje del marcador y prueba de cámara](docs/prueba-webcam.md).
 
+La tarjeta **Robot** permite enlazar la ESP32 por Wi-Fi y ejecutar un único
+avance con PWM 100/100 durante 1000 ms. La configuración inicial se envía por
+USB desde el mismo panel. [Cómo configurar y probar el control Wi-Fi](docs/prueba-control-wifi.md).
+
 ## Referencia física
 
 | Parámetro | Valor | Procedencia |
