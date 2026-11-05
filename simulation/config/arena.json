@@ -1,0 +1,7 @@
+{
+  "width_m":2.4,"height_m":1.8,"corridor_width_m":0.5,"wall_height_m":0.1,"wall_thickness_m":0.02,
+  "scale":1.0,"scale_min":0.8,"scale_max":1.5,"speed":0.30,"speed_min":0.05,"speed_max":1.5,
+  "nodes":{"A":[-0.6,0.55],"B":[0.6,0.55],"C":[-0.6,-0.55],"D":[0.6,-0.55],"L":[-0.6,0],"R":[0.6,0]},
+  "edges":[["A","L"],["C","L"],["L","R"],["R","B"],["R","D"]],
+  "mission":["A","B","C","D"],"initial_yaw":-1.5707963267948966
+}

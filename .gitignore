@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+simulation/ui/dist/
+simulation/.runtime/
+simulation/.downloads/
+simulation/webots/controllers/robot_driver/robot_driver
+simulation/webots/controllers/robot_driver/build/
+*.o
+*.dylib

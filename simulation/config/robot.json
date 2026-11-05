@@ -1,0 +1,42 @@
+{
+  "name": "RobotRacers",
+  "revision": "RevQ",
+  "mass_kg": 0.18,
+  "wheel_radius_m": 0.0115,
+  "wheel_width_m": 0.04,
+  "track_width_m": 0.19,
+  "body_width_m": 0.13,
+  "body_length_m": 0.07,
+  "encoder_counts_per_revolution": 59.94,
+  "motor_voltage": 6.0,
+  "battery_voltage": 7.4,
+  "motor_no_load_rpm": 6500,
+  "motor_no_load_current_a": 0.17,
+  "motor_stall_current_a": 1.5,
+  "motor_stall_torque_nm": 0.008825985,
+  "motor_current_limit_a": 1.53,
+  "friction": 0.8,
+  "skid_friction": 0.12,
+  "fan_force_n": 0.0,
+  "marker_size_m": 0.04,
+  "marker_offset_m": [
+    -0.02685,
+    0.0
+  ],
+  "provenance": {
+    "mass_kg": "estimated",
+    "track_width_m": "inferred from user outer width 230 mm minus wheel width 40 mm",
+    "wheel_dimensions": "Ja-Bots 23x40",
+    "motor": "Pololu #5178 manufacturer",
+    "encoder": "12 x 4.995; already quadrature",
+    "friction": "estimated",
+    "skid_friction": "estimated",
+    "fan_force_n": "unmeasured; disabled"
+  },
+  "marker_height_m": 0.023,
+  "cad_body_offset_m": [
+    0.01315,
+    0,
+    0
+  ]
+}
