@@ -773,6 +773,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "numpy" },
     { name = "opencv-contrib-python-headless" },
+    { name = "pyserial" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -797,6 +798,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2,<3" },
     { name = "opencv-contrib-python-headless", specifier = ">=4.10,<5" },
     { name = "pillow", marker = "extra == 'assets'", specifier = ">=11,<13" },
+    { name = "pyserial", specifier = ">=3.5,<4" },
     { name = "pyserial", marker = "extra == 'hardware'", specifier = ">=3.5,<4" },
     { name = "reportlab", marker = "extra == 'assets'", specifier = ">=4.4,<6" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
