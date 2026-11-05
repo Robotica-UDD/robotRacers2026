@@ -53,10 +53,11 @@ class Navigation:
     RESUME_STABLE_SECONDS = .15
     RESUME_FRAMES = 3
     RESUME_RETRY_SECONDS = 1.
-    SPEED_RISE_MM_S2 = 120.
-    SPEED_FALL_MM_S2 = 180.
+    SPEED_RISE_MM_S2 = 600.
+    SPEED_FALL_MM_S2 = 900.
     RETRY_PAUSE_SECONDS = .5
     SETTLE_SECONDS = .40
+    WAYPOINT_SETTLE_SECONDS = .15
     MAX_DURATION_SECONDS = 30.
     NO_PROGRESS_SECONDS = 5.
     STATUS_STARTUP_SECONDS = 1.25  # RobotLink actualiza el estado remoto cada segundo.
@@ -76,6 +77,10 @@ class Navigation:
         self._persistence_lock = threading.Lock()
         self._calibration: Calibration | None = None
         self._target: list[float] | None = None
+        self._waypoints: list[list[float]] = []
+        self._waypoint_index = 0
+        self._route_generation = 0
+        self._last_arrival_mm = None
         self._phase = "uncalibrated"
         self._message = "Marca el centro entre ruedas y después el frente del robot."
         self._active = False
@@ -177,30 +182,43 @@ class Navigation:
             path = self._runtime_path
             if not path.exists() and path.name == "navigation-state.json":
                 path = path.with_name("navigation-calibration.json")
-            if path.stat().st_size > 8192:
+            if path.stat().st_size > 1_048_576:
                 return
             value = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(value, dict) and value.get("version") == 1:
-                if set(value) != {"version", "calibration", "target_px", "pending_mission"}:
+            if isinstance(value, dict) and value.get("version") in (1, 2):
+                version = value["version"]
+                expected = ({"version", "calibration", "target_px", "pending_mission"} if version == 1
+                            else {"version", "calibration", "waypoints_px", "waypoint_index", "pending_mission"})
+                if set(value) not in (expected, expected | {"route_revision"}):
+                    return
+                revision = value.get("route_revision", 0)
+                if type(revision) is not int or revision < 0:
                     return
                 calibration = (Calibration.from_dict(value["calibration"])
                                if value["calibration"] is not None else None)
-                target = value["target_px"]
-                if target is not None:
-                    if calibration is None or not isinstance(target, list) or len(target) != 2:
-                        return
-                    target = [_finite(target[0], "El destino"), _finite(target[1], "El destino")]
-                    if not (0 <= target[0] < calibration.width and 0 <= target[1] < calibration.height):
-                        return
-                if type(value["pending_mission"]) is not bool:
+                points = ([value["target_px"]] if value["target_px"] is not None else []) if version == 1 else value["waypoints_px"]
+                index = 0 if version == 1 else value["waypoint_index"]
+                if (not isinstance(points, list) or type(index) is not int or not 0 <= index <= len(points)
+                        or type(value["pending_mission"]) is not bool):
                     return
-                self._calibration, self._target = calibration, target
-                self._pending_mission = value["pending_mission"] and target is not None
+                route = []
+                for point in points:
+                    if calibration is None or not isinstance(point, list) or len(point) != 2:
+                        return
+                    point = [_finite(point[0], "El destino"), _finite(point[1], "El destino")]
+                    if not (0 <= point[0] < calibration.width and 0 <= point[1] < calibration.height):
+                        return
+                    route.append(point)
+                self._calibration, self._waypoints, self._waypoint_index = calibration, route, index
+                self._route_generation = revision
+                self._sync_target_locked()
+                self._pending_mission = value["pending_mission"] and self._target is not None
             else:
                 self._calibration = Calibration.from_dict(value)  # Archivo anterior: solo calibración.
-            self._phase = ("selected" if self._target is not None else "idle"
+            self._phase = ("arrived" if self._waypoints and self._target is None else
+                           "selected" if self._target is not None else "idle"
                            if self._calibration is not None else "uncalibrated")
-            self._message = ("Recorrido guardado. Pulsa Ir al punto para continuar tras reiniciar el programa."
+            self._message = ("Recorrido guardado. Pulsa Iniciar recorrido para continuar tras reiniciar el programa."
                              if self._pending_mission else
                              "Calibración guardada. Comprueba la cámara y el frente antes de iniciar.")
         except (OSError, ValueError, TypeError, NavigationError):
@@ -212,9 +230,10 @@ class Navigation:
         with self._persistence_lock:
             with self._lock:
                 calibration = self._calibration
-                value = {"version": 1, "calibration": calibration.to_dict() if calibration else None,
-                         "target_px": None if self._target is None else list(self._target),
-                         "pending_mission": self._pending_mission}
+                value = {"version": 2, "calibration": calibration.to_dict() if calibration else None,
+                         "waypoints_px": [list(point) for point in self._waypoints],
+                         "waypoint_index": self._waypoint_index, "pending_mission": self._pending_mission,
+                         "route_revision": self._route_generation}
             try:
                 self._runtime_path.parent.mkdir(parents=True, exist_ok=True)
                 temporary = self._runtime_path.with_name(self._runtime_path.name + ".tmp")
@@ -231,6 +250,10 @@ class Navigation:
             return value if isinstance(value, dict) else {}
         except Exception:
             return {}
+
+    def _sync_target_locked(self):
+        self._target = (list(self._waypoints[self._waypoint_index])
+                        if self._waypoint_index < len(self._waypoints) else None)
 
     @staticmethod
     def _same_source(frame: dict, calibration: Calibration) -> bool:
@@ -257,6 +280,10 @@ class Navigation:
             if not changed:
                 return
             self._calibration = None
+            self._route_generation += 1
+            self._waypoints = []
+            self._waypoint_index = 0
+            self._last_arrival_mm = None
             self._target = None
             self._pending_mission = False
             self._message = "Cambió la cámara o la resolución. Repite la calibración."
@@ -293,6 +320,8 @@ class Navigation:
             raise NavigationError("Detén el robot antes de modificar el destino o la calibración.")
 
     def calibrate(self, center_px, front_px, frame_width, frame_height, camera_id):
+        with self._lock:
+            generation = self._route_generation
         frame = self._camera_state()
         self._check_source(frame)
         self._request_source(frame, frame_width, frame_height, camera_id)
@@ -305,7 +334,13 @@ class Navigation:
             raise NavigationError(str(exc), 422) from None
         with self._lock:
             self._editable()
+            if generation != self._route_generation:
+                raise NavigationError("La ruta cambió durante la calibración. Repite los dos clics.")
             self._calibration = calibration
+            self._route_generation += 1
+            self._waypoints = []
+            self._waypoint_index = 0
+            self._last_arrival_mm = None
             self._target = None
             self._pending_mission = False
             self._phase = "idle"
@@ -313,13 +348,22 @@ class Navigation:
         self._save_calibration()
         return self.state()
 
-    def select_target(self, x, y, frame_width, frame_height, camera_id):
+    def _select_target(self, x, y, frame_width, frame_height, camera_id, *, append, expected_route_revision=None):
+        if expected_route_revision is not None and (type(expected_route_revision) is not int
+                                                    or expected_route_revision < 0):
+            raise NavigationError("La revisión de la ruta debe ser un entero no negativo.", 422)
+        with self._lock:
+            generation = self._route_generation
         target = [_finite(x, "La coordenada X"), _finite(y, "La coordenada Y")]
         frame = self._camera_state()
         self._check_source(frame)
         self._request_source(frame, frame_width, frame_height, camera_id)
         with self._lock:
             self._editable()
+            if generation != self._route_generation:
+                raise NavigationError("La ruta cambió durante la selección. Vuelve a añadir el punto.")
+            if expected_route_revision is not None and expected_route_revision != self._route_generation:
+                raise NavigationError("La ruta cambió. Actualiza el panel antes de añadir el punto.")
             calibration = self._calibration
             if calibration is None or not self._same_source(frame, calibration):
                 raise NavigationError("Calibra el centro y el frente antes de seleccionar un destino.")
@@ -333,10 +377,46 @@ class Navigation:
                 raise NavigationError("El destino debe quedar más alejado del borde de la imagen.", 422)
             if observation["distance_m"] > self.MAX_DISTANCE_M:
                 raise NavigationError("Selecciona un destino a no más de 600 mm del robot.", 422)
-            self._target = target
+            if append:
+                self._waypoints.append(target)
+                self._route_generation += 1
+            else:
+                self._route_generation += 1
+                self._waypoints = [target]
+                self._waypoint_index = 0
+                self._last_arrival_mm = None
+            self._sync_target_locked()
             self._pending_mission = False
             self._phase = "selected"
-            self._message = "Destino seleccionado. Inicia el recorrido cuando la zona esté despejada."
+            self._message = "Ruta preparada. Inicia el recorrido cuando la zona esté despejada."
+        self._save_calibration()
+        return self.state()
+
+    def select_target(self, x, y, frame_width, frame_height, camera_id):
+        return self._select_target(x, y, frame_width, frame_height, camera_id, append=False)
+
+    def append_target(self, x, y, frame_width, frame_height, camera_id, expected_route_revision):
+        if type(expected_route_revision) is not int or expected_route_revision < 0:
+            raise NavigationError("La revisión de la ruta debe ser un entero no negativo.", 422)
+        return self._select_target(x, y, frame_width, frame_height, camera_id, append=True,
+                                   expected_route_revision=expected_route_revision)
+
+    def clear_targets(self):
+        with self._lock:
+            self._route_generation += 1
+            self._waypoints = []
+            self._waypoint_index = 0
+            self._last_arrival_mm = None
+            self._target = None
+            self._pending_mission = False
+            if self._active:
+                self._cancel_reason = "Ruta borrada. Robot detenido."
+                self._cancel.set()
+                self._phase = "stopping"
+            else:
+                self._phase = "idle" if self._calibration is not None else "uncalibrated"
+            self._message = "Ruta borrada. Robot detenido."
+        self._safe_stop()
         self._save_calibration()
         return self.state()
 
@@ -365,6 +445,10 @@ class Navigation:
             return {"phase": self._phase, "active": self._active,
                     "calibrated": calibration is not None and self._same_source(frame, calibration),
                     "message": self._message, "target_px": target,
+                    "waypoints_px": [list(point) for point in self._waypoints],
+                    "waypoint_index": self._waypoint_index, "waypoint_count": len(self._waypoints),
+                    "route_revision": self._route_generation,
+                    "last_arrival_mm": self._last_arrival_mm,
                     "pending_mission": self._pending_mission,
                     "vision_grace_active": self._vision_hold, "vision_gap_ms": self._vision_gap_ms,
                     "vision_pauses": self._vision_pauses, "brief_vision_gaps": self._brief_vision_gaps,
@@ -384,7 +468,8 @@ class Navigation:
                                    if self._active and self._started_at is not None else self._elapsed_ms),
                     "sequence": frame.get("sequence") if type(frame.get("sequence")) is int else None,
                     "remaining_mm": (round(observation["distance_m"] * 1000, 1)
-                                     if observation and observation["distance_m"] is not None else None)}
+                                     if observation and observation["distance_m"] is not None
+                                     else self._last_arrival_mm if self._phase == "arrived" else None)}
 
     def overlay_pose(self, detection):
         # El proveedor se ejecuta en el hilo de captura: solamente lectura y
@@ -405,14 +490,21 @@ class Navigation:
         except (ValueError, TypeError):
             return None
 
-    def start(self):
+    def start(self, expected_route_revision=None):
+        if expected_route_revision is not None and (type(expected_route_revision) is not int
+                                                    or expected_route_revision < 0):
+            raise NavigationError("La revisión de la ruta debe ser un entero no negativo.", 422)
         frame = self._camera_state()
         self._check_source(frame)
         with self._lock:
             self._editable()
-            calibration, target = self._calibration, self._target
-            if calibration is None or target is None:
+            if expected_route_revision is not None and expected_route_revision != self._route_generation:
+                raise NavigationError("La ruta cambió. Actualiza el panel antes de iniciar.")
+            calibration = self._calibration
+            if calibration is None or not self._waypoints:
                 raise NavigationError("Calibra el robot y selecciona un destino antes de iniciar.")
+            index = self._waypoint_index if self._waypoint_index < len(self._waypoints) else 0
+            target = list(self._waypoints[index])
             observation = self._observe(frame, calibration, target, required=True)
             if observation["distance_m"] > self.MAX_DISTANCE_M:
                 raise NavigationError("El destino quedó a más de 600 mm. Vuelve a seleccionarlo.")
@@ -426,6 +518,9 @@ class Navigation:
                 raise NavigationError("Actualiza el firmware antes de iniciar con las velocidades configuradas.")
             if remote.get("moving") or remote.get("navigation_active"):
                 raise NavigationError("El robot ya tiene un movimiento en curso.")
+            self._waypoint_index = index
+            self._sync_target_locked()
+            self._last_arrival_mm = None
             self._active = True
             self._phase = "arming"
             self._message = "Preparando el recorrido…"
@@ -480,6 +575,8 @@ class Navigation:
     def cancel_local(self, reason: str = "Parada solicitada."):
         """Cancela el trabajador sin IO ni esperas; apto para el callback de RobotLink."""
         with self._lock:
+            if not self._closed:
+                self._route_generation += 1
             if self._active:
                 self._cancel_reason = reason
                 self._cancel.set()
@@ -513,7 +610,7 @@ class Navigation:
         self._drive(0, 0)
 
     @staticmethod
-    def _ramp_value(current, target, seconds, rise=120., fall=180.):
+    def _ramp_value(current, target, seconds, rise=600., fall=900.):
         # Una inversión llega primero a cero; el signo nuevo empieza en otro ciclo.
         effective = 0. if current * target < 0 else float(target)
         rate = fall if abs(effective) < abs(current) else rise
@@ -635,13 +732,13 @@ class Navigation:
         """Consignas físicas por rueda en mm/s; el firmware regula con encoders."""
         if mode == "turning":
             angle = abs(math.degrees(bearing))
-            braking_rate = math.sqrt(2. * 70. * max(0., angle - 8.))
+            braking_rate = math.sqrt(2. * 240. * max(0., angle - 8.))
             target_rate = max(12., min(turn_deg_s, angle * turn_deg_s / 40., braking_rate))
             magnitude = max(20., min(95. * math.radians(turn_deg_s), 95. * math.radians(target_rate)))
             sign = 1 if bearing > 0 else -1
             return _velocity_mm_s(-sign * magnitude), _velocity_mm_s(sign * magnitude)
         base_speed = 50. + (forward_mm_s - 50.) * min(1., max(0., distance) / .15)
-        braking_speed = math.sqrt(2. * 120. * max(0., distance * 1000. - 25.))
+        braking_speed = math.sqrt(2. * 450. * max(0., distance * 1000. - 25.))
         speed = max(50., min(base_speed, braking_speed))
         angular_rate = max(-math.radians(12), min(math.radians(12), bearing * 1.5))
         correction = 95. * angular_rate
@@ -857,10 +954,31 @@ class Navigation:
                             settle_started = active_seconds
                     else:
                         settle_started = None
-                    if settle_started is not None and active_seconds - settle_started >= self.SETTLE_SECONDS:
+                    with self._lock:
+                        settle_duration = (self.WAYPOINT_SETTLE_SECONDS if
+                                           self._waypoint_index + 1 < len(self._waypoints) else self.SETTLE_SECONDS)
+                    if settle_started is not None and active_seconds - settle_started >= settle_duration:
                         if distance <= self.SETTLED_M:
-                            final_phase, final_message = "arrived", "Destino alcanzado. Robot detenido."
-                            break
+                            with self._lock:
+                                if self._cancel.is_set():
+                                    break
+                                self._last_arrival_mm = round(distance * 1000, 1)
+                                self._waypoint_index += 1
+                                self._sync_target_locked()
+                                next_target = None if self._target is None else list(self._target)
+                                if next_target is None:
+                                    self._pending_mission = False
+                            self._save_calibration()
+                            if next_target is None:
+                                final_phase, final_message = "arrived", "Ruta completada. Robot detenido."
+                                break
+                            target = next_target
+                            mode = None
+                            retry_until = settle_started = None
+                            no_progress_seconds = 0.
+                            best_distance = best_angle = math.inf
+                            self._cancel.wait(self.CONTROL_INTERVAL)
+                            continue
                         mode = None
                 elif distance <= self.ARRIVAL_M:
                     mode, mode_started = "settling", active_seconds
@@ -919,6 +1037,11 @@ class Navigation:
             with self._lock:
                 self._session = None
                 self._active = False
+                if self._cancel.is_set():
+                    final_phase, final_message = "stopped", self._cancel_reason
+                elif final_phase != "arrived" and not self._closed:
+                    # Una parada física/fallo también invalida órdenes Go antiguas.
+                    self._route_generation += 1
                 if not self._closed:
                     self._pending_mission = False
                 self._elapsed_ms = round((time.monotonic() - self._started_at) * 1000)
@@ -929,7 +1052,7 @@ class Navigation:
 def make_navigation_router(navigation: Navigation) -> APIRouter:
     router = APIRouter(prefix="/api/navigation")
 
-    async def action_body(request: Request, fields: set[str]) -> dict:
+    async def action_body(request: Request, fields: set[str] | tuple[set[str], ...]) -> dict:
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
             raise HTTPException(403, "La solicitud debe realizarse desde el panel local.")
         data = bytearray()
@@ -943,7 +1066,8 @@ def make_navigation_router(navigation: Navigation) -> APIRouter:
             value = json.loads(data, parse_constant=reject_constant) if data else {}
         except (ValueError, UnicodeError):
             raise HTTPException(422, "La solicitud no es válida.") from None
-        if not isinstance(value, dict) or set(value) != fields:
+        shapes = fields if isinstance(fields, tuple) else (fields,)
+        if not isinstance(value, dict) or not any(set(value) == shape for shape in shapes):
             raise HTTPException(422, "La solicitud contiene campos incorrectos.")
         return value
 
@@ -969,6 +1093,18 @@ def make_navigation_router(navigation: Navigation) -> APIRouter:
         return await asyncio.to_thread(perform, navigation.select_target, data["x"], data["y"],
                                        data["frame_width"], data["frame_height"], data["camera_id"])
 
+    @router.post("/targets")
+    async def targets(request: Request):
+        data = await action_body(request, {"x", "y", "frame_width", "frame_height", "camera_id", "expected_route_revision"})
+        return await asyncio.to_thread(perform, navigation.append_target, data["x"], data["y"],
+                                       data["frame_width"], data["frame_height"], data["camera_id"],
+                                       data["expected_route_revision"])
+
+    @router.post("/clear-targets")
+    async def clear_targets(request: Request):
+        await action_body(request, set())
+        return await asyncio.to_thread(perform, navigation.clear_targets)
+
     @router.post("/speeds")
     async def speeds(request: Request):
         data = await action_body(request, {"forward_mm_s", "turn_deg_s"})
@@ -977,8 +1113,11 @@ def make_navigation_router(navigation: Navigation) -> APIRouter:
 
     @router.post("/start")
     async def start(request: Request):
-        await action_body(request, set())
-        return await asyncio.to_thread(perform, navigation.start)
+        data = await action_body(request, (set(), {"expected_route_revision"}))
+        revision = data.get("expected_route_revision")
+        if data and (type(revision) is not int or revision < 0):
+            raise HTTPException(422, "La revisión de la ruta debe ser un entero no negativo.")
+        return await asyncio.to_thread(perform, navigation.start, revision)
 
     @router.post("/stop")
     async def stop(request: Request):

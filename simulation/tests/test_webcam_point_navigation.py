@@ -165,6 +165,7 @@ def rig():
     nav = Navigation(camera, robot)
     nav.CONTROL_INTERVAL = .01
     nav.SETTLE_SECONDS = .04
+    nav.WAYPOINT_SETTLE_SECONDS = .02
     nav.RESUME_STABLE_SECONDS = .03
     nav.RESUME_RETRY_SECONDS = .03
     try:
@@ -247,7 +248,7 @@ def test_commands_are_bounded_physical_wheel_velocities(bearing):
 def test_speed_reduces_with_distance_and_angle_continuously():
     assert Navigation._wheel_commands("advancing", 0, .3, .3) == (100, 100)
     near = Navigation._wheel_commands("advancing", 0, .03, .3)
-    assert near == (50, 50)
+    assert near == (60, 60)
     assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-53, 53)
     assert Navigation._wheel_commands("turning", math.radians(10), .3, .3) == (-20, 20)
 
@@ -458,7 +459,7 @@ def test_calibration_and_target_persist_without_automatic_movement(tmp_path):
     restored = Navigation(camera, robot, path)
     assert restored.state()["calibrated"] is True
     assert restored.state()["target_px"] == [900., 480.] and restored.state()["active"] is False
-    assert set(json.loads(path.read_text())) == {"version", "calibration", "target_px", "pending_mission"}
+    assert set(json.loads(path.read_text())) == {"version", "calibration", "waypoints_px", "waypoint_index", "pending_mission", "route_revision"}
     assert robot.starts == 0 and robot.drives == [] and robot.stops == 0
     camera.update(camera_id="new-camera")
     assert restored.state()["calibrated"] is False
@@ -524,10 +525,11 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, pr
     nav = Navigation(camera, robot)
     nav.CONTROL_INTERVAL = .001
     nav.SETTLE_SECONDS = .01
+    nav.WAYPOINT_SETTLE_SECONDS = .005
     # La planta virtual avanza 20 ms por ciclo de control de 1 ms: acelerar
     # también las rampas conserva sus pendientes en el tiempo de esa planta.
-    nav.SPEED_RISE_MM_S2 = 2400.
-    nav.SPEED_FALL_MM_S2 = 3600.
+    nav.SPEED_RISE_MM_S2 = 12000.
+    nav.SPEED_FALL_MM_S2 = 18000.
     try:
         robot.update(max_velocity_mm_s=300)
         nav.set_speeds(*profile)
@@ -756,8 +758,8 @@ def test_old_calibration_file_loads_without_device_io_or_implicit_migration_writ
         assert restored.state()["calibrated"] is True and not path.exists()
         assert robot.starts == robot.stops == 0 and robot.drives == []
         target(restored)
-        assert json.loads(path.read_text())["version"] == 1
-        assert json.loads(path.read_text())["target_px"] == [900., 480.]
+        assert json.loads(path.read_text())["version"] == 2
+        assert json.loads(path.read_text())["waypoints_px"] == [[900., 480.]]
     finally:
         original.close()
         restored.close()
@@ -803,7 +805,7 @@ def test_metric_acceleration_ramp_and_reverse_require_an_intermediate_zero():
         previous = value
         value = Navigation._ramp_value(value, 65., .05)
         values.append(value)
-        assert 0 <= value - previous <= 6. + 1e-8
+        assert 0 <= value - previous <= 30. + 1e-8
     assert values[-1] == pytest.approx(65.)
     reverse = []
     for _ in range(20):
@@ -811,7 +813,7 @@ def test_metric_acceleration_ramp_and_reverse_require_an_intermediate_zero():
         value = Navigation._ramp_value(value, -55., .05)
         reverse.append(value)
         if previous > 0:
-            assert value >= 0 and previous - value <= 9. + 1e-8
+            assert value >= 0 and previous - value <= 45. + 1e-8
     assert 0. in reverse and min(reverse) < 0
     zero_index = reverse.index(0.)
     assert all(item >= 0 for item in reverse[:zero_index])
@@ -1021,8 +1023,8 @@ def test_moderate_speed_increase_keeps_precision_floor():
 
 def test_forward_floor_does_not_clamp_inner_wheel_and_distort_steering():
     left, right = Navigation._wheel_commands("advancing", .3, .03, 0.)
-    assert (left, right) == (30, 70)  # Centro a50 mm/s, corrección diferencial conservada.
-    assert left < 50 and (left + right) / 2 == 50
+    assert (left, right) == (40, 80)  # Centro a60 mm/s, corrección diferencial conservada.
+    assert left < 50 and (left + right) / 2 == 60
     for bearing in (-.4, -.1, 0., .1, .4):
         left, right = Navigation._wheel_commands("advancing", bearing, .6, 0.)
         assert 0 <= left <= 100 and 0 <= right <= 100
@@ -1126,7 +1128,7 @@ def test_speed_change_during_motion_keeps_mission_and_uses_slew_without_direct_c
     time.sleep(.06)
     assert robot.starts == 1 and all(sample[3] == "webcam-point-navigation" for sample in samples)
     for previous, current in zip(samples, samples[1:]):
-        assert current[1] - previous[1] <= 120 * (current[0] - previous[0]) + 2
+        assert current[1] - previous[1] <= 600 * (current[0] - previous[0]) + 2
 
 
 def test_capacity_loss_pauses_without_clipping_then_recovers_or_manual_stop_cancels(rig):
@@ -1153,16 +1155,15 @@ def test_capacity_loss_pauses_without_clipping_then_recovers_or_manual_stop_canc
 
 
 def test_high_speed_profiles_brake_from_geometry_before_the_fixed_approach_zone():
-    high_far = Navigation._wheel_commands("advancing", 0., .6, 0., forward_mm_s=300, turn_deg_s=100)
-    high_mid = Navigation._wheel_commands("advancing", 0., .3, 0., forward_mm_s=300, turn_deg_s=100)
-    high_near = Navigation._wheel_commands("advancing", 0., .1, 0., forward_mm_s=300, turn_deg_s=100)
-    assert high_far == (300, 300)
-    assert 100 < high_near[0] < high_mid[0] < high_far[0]  # Frenado antes de150 mm.
-    assert Navigation._wheel_commands("advancing", 0., .03, 0., forward_mm_s=300) == (50, 50)
-    far_turn = Navigation._wheel_commands("turning", math.pi / 2, .3, 0., turn_deg_s=100)
-    mid_turn = Navigation._wheel_commands("turning", math.radians(40), .3, 0., turn_deg_s=100)
-    near_turn = Navigation._wheel_commands("turning", math.radians(9), .3, 0., turn_deg_s=100)
-    assert 20 <= abs(near_turn[0]) < abs(mid_turn[0]) < abs(far_turn[0]) <= 166
+    high_far = Navigation._wheel_commands("advancing", 0., .6, 0., forward_mm_s=1000, turn_deg_s=360)
+    high_mid = Navigation._wheel_commands("advancing", 0., .3, 0., forward_mm_s=1000, turn_deg_s=360)
+    high_near = Navigation._wheel_commands("advancing", 0., .1, 0., forward_mm_s=1000, turn_deg_s=360)
+    assert 100 < high_near[0] < high_mid[0] < high_far[0] < 1000
+    assert Navigation._wheel_commands("advancing", 0., .026, 0., forward_mm_s=300) == (50, 50)
+    far_turn = Navigation._wheel_commands("turning", math.pi / 2, .3, 0., turn_deg_s=360)
+    mid_turn = Navigation._wheel_commands("turning", math.radians(40), .3, 0., turn_deg_s=360)
+    near_turn = Navigation._wheel_commands("turning", math.radians(9), .3, 0., turn_deg_s=360)
+    assert 20 <= abs(near_turn[0]) < abs(mid_turn[0]) < abs(far_turn[0]) <= 597
     for mode in ("turning", "advancing"):
         for angle in (-math.pi, -.3, 0., .3, math.pi):
             assert all(abs(value) <= 300 for value in Navigation._wheel_commands(
@@ -1284,3 +1285,247 @@ def test_unbounded_settings_keep_geometry_braking_finite_and_packets_representab
     assert 50 < short[0] < longer[0] < 1000  # El límite geométrico sigue activo para recorridos reales.
     assert Navigation._wheel_commands("advancing", 0., 1e20, 0.,
                                       forward_mm_s=INT32_MAX) == (INT32_MAX, INT32_MAX)
+
+
+def append(nav, x, y=480.):
+    with nav._lock:
+        revision = nav._route_generation
+    return nav.append_target(x, y, 1280, 960, "usb-camera", revision)
+
+
+def test_appending_ordered_waypoints_never_starts_and_legacy_target_replaces_route(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    append(nav, 700)
+    state = append(nav, 900)
+    assert state["waypoints_px"] == [[700., 480.], [900., 480.]]
+    assert state["waypoint_index"] == 0 and state["waypoint_count"] == 2
+    assert state["target_px"] == [700., 480.]
+    state = target(nav, 800)
+    assert state["waypoints_px"] == [[800., 480.]] and state["waypoint_index"] == 0
+    assert robot.starts == robot.stops == 0 and robot.drives == []
+
+
+def test_ordered_route_closed_loop_passes_each_point_then_requires_explicit_restart():
+    camera = FakeCamera()
+    robot = ClosedLoopRobot(camera)
+    nav = Navigation(camera, robot)
+    nav.CONTROL_INTERVAL = .001
+    nav.SPEED_RISE_MM_S2 = 12000.
+    nav.SPEED_FALL_MM_S2 = 18000.
+    nav.SETTLE_SECONDS = .01
+    nav.WAYPOINT_SETTLE_SECONDS = .005
+    goals = [(.10, 0.), (.10, .10), (0., .10), (0., 0.)]
+    passed = []
+    try:
+        calibrate(nav)
+        for x, y in goals:
+            append(nav, 640 + x * 2000, 480 - y * 2000)
+        original = nav._sync_target_locked
+
+        def observe_progress():
+            original()
+            if nav._active:
+                passed.append((nav._waypoint_index, robot.x, robot.y))
+
+        nav._sync_target_locked = observe_progress
+        nav.start()
+        wait_for(lambda: not nav.state()["active"], timeout=4.)
+        state = nav.state()
+        assert state["phase"] == "arrived", state["message"]
+        assert [index for index, _, _ in passed] == [1, 2, 3, 4]
+        for (_, x, y), goal in zip(passed, goals):
+            assert math.hypot(x - goal[0], y - goal[1]) <= .026
+        assert state["waypoint_index"] == state["waypoint_count"] == 4 and state["target_px"] is None
+        assert robot.starts == robot.stops == 1
+        count = len(robot.drives)
+        time.sleep(.03)
+        assert robot.starts == 1 and len(robot.drives) == count
+        nav.start()  # La ruta completada solo vuelve a empezar por acción explícita.
+        wait_for(lambda: bool(nav.state()["active"]))
+        assert nav.state()["waypoint_index"] == 0 and robot.starts == 2
+    finally:
+        nav.close()
+
+
+def test_route_pause_stop_and_resume_preserve_pending_index(rig):
+    camera, robot, nav = rig
+    calibrate(nav)
+    append(nav, 700)
+    append(nav, 900)
+    nav.start()
+    camera.pose(x=700.)
+    wait_for(lambda: nav.state()["waypoint_index"] == 1)
+    camera.update(visible=False)
+    wait_for(lambda: nav.state()["phase"] == "paused_vision")
+    assert nav.state()["target_px"] == [900., 480.] and nav.state()["waypoint_count"] == 2
+    stable_vision(camera, nav, x=700.)
+    wait_for(lambda: nav.state()["phase"] == "advancing")
+    nav.stop()
+    wait_for(lambda: not nav.state()["active"])
+    assert nav.state()["waypoint_index"] == 1 and nav.state()["target_px"] == [900., 480.]
+    nav.start()
+    assert nav.state()["waypoint_index"] == 1
+    camera.pose(x=900.)
+    wait_for(lambda: not nav.state()["active"])
+    assert nav.state()["waypoint_index"] == 2 and nav.state()["target_px"] is None
+    state = append(nav, 1000)
+    assert state["waypoint_index"] == 2 and state["waypoint_count"] == 3
+    assert state["target_px"] == [1000., 480.] and state["active"] is False
+
+
+def test_route_v1_migration_and_v2_pending_progress_restore_without_motion(tmp_path):
+    camera, robot = FakeCamera(), FakeRobot()
+    original = Navigation(camera, robot)
+    calibrate(original)
+    path = tmp_path / "navigation-state.json"
+    path.write_text(json.dumps({"version": 1, "calibration": original._calibration.to_dict(),
+                               "target_px": [700., 480.], "pending_mission": True}))
+    nav = Navigation(camera, robot, path)
+    nav.CONTROL_INTERVAL = .005
+    nav.SETTLE_SECONDS = .02
+    nav.WAYPOINT_SETTLE_SECONDS = .01
+    assert nav.state()["waypoints_px"] == [[700., 480.]] and nav.state()["pending_mission"] is True
+    assert nav.state()["active"] is False and robot.starts == robot.stops == 0
+    append(nav, 900)
+    nav.start()
+    camera.pose(x=700.)
+    wait_for(lambda: nav.state()["waypoint_index"] == 1)
+    nav.close()
+    saved = json.loads(path.read_text())
+    assert saved["version"] == 2 and saved["waypoint_index"] == 1
+    other = FakeRobot()
+    restored = Navigation(camera, other, path)
+    try:
+        state = restored.state()
+        assert state["waypoint_index"] == 1 and state["waypoints_px"] == [[700., 480.], [900., 480.]]
+        assert state["target_px"] == [900., 480.] and state["active"] is False
+        assert other.starts == other.stops == 0 and other.drives == []
+    finally:
+        original.close()
+        restored.close()
+
+
+def test_clear_route_stops_and_preserves_calibration_and_speeds(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    append(nav, 700)
+    append(nav, 900)
+    calibration, speeds = nav._calibration, nav.get_speeds()
+    nav.start()
+    with pytest.raises(NavigationError, match="Detén"):
+        append(nav, 1000)
+    nav.clear_targets()
+    wait_for(lambda: not nav.state()["active"])
+    state = nav.state()
+    assert state["waypoints_px"] == [] and state["waypoint_index"] == state["waypoint_count"] == 0
+    assert state["target_px"] is None and state["pending_mission"] is False
+    assert nav._calibration == calibration and nav.get_speeds() == speeds
+    with pytest.raises(NavigationError):
+        nav.start()
+    assert robot.stops >= 1
+
+
+def test_clear_invalidates_an_append_request_still_measuring_the_camera(rig):
+    camera, _, nav = rig
+    calibrate(nav)
+    append(nav, 700)
+    entered, release = threading.Event(), threading.Event()
+    original = camera.state
+    errors = []
+
+    def state():
+        if threading.current_thread().name == "append-request":
+            entered.set()
+            release.wait(1.)
+        return original()
+
+    def request():
+        try:
+            append(nav, 900)
+        except NavigationError as exc:
+            errors.append(exc)
+
+    camera.state = state
+    worker = threading.Thread(target=request, name="append-request")
+    worker.start()
+    assert entered.wait(.5)
+    nav.clear_targets()
+    release.set()
+    worker.join(timeout=1.)
+    assert errors and errors[0].status_code == 409
+    assert nav.state()["waypoints_px"] == [] and nav.state()["target_px"] is None
+
+
+def test_route_endpoints_append_and_clear_require_exact_local_requests(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    app = FastAPI()
+    app.include_router(make_navigation_router(nav))
+    headers = {"X-Requested-With": "XMLHttpRequest"}
+    point = {"x": 700, "y": 480, "frame_width": 1280, "frame_height": 960, "camera_id": "usb-camera"}
+    with TestClient(app) as client:
+        assert client.post("/api/navigation/targets", json=point).status_code == 403
+        point["expected_route_revision"] = nav.state()["route_revision"]
+        first = client.post("/api/navigation/targets", json=point, headers=headers).json()
+        assert first["waypoint_count"] == 1
+        point["x"] = 900
+        point["expected_route_revision"] = first["route_revision"]
+        state = client.post("/api/navigation/targets", json=point, headers=headers).json()
+        assert state["waypoint_count"] == 2 and state["target_px"] == [700., 480.]
+        assert robot.starts == 0 and robot.drives == []
+        assert client.post("/api/navigation/clear-targets", json={}).status_code == 403
+        assert client.post("/api/navigation/clear-targets", json={"extra": 1}, headers=headers).status_code == 422
+        state = client.post("/api/navigation/clear-targets", json={}, headers=headers).json()
+        assert state["waypoints_px"] == [] and state["calibrated"] is True
+
+
+def test_late_append_and_go_with_old_route_revision_cannot_revive_cleared_route(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    append(nav, 700)
+    old_revision = nav.state()["route_revision"]
+    nav.clear_targets()
+    with pytest.raises(NavigationError) as rejected:
+        nav.append_target(900, 480, 1280, 960, "usb-camera", old_revision)
+    assert rejected.value.status_code == 409 and nav.state()["waypoints_px"] == []
+    append(nav, 800)
+    before = nav.state()
+    with pytest.raises(NavigationError) as rejected:
+        nav.start(old_revision)
+    assert rejected.value.status_code == 409
+    after = nav.state()
+    assert after["waypoint_index"] == before["waypoint_index"] and after["active"] is False
+    assert after["route_revision"] == before["route_revision"] and robot.starts == 0
+
+
+def test_manual_stop_invalidates_old_go_even_without_changing_the_route(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    append(nav, 700)
+    before = nav.state()
+    nav.stop()
+    after = nav.state()
+    assert after["route_revision"] > before["route_revision"]
+    assert after["waypoints_px"] == before["waypoints_px"] and after["waypoint_index"] == 0
+    with pytest.raises(NavigationError):
+        nav.start(before["route_revision"])
+    assert robot.starts == 0
+    nav.start(after["route_revision"])
+    assert robot.starts == 1
+
+
+def test_start_revision_body_strictness_and_legacy_empty_body_remain_compatible(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    append(nav, 700)
+    app = FastAPI()
+    app.include_router(make_navigation_router(nav))
+    headers = {"X-Requested-With": "XMLHttpRequest"}
+    with TestClient(app) as client:
+        for revision in (True, None, -1, "1"):
+            assert client.post("/api/navigation/start", json={"expected_route_revision": revision},
+                               headers=headers).status_code == 422
+        assert robot.starts == 0
+        assert client.post("/api/navigation/start", json={}, headers=headers).status_code == 200
+        assert robot.starts == 1

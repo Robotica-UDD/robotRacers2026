@@ -16,6 +16,7 @@
   </style>
   <style>
     .speed-heading label{flex:1;min-width:0;max-width:none}.speed-value-edit{display:flex;align-items:baseline;gap:4px;flex:0 1 64%;min-width:0}.speed-value-edit small{font-size:10px;color:var(--muted);white-space:nowrap}.speed-number{font:inherit;font-size:23px;font-weight:550;letter-spacing:-.045em;font-variant-numeric:tabular-nums;min-width:0;width:100%;padding:2px 0;border:0;border-bottom:1px solid transparent;border-radius:0;background:transparent;color:inherit;text-align:right;appearance:textfield;-moz-appearance:textfield}.speed-number::-webkit-inner-spin-button,.speed-number::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.speed-number:hover{border-bottom-color:#5b9e8155}.speed-number:focus-visible{outline:2px solid #4b9e9066;outline-offset:3px;border-radius:3px}.speed-number[aria-invalid="true"]{border-bottom-color:#bc6656}.speed-number:disabled{opacity:.45}.speed-scale-action{display:block;border:0;background:transparent;color:var(--accent);font:inherit;font-size:10px;padding:6px 0 0;margin-left:auto;cursor:pointer}.speed-scale-action:hover:not(:disabled){text-decoration:underline}.speed-scale-action:disabled{opacity:.4;cursor:default}
+    .navigation-route-line{stroke:#8edec9bb;stroke-width:2;fill:none;stroke-linejoin:round}.navigation-waypoint-number{font-family:inherit;font-weight:650;text-anchor:middle;dominant-baseline:central;fill:#173c36}.navigation-progress{font-size:11px;font-weight:600;color:#547367;margin:-3px 0 13px;font-variant-numeric:tabular-nums}.navigation-route-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.navigation-route-actions .button{padding:11px 7px;font-size:11px;gap:6px;min-width:0}
   </style>
 </head>
 <body>
@@ -38,8 +39,10 @@
           <div id="viewport" class="viewport">
             <img id="camera-image" alt="Imagen en directo con recuadro del marcador y flecha hacia el frente del robot">
             <svg id="navigation-overlay" class="navigation-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden>
+              <polyline id="navigation-route-line" class="navigation-route-line" vector-effect="non-scaling-stroke" hidden/>
               <line id="navigation-tether" class="navigation-tether" vector-effect="non-scaling-stroke" hidden/>
               <circle id="navigation-center" class="navigation-center" vector-effect="non-scaling-stroke" hidden/>
+              <g id="navigation-waypoints"></g>
               <circle id="navigation-target" class="navigation-target" vector-effect="non-scaling-stroke" hidden/>
               <path id="navigation-cross" class="navigation-cross" vector-effect="non-scaling-stroke" fill="none" hidden/>
               <circle id="navigation-calibration-dot" class="calibration-dot" vector-effect="non-scaling-stroke" hidden/>
@@ -67,7 +70,8 @@
         <section class="glass navigation-controls" aria-labelledby="navigation-title">
           <h2 id="navigation-title" class="section-label">Navegación</h2>
           <p id="navigation-status" class="navigation-status" data-mode="idle" role="status">Preparando navegación</p>
-          <p id="navigation-instruction" class="navigation-instruction">Calibra el centro y el frente del robot antes de elegir un destino.</p>
+          <p id="navigation-instruction" class="navigation-instruction">Calibra el centro y el frente del robot antes de añadir puntos.</p>
+          <p id="navigation-progress" class="navigation-progress" role="status">Sin puntos</p>
           <div class="navigation-calibration"><span id="navigation-calibration-label">Calibración pendiente</span><span id="navigation-distance" class="navigation-distance"></span></div>
           <div class="speed-controls" aria-label="Velocidades máximas">
             <div class="speed-control">
@@ -87,8 +91,11 @@
             <p id="navigation-speed-error" class="error" role="alert" hidden></p>
           </div>
           <button id="navigation-calibrate" class="button secondary calibrate-button" type="button" disabled>Calibrar robot</button>
-          <button id="navigation-start" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="navigation-start-label">Ir al punto</span></button>
-          <button id="navigation-stop" class="button secondary robot-stop" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Detener recorrido</button>
+          <button id="navigation-start" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="navigation-start-label">Iniciar recorrido</span></button>
+          <div class="navigation-route-actions">
+            <button id="navigation-stop" class="button secondary robot-stop" type="button" aria-label="Detener recorrido" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Detener</button>
+            <button id="navigation-clear" class="button secondary" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M6 2h4M5 6v7h6V6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="navigation-clear-label">Borrar puntos</span></button>
+          </div>
           <p id="navigation-error" class="error" role="alert" hidden></p>
           <p class="navigation-note">Área despejada · cámara fija</p>
         </section>
@@ -147,6 +154,8 @@
     let navigationState = null, navigationAvailable = false, navigationBusy = '', navigationStartPending = false;
     let navigationReadBusy = false, navigationReadVersion = 0, navigationAppliedVersion = 0;
     let navigationActionVersion = 0, navigationCameraKey = '';
+    let routePointQueue = [], routePointSending = false, routeEditGeneration = 0;
+    let routePointSendingGeneration = -1;
     let calibrationStage = '', calibrationCenter = null, calibrationAnchor = null;
     let calibrationCenterTag = null, calibrationProjectionReady = false, calibrationSourceKey = '';
     let cameraStateReceivedAt = 0;
@@ -557,6 +566,22 @@
     function finitePoint(point) {
       return Array.isArray(point) && point.length === 2 && point.every(Number.isFinite);
     }
+    function navigationWaypoints() {
+      const points = navigationState?.waypoints_px;
+      if (Array.isArray(points)) return points.every(finitePoint) ? points : [];
+      return finitePoint(navigationState?.target_px) ? [navigationState.target_px] : [];
+    }
+    function navigationWaypointIndex() {
+      const count = navigationWaypoints().length, index = navigationState?.waypoint_index;
+      return Number.isInteger(index) ? Math.max(0, Math.min(count, index)) : 0;
+    }
+    function navigationRouteRevision() {
+      const revision = navigationState?.route_revision;
+      return Number.isInteger(revision) && revision >= 0 ? revision : null;
+    }
+    function routePointsPending() {
+      return routePointQueue.length > 0 || (routePointSending && routePointSendingGeneration === routeEditGeneration);
+    }
     function cameraKey() {
       return `${state?.camera_id ?? state?.camera_index ?? ''}:${state?.frame_width || 0}x${state?.frame_height || 0}`;
     }
@@ -580,13 +605,14 @@
       return [(clientX - box.left) / box.scale, (clientY - box.top) / box.scale];
     }
     function navigationOwnsRobot() {
-      return !!navigationState?.active || navigationStartPending || navigationBusy === 'start' || navigationBusy === 'stop';
+      return !!navigationState?.active || navigationStartPending || ['start', 'stop', 'clear-targets'].includes(navigationBusy);
     }
     function navigationAllowsReconnect() {
       return !!navigationState?.active && ['paused_connection', 'reconnecting'].includes(navigationState.phase);
     }
-    function canEditNavigation() {
-      return navigationAvailable && cameraVisionFresh() && !navigationOwnsRobot() && !navigationBusy &&
+    function canEditNavigation(allowQueuedPoints = false) {
+      const actionAvailable = !navigationBusy || (allowQueuedPoints && navigationBusy === 'targets');
+      return navigationAvailable && cameraVisionFresh() && !navigationOwnsRobot() && actionAvailable && (allowQueuedPoints || !routePointsPending()) &&
         !robotState?.moving && !robotPulsePending && !robotPulseSubmitting && !robotStopBusy && !robotConnectBusy;
     }
     function navigationCalibrated() {
@@ -599,7 +625,7 @@
       return required <= capability;
     }
     function canStartNavigation() {
-      return canEditNavigation() && !calibrationStage && navigationCalibrated() && finitePoint(navigationState?.target_px) &&
+      return canEditNavigation() && !calibrationStage && navigationCalibrated() && navigationWaypoints().length > 0 && navigationRouteRevision() !== null &&
         robotAvailable && !!robotState?.connected && !!robotState.ready &&
         robotState.velocity_control === true && robotState.encoder_ready === true && robotSupportsSpeedSettings() && !speedPending && !speedInFlight;
     }
@@ -698,6 +724,30 @@
     function setSvgVisible(element, visible) {
       if (visible) element.removeAttribute('hidden'); else element.setAttribute('hidden', '');
     }
+    function drawRoutePoints(points, index, scale) {
+      const group = $('navigation-waypoints'), line = $('navigation-route-line');
+      while (group.children.length > points.length) group.removeChild(group.lastElementChild);
+      while (group.children.length < points.length) {
+        const node = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('vector-effect', 'non-scaling-stroke'); circle.setAttribute('stroke-width', '1.5');
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('class', 'navigation-waypoint-number');
+        node.appendChild(circle); node.appendChild(text); group.appendChild(node);
+      }
+      points.forEach((point, itemIndex) => {
+        const node = group.children[itemIndex], circle = node.children[0], text = node.children[1];
+        const completed = itemIndex < index, current = itemIndex === index;
+        node.setAttribute('transform', `translate(${point[0]} ${point[1]})`);
+        circle.setAttribute('r', 12 / scale);
+        circle.setAttribute('fill', completed ? '#cadbd4de' : current ? '#6ce5ce' : '#f0fff9ed');
+        circle.setAttribute('stroke', completed ? '#82988e' : '#167b65');
+        text.setAttribute('font-size', 12 / scale);
+        if (text.textContent !== String(itemIndex + 1)) text.textContent = itemIndex + 1;
+      });
+      line.setAttribute('points', points.map(point => `${point[0]},${point[1]}`).join(' '));
+      setSvgVisible(line, points.length > 1);
+    }
     function drawNavigationOverlay() {
       const overlay = $('navigation-overlay');
       if (!cameraFrameFresh()) { setSvgVisible(overlay, false); return; }
@@ -709,9 +759,11 @@
       overlay.setAttribute('viewBox', `0 0 ${state.frame_width} ${state.frame_height}`);
       const target = navigationCameraKey === cameraKey() && finitePoint(navigationState?.target_px) ? navigationState.target_px : null;
       const center = cameraVisionFresh() && navigationCalibrated() && finitePoint(navigationState?.center_px) ? navigationState.center_px : null;
+      const points = navigationCameraKey === cameraKey() ? navigationWaypoints() : [];
+      drawRoutePoints(points, navigationWaypointIndex(), box.scale);
       const ring = $('navigation-target'), cross = $('navigation-cross'), tether = $('navigation-tether'), dot = $('navigation-center'), calibrationDot = $('navigation-calibration-dot');
       if (target) {
-        ring.setAttribute('cx', target[0]); ring.setAttribute('cy', target[1]); ring.setAttribute('r', 13 / box.scale);
+        ring.setAttribute('cx', target[0]); ring.setAttribute('cy', target[1]); ring.setAttribute('r', (points.length ? 17 : 13) / box.scale);
         const arm = 5 / box.scale;
         cross.setAttribute('d', `M ${target[0] - arm} ${target[1]} H ${target[0] + arm} M ${target[0]} ${target[1] - arm} V ${target[1] + arm}`);
       }
@@ -722,9 +774,9 @@
       }
       const preview = cameraVisionFresh() && calibrationProjectionReady && finitePoint(calibrationCenter) && (calibrationStage || navigationBusy === 'calibrate');
       if (preview) { calibrationDot.setAttribute('cx', calibrationCenter[0]); calibrationDot.setAttribute('cy', calibrationCenter[1]); calibrationDot.setAttribute('r', 5 / box.scale); }
-      setSvgVisible(ring, !!target); setSvgVisible(cross, !!target); setSvgVisible(dot, !!center);
+      setSvgVisible(ring, !!target); setSvgVisible(cross, !!target && !points.length); setSvgVisible(dot, !!center);
       setSvgVisible(tether, !!center && !!target); setSvgVisible(calibrationDot, !!preview);
-      setSvgVisible(overlay, !!target || !!center || !!preview);
+      setSvgVisible(overlay, points.length > 0 || !!target || !!center || !!preview);
     }
     function sameSpeeds(first, second) {
       return first.forward_mm_s === second.forward_mm_s && first.turn_deg_s === second.turn_deg_s;
@@ -901,22 +953,27 @@
     function updateNavigationUI() {
       const active = navigationOwnsRobot();
       const calibrationPaused = !!calibrationStage && (!cameraVisionFresh() || !navigationAvailable || active || !calibrationProjectionReady);
-      const phases = {uncalibrated: 'Calibración pendiente', idle: 'Listo para elegir destino', selected: 'Destino seleccionado', arming: 'Preparando recorrido', turning: 'Girando hacia el punto', advancing: 'Avanzando al punto', settling: 'Estabilizando', arrived: 'Destino alcanzado', stopped: 'Recorrido detenido', stopping: 'Deteniendo recorrido', retrying: 'Recalculando desde la posición actual', error: 'Recorrido detenido', paused_vision: 'En pausa · esperando visión', paused_connection: 'En pausa · esperando conexión', reconnecting: 'Reconectando al robot', paused: 'Recorrido en pausa'};
+      const phases = {uncalibrated: 'Calibración pendiente', idle: 'Listo para añadir puntos', selected: 'Recorrido preparado', arming: 'Preparando recorrido', turning: 'Girando hacia el punto', advancing: 'Avanzando al punto', settling: 'Estabilizando', arrived: 'Recorrido completado', stopped: 'Recorrido detenido', stopping: 'Deteniendo recorrido', retrying: 'Recalculando desde la posición actual', error: 'Recorrido detenido', paused_vision: 'En pausa · esperando visión', paused_connection: 'En pausa · esperando conexión', reconnecting: 'Reconectando al robot', paused: 'Recorrido en pausa'};
       $('navigation-status').textContent = navigationBusy === 'calibrate' ? 'Guardando calibración' : calibrationPaused ? 'Calibración en pausa' : calibrationStage === 'center' ? '1 de 2 · Centro del robot' : calibrationStage === 'front' ? '2 de 2 · Frente del robot' : navigationStartPending && !navigationState?.active ? 'Preparando recorrido' : navigationAvailable ? phases[navigationState?.phase] || 'Navegación' : 'Navegación no disponible';
       $('navigation-status').dataset.mode = navigationState?.phase === 'error' ? 'error' : active ? 'active' : 'idle';
-      $('navigation-instruction').textContent = calibrationPaused ? 'Tu selección está guardada. Cuando vuelva la visión y la conexión, continúa desde este paso.' : calibrationStage === 'center' ? 'Haz clic en el centro entre las dos ruedas.' : calibrationStage === 'front' ? 'El centro sigue al robot. Haz clic en un punto hacia su frente, en el plano del marcador.' : navigationState?.message || (navigationCalibrated() ? 'Haz clic en la imagen para elegir un destino. Después pulsa Ir al punto.' : 'Calibra el centro y el frente del robot antes de elegir un destino.');
+      $('navigation-instruction').textContent = calibrationPaused ? 'Tu selección está guardada. Cuando vuelva la visión y la conexión, continúa desde este paso.' : calibrationStage === 'center' ? 'Haz clic en el centro entre las dos ruedas.' : calibrationStage === 'front' ? 'El centro sigue al robot. Haz clic en un punto hacia su frente, en el plano del marcador.' : navigationState?.message || (navigationCalibrated() ? 'Haz clic en la imagen para añadir puntos en orden. Después inicia el recorrido.' : 'Calibra el centro y el frente del robot antes de añadir puntos.');
       if (!active && !calibrationStage && robotState?.connected && robotState?.ready && (robotState.velocity_control !== true || !robotSupportsSpeedSettings())) {
         $('navigation-status').textContent = 'Actualización del robot pendiente';
         $('navigation-instruction').textContent = 'Actualiza el firmware por USB para usar estas velocidades. Tu calibración y tu destino están guardados.';
       }
       $('navigation-calibration-label').textContent = navigationCalibrated() ? 'Centro y frente listos' : 'Calibración pendiente';
+      const pointCount = navigationWaypoints().length, pointIndex = navigationWaypointIndex();
+      const progress = pointCount ? `Punto ${Math.min(pointCount, pointIndex + 1)} / ${pointCount}${pointIndex >= pointCount ? ' · Completado' : ''}` : routePointsPending() ? 'Guardando puntos…' : 'Sin puntos';
+      if ($('navigation-progress').textContent !== progress) $('navigation-progress').textContent = progress;
       $('navigation-distance').textContent = cameraVisionFresh() && navigationCalibrated() && Number.isFinite(navigationState?.remaining_mm) ? `≈ ${Math.round(navigationState.remaining_mm)} mm` : '';
       $('navigation-calibrate').textContent = calibrationStage ? 'Cancelar calibración' : 'Calibrar robot';
       $('navigation-calibrate').disabled = !!navigationBusy || active || (!calibrationStage && !canEditNavigation());
       $('navigation-start').disabled = !canStartNavigation();
-      $('navigation-start-label').textContent = active ? navigationState?.phase === 'stopping' ? 'Deteniendo recorrido' : /^(paused|reconnecting)/.test(navigationState?.phase || '') ? 'Recorrido en pausa' : 'Recorrido en curso' : 'Ir al punto';
-      $('navigation-stop').disabled = !active || navigationBusy === 'stop';
-      viewport.dataset.selectable = canEditNavigation() && (!!calibrationStage || navigationCalibrated()) ? 'true' : 'false';
+      $('navigation-start-label').textContent = active ? ['stop', 'clear-targets'].includes(navigationBusy) || navigationState?.phase === 'stopping' ? 'Deteniendo recorrido' : /^(paused|reconnecting)/.test(navigationState?.phase || '') ? 'Recorrido en pausa' : 'Recorrido en curso' : 'Iniciar recorrido';
+      $('navigation-stop').disabled = !active || ['stop', 'clear-targets'].includes(navigationBusy);
+      $('navigation-clear').disabled = !navigationAvailable || navigationBusy === 'clear-targets' || (!pointCount && !routePointsPending());
+      $('navigation-clear-label').textContent = navigationBusy === 'clear-targets' ? 'Borrando…' : 'Borrar puntos';
+      viewport.dataset.selectable = canEditNavigation(!calibrationStage) && (!!calibrationStage || (navigationCalibrated() && navigationRouteRevision() !== null)) ? 'true' : 'false';
       renderSpeedControls();
       updateRobotButtons();
       drawNavigationOverlay();
@@ -959,7 +1016,7 @@
         const result = await api(`/api/navigation/${action}`, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body: JSON.stringify(body)});
         if (actionVersion !== navigationActionVersion) return false;
         navigationAppliedVersion = ++navigationReadVersion;
-        renderNavigation(result, action === 'stop', speedGeneration);
+        renderNavigation(result, ['stop', 'clear-targets'].includes(action), speedGeneration);
         return true;
       } catch (error) {
         if (actionVersion === navigationActionVersion) setNavigationError(error.message || 'No se pudo completar la solicitud.');
@@ -971,8 +1028,38 @@
         }
       }
     }
+    async function sendRoutePoints() {
+      if (routePointSending || !routePointQueue.length) return;
+      const generation = routeEditGeneration;
+      routePointSending = true; routePointSendingGeneration = generation;
+      updateNavigationUI();
+      try {
+        while (routePointQueue.length && generation === routeEditGeneration) {
+          const job = routePointQueue.shift();
+          if (job.generation !== generation) continue;
+          if (state?.camera_id !== job.body.camera_id || state?.frame_width !== job.body.frame_width || state?.frame_height !== job.body.frame_height) {
+            routePointQueue = [];
+            setNavigationError('La imagen cambió. Vuelve a seleccionar los puntos pendientes.');
+            break;
+          }
+          const revision = navigationRouteRevision();
+          if (revision === null) {
+            routePointQueue = [];
+            setNavigationError('Espera a que se confirme la ruta antes de añadir puntos.');
+            break;
+          }
+          const accepted = await navigationPost('targets', {...job.body, expected_route_revision: revision});
+          if (generation !== routeEditGeneration) break;
+          if (!accepted) { routePointQueue = []; break; }
+        }
+      } finally {
+        routePointSending = false; routePointSendingGeneration = -1;
+        updateNavigationUI();
+        if (routePointQueue.length) sendRoutePoints();
+      }
+    }
     async function selectNavigationPoint(event) {
-      if (!canEditNavigation()) return;
+      if (!canEditNavigation(!calibrationStage)) return;
       const point = nativeImagePoint(event.clientX, event.clientY, viewport.getBoundingClientRect(), state.frame_width, state.frame_height);
       if (!point) return;
       if (calibrationStage) {
@@ -994,22 +1081,30 @@
           if (calibrationAnchor?.key === submittedSource) cancelCalibration();
         } else if (calibrationAnchor?.key === submittedSource) persistCalibrationDraft();
         updateNavigationUI();
-      } else if (navigationCalibrated()) {
-        await navigationPost('target', {x: point[0], y: point[1], frame_width: state.frame_width, frame_height: state.frame_height, camera_id: state.camera_id || null});
+      } else if (navigationCalibrated() && navigationRouteRevision() !== null) {
+        routePointQueue.push({generation: routeEditGeneration, body: {x: point[0], y: point[1], frame_width: state.frame_width, frame_height: state.frame_height, camera_id: state.camera_id || null}});
+        await sendRoutePoints();
       }
     }
     function startNavigation(event) {
       if (event?.detail > 1 || !canStartNavigation()) return;
       navigationStartPending = true;
-      navigationPost('start', {});
+      navigationPost('start', {expected_route_revision: navigationRouteRevision()});
     }
     function stopNavigation() {
       if (!navigationOwnsRobot() || navigationBusy === 'stop') return;
       navigationPost('stop', {});
     }
+    function clearNavigationPoints() {
+      if (!navigationAvailable || navigationBusy === 'clear-targets' || (!navigationWaypoints().length && !routePointsPending())) return;
+      routeEditGeneration++;
+      routePointQueue = [];
+      navigationPost('clear-targets', {});
+    }
     $('navigation-calibrate').addEventListener('click', beginCalibration);
     $('navigation-start').addEventListener('click', startNavigation);
     $('navigation-stop').addEventListener('click', stopNavigation);
+    $('navigation-clear').addEventListener('click', clearNavigationPoints);
     for (const id of ['navigation-forward-speed', 'navigation-turn-speed']) {
       const input = $(id);
       input.addEventListener('input', speedInput);

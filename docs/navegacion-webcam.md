@@ -1,7 +1,7 @@
-# Ir a un punto con la webcam
+# Recorrer puntos con la webcam
 
-El panel de http://127.0.0.1:8010/ permite seleccionar un destino en la imagen
-y enviar al robot una secuencia de giro, avance y parada. Python y OpenCV
+El panel de http://127.0.0.1:8010/ permite marcar varios destinos en la imagen
+y recorrerlos en el orden elegido. Python y OpenCV
 obtienen la posición desde el AprilTag; las consignas de velocidad llegan a la
 ESP32 por Wi-Fi y el firmware regula cada rueda con su encoder. Esta prueba
 funciona sin Webots ni ROS 2.
@@ -70,30 +70,37 @@ con el mismo nombre exacto**. Si hay varias coincidencias o se elige otra cámar
 no las considera intercambiables. Una resolución diferente sigue requiriendo
 calibrar; esta recuperación no sustituye la comprobación física del montaje.
 
-El servicio conserva la calibración, el destino y la indicación de misión
+El servicio conserva la calibración, la lista de puntos, el siguiente punto pendiente y la indicación de misión
 pendiente en `simulation/.runtime/navigation-state.json`, excluido de Git.
 También puede leer el archivo anterior `navigation-calibration.json`. Cargar
 ese estado o abrir el panel no envía órdenes al robot.
 
-## Elegir un destino y moverse
+## Marcar un recorrido y moverse
 
-1. Con el robot detenido, haz clic sobre una zona despejada de la imagen. El
-   punto y la línea de unión muestran el destino seleccionado.
-2. **Seleccionar un punto nunca mueve el robot.** Revisa el sentido del frente,
+1. Con el robot detenido, haz clic en los destinos sobre zonas despejadas de la
+   imagen. Cada clic añade un punto numerado; la línea muestra el orden del recorrido.
+2. **Marcar puntos nunca mueve el robot.** Revisa el sentido del frente,
    el espacio disponible para girar y la trayectoria completa antes de continuar.
-3. Pulsa **Ir al punto** una sola vez. El robot gira para orientarse, avanza
-   corrigiendo su dirección y envía una parada al acercarse al destino.
+3. Pulsa **Iniciar recorrido** una sola vez. El robot gira para orientarse, avanza
+   corrigiendo su dirección, se detiene en cada punto y continúa con el siguiente.
 4. Usa **Detener recorrido**, **Detener** en la tarjeta Robot o el botón físico
    **D48** para cancelarlo. Esas paradas requieren un nuevo inicio explícito.
+5. **Borrar puntos** detiene el recorrido y vacía la lista. Conserva la calibración
+   y las velocidades. Puedes marcar después una ruta nueva.
+
+El panel indica el punto actual y el total. Tras una parada puedes continuar con
+el punto pendiente pulsando **Iniciar recorrido**; después de completar toda la
+lista, ese mismo botón permite repetirla desde el primer punto. Si añades puntos
+después de completar una ruta, el siguiente inicio recorre solo los nuevos.
 
 Si se pierde una detección o la conexión Wi-Fi, la misión **espera con los
-motores a cero**, conservando el destino y la calibración. Al recuperarse una
-imagen estable y el enlace, continúa automáticamente hacia el mismo punto.
+motores a cero**, conservando la lista, su progreso y la calibración. Al recuperarse una
+imagen estable y el enlace, continúa automáticamente hacia el punto pendiente.
 No debes volver a seleccionarlo ni iniciar otra misión. Un cambio real de
 cámara o resolución sí requiere repetir la calibración.
 
 Si cierras o reinicias el **programa Python**, al abrirlo recupera el destino
-como pendiente, pero exige pulsar **Ir al punto** para volver a mover el robot.
+como pendiente, pero exige pulsar **Iniciar recorrido** para volver a mover el robot.
 Es distinto de una reconexión de la webcam o del Wi-Fi durante una misión activa,
 que se reanuda automáticamente.
 
@@ -103,7 +110,8 @@ se rechazan: el margen mínimo es el mayor entre 20 píxeles y el 60 % del lado
 medio del marcador detectado. Esto ayuda a conservar el seguimiento; también
 debes comprobar que todo el robot permanezca dentro del área de prueba.
 
-No puedes cambiar el destino ni recalibrar mientras un recorrido esté activo.
+No puedes añadir puntos ni recalibrar mientras un recorrido esté activo.
+**Borrar puntos** sí está disponible durante el movimiento y lo detiene.
 La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegación.
 
 ## Ajustar las velocidades
@@ -134,8 +142,11 @@ y anuncia `max_velocity_mm_s: 2147483647`; ese número describe el mensaje, no l
 velocidad física del robot. Cada inicio comprueba la capacidad de la versión
 conectada, y los números que no caben en el formato se rechazan.
 
-La potencia máxima sigue siendo PWM 160 de 255 y se conservan las rampas y el
-frenado. La velocidad alcanzable depende de la alimentación, carga y motores.
+La potencia máxima sigue siendo PWM 160 de 255. Las rampas de consigna son ahora
+600 mm/s² al acelerar y 900 mm/s² al desacelerar, tanto en Python como en el
+controlador local. El frenado cerca del destino se anticipa con 450 mm/s² y
+240°/s² al terminar un giro. Son valores de control, pendientes de medir sobre
+el robot real. La velocidad alcanzable depende de la alimentación, carga y motores.
 Pololu especifica 6500 rpm sin carga a 6 V para el modelo #5178; ese dato no es
 una medición del robot sobre el suelo. [Especificaciones de Pololu](https://www.pololu.com/product/5178/specs).
 
@@ -149,13 +160,14 @@ una medición del robot sobre el suelo. [Especificaciones de Pololu](https://www
 | Volver a girar durante el avance | Error mayor de 25° |
 | Velocidad máxima de avance | Escala ampliable y entrada numérica desde 50 mm/s; valor inicial de 100 mm/s |
 | Velocidad máxima de giro | Escala ampliable y entrada numérica desde 12°/s; valor inicial de 32°/s |
-| Aproximación al destino | Reduce la consigna según distancia de frenado; usa 120 mm/s² para anticipar la parada |
-| Fin del giro | Reduce según el ángulo pendiente; usa 70°/s² como referencia de frenado |
-| Subida y bajada de consigna en Python | 120 y 180 mm/s², respectivamente |
+| Aproximación al destino | Reduce la consigna según distancia de frenado; usa 450 mm/s² para anticipar la parada |
+| Fin del giro | Reduce según el ángulo pendiente; usa 240°/s² como referencia de frenado |
+| Subida y bajada de consigna en Python y ESP32 | 600 y 900 mm/s², respectivamente |
+| Subida y bajada de salida PWM local | 600 y 900 unidades/s; el aumento inicial hasta detectar movimiento conserva 300 unidades/s |
 | Cambio de sentido o de movimiento | Pasa por cero antes de invertir; frena ambas ruedas antes de cambiar entre giro y avance |
 | Control local de velocidad | 100 Hz en la ESP32, con realimentación de ambos encoders |
 | Inicio de la parada | Distancia estimada de hasta 25 mm |
-| Asentamiento | 400 ms con consignas cero; acepta hasta 40 mm al terminar |
+| Asentamiento | 150 ms entre puntos y 400 ms al terminar, con consignas cero; acepta hasta 40 mm al confirmar cada llegada |
 | Duración del intento | Sin cancelación automática por tiempo total; el tiempo se muestra como diagnóstico |
 | Tiempo sin progreso observado | Tras 5 segundos activos, pausa 0,5 segundos, vuelve a estimar y reintenta con los mismos topes |
 | Imagen requerida al iniciar | Antigüedad de hasta 200 ms |
@@ -263,6 +275,16 @@ reconexión de la misma cámara no lo hacen.
 El primer inicio manual sin confirmación no se reintenta automáticamente. La
 recuperación automática corresponde a una misión que ya fue iniciada y confirmada.
 
+La API local añade un punto con `POST /api/navigation/targets`, usando las
+coordenadas `x`, `y`, `frame_width`, `frame_height` y `camera_id` de la imagen.
+`POST /api/navigation/clear-targets` detiene y borra la lista. El estado incluye
+`waypoints_px`, `waypoint_index` (desde cero) y `waypoint_count`;
+`target_px` representa el punto pendiente y queda vacío al completar la lista.
+El antiguo `POST /api/navigation/target` conserva su significado de reemplazar
+el destino por una ruta de un solo punto. El panel incluye `expected_route_revision` al añadir e iniciar para rechazar
+peticiones anteriores a una edición o borrado de la ruta. Estas peticiones usan la cabecera
+local `X-Requested-With: XMLHttpRequest`, igual que los controles anteriores.
+
 El estado de navegación expone `left_target_mm_s` y `right_target_mm_s` para las
 consignas enviadas. Los campos anteriores `last_left` y `last_right` se mantienen
 por compatibilidad y ahora también representan mm/s, **no PWM**. Incluye además
@@ -281,7 +303,7 @@ la captura de imagen hasta la aplicación de una consigna.
 ## Comprobaciones realizadas
 
 - El firmware con encoders se compiló con Arduino-ESP32 **2.0.14**:
-  **764933 bytes de programa y 50432 bytes de RAM**. Se cargó por USB y se
+  **764889 bytes de programa y 50432 bytes de RAM**. Se cargó por USB y se
   verificaron `max_velocity_mm_s: 2147483647`, `velocity_control: true`, `encoder_ready: true`, ambos PWM a cero
   y ninguna sesión de movimiento activa. La prueba de movimiento sigue pendiente.
 - Con la versión anterior del robot físico se enviaron consignas UDP **0/0** para verificar
@@ -296,13 +318,17 @@ la captura de imagen hasta la aplicación de una consigna.
   Completó seis destinos delante, a ambos lados, detrás y en diagonales traseras,
   con error final de hasta 26 mm y parada. Es un modelo cinemático ideal; no
   reproduce la fricción ni la inercia medidas del robot real.
+- Un recorrido virtual de cuatro puntos con giros se completó en orden dentro
+  de una misma sesión. Se verificaron la continuación desde un punto intermedio,
+  el borrado durante el movimiento y el rechazo de solicitudes atrasadas después
+  de borrar o detener. La suite completa pasó **504 pruebas**.
 - Las pruebas automatizadas cubren geometría, sentido de los giros, correcciones,
   selección sin movimiento, límites de destino, pausa y recuperación de visión,
   cambios de fuente, D48, caducidad y recuperación de sesión, reinicio, confirmaciones
   tardías tras cancelar, persistencia sin movimiento, rampas, paso por cero,
   consignas métricas, rechazo de firmware sin control por encoder, transporte y solicitudes inválidas.
   Usan dobles de cámara y robot, sin abrir hardware ni enviar tráfico al robot.
-- Once pruebas C++ del controlador real, compilado sin Arduino, cubren fricción
+- Catorce pruebas C++ del controlador real, compilado sin Arduino, cubren fricción
   estática, pulsos cuantizados, arranque, regulación, saturación, parada,
   inversión con inercia y el límite de cinco segundos sin respuesta.
 
