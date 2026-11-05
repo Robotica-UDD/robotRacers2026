@@ -1,5 +1,5 @@
-// Última modificación: 2026-11-05 15:48 | America/Santiago (UTC-03).
-// ESP32-S3, Arduino-ESP32 2.0.14. Pulso HTTP y navegación UDP con vencimiento local.
+// Última modificación: 2026-11-05 16:25 | America/Santiago (UTC-03).
+// ESP32-S3, Arduino-ESP32 2.0.14. HTTP/UDP y control local de encoders a 100 Hz.
 // La duración se cumple en un temporizador local; el encendido nunca mueve motores.
 #include <Arduino.h>
 #include <Wire.h>
@@ -11,13 +11,18 @@
 #include <Adafruit_NeoPixel.h>
 #include <esp_timer.h>
 #include <esp_system.h>
+#include <driver/pcnt.h>
 #include <freertos/semphr.h>
+#include <freertos/task.h>
 #include <soc/gpio_struct.h>
 #include <atomic>
+#include "WheelVelocityControl.h"
 
 const uint8_t PWM_PIN[] = {47, 8}, PH_PIN[] = {5, 9};
 const uint8_t SLEEP_PIN[] = {6, 10}, FAULT_PIN[] = {7, 11};
 const bool INVERTIR[] = {false, true};
+const uint8_t ENC_A[] = {15, 17}, ENC_B[] = {16, 18};
+const int8_t SIGNO_ENCODER[] = {-1, 1};
 const uint8_t STOP_PIN = 48, TURBINA_PIN = 12;
 const int PULSE_PWM = 100;
 const uint32_t PULSE_MS = 1000;
@@ -30,14 +35,22 @@ WiFiUDP navigationUDP;
 Preferences preferences;
 Adafruit_NeoPixel rgb(1, 45, NEO_GRB + NEO_KHZ800);
 SemaphoreHandle_t motorMutex = nullptr;
+SemaphoreHandle_t udpMutex = nullptr;
+TaskHandle_t motorTask = nullptr;
 esp_timer_handle_t pulseTimer = nullptr;
 std::atomic<bool> statusDirty(true);
 volatile bool emergencyRequested = false;
 bool moving = false, driversAwake = false, driverFault = false;
 bool powerInitOK = false, hardwareOK = false, storageOK = false;
 bool serverStarted = false;
-bool udpStarted = false, navigationActive = false, haveControlSeq = false;
+std::atomic<bool> udpStarted(false);
+bool navigationActive = false, haveControlSeq = false;
 bool resumeBlocked = false;
+bool encoderReady = false, velocityMode = false;
+int16_t previousPCNT[2] = {};
+int64_t encoderCount[2] = {};
+int appliedPwm[2] = {};
+robotracers::WheelVelocityControl wheelControl[2];
 uint32_t controlSeq = 0;
 int8_t lastDirection[2] = {1, 1};
 int64_t controlDeadline = 0;
@@ -49,7 +62,7 @@ String robotMac, savedSSID, savedPassword;
 uint32_t lastPowerCheck = 0, lastWifiRetry = 0;
 wl_status_t previousWifi = WL_NO_SHIELD;
 String previousIP;
-char usbLine[MAX_LINE + 1] = {}, usbOutput[768] = {}, usbError[64] = {};
+char usbLine[MAX_LINE + 1] = {}, usbOutput[2048] = {}, usbError[64] = {};
 size_t usbLength = 0, outputLength = 0, outputOffset = 0;
 bool usbOverflow = false, previousSerial = false;
 bool previousStopHeld = false;
@@ -66,7 +79,10 @@ bool stopHeld() { return digitalRead(STOP_PIN) == LOW; }
 
 // Solo llamar con motorMutex tomado (excepto la inicialización, sin tareas).
 void outputsOffLocked(bool sleepDrivers) {
+  velocityMode = false;
+  wheelControl[0].setTarget(0); wheelControl[1].setTarget(0);
   ledcWrite(0, 0); ledcWrite(1, 0);
+  appliedPwm[0] = appliedPwm[1] = 0;
   if (sleepDrivers) {
     digitalWrite(SLEEP_PIN[0], LOW); digitalWrite(SLEEP_PIN[1], LOW);
     driversAwake = false;
@@ -90,7 +106,8 @@ void stopLocked(const char *reason, bool sleepDrivers) {
   // visible por pérdida de WiFi o alimentación. Solo un nuevo inicio la libera.
   if (strcmp(reason, "button_stop") == 0 || strcmp(reason, "driver_fault") == 0 ||
       strcmp(reason, "remote") == 0 || strcmp(reason, "remote_stop") == 0 ||
-      strcmp(reason, "manual_stop") == 0) resumeBlocked = true;
+      strcmp(reason, "manual_stop") == 0 || strcmp(reason, "encoder_stall") == 0 ||
+      strcmp(reason, "encoder_fault") == 0) resumeBlocked = true;
   invalidateNavigationLocked();
   outputsOffLocked(sleepDrivers);
   if (strcmp(stopReason, reason) != 0) {
@@ -185,6 +202,7 @@ int beginPulse(const char *id, bool &replayed, bool &isMoving) {
   esp_timer_stop(pulseTimer);
   controlDeadline = esp_timer_get_time() + int64_t(PULSE_MS) * 1000;
   ledcWrite(0, PULSE_PWM); ledcWrite(1, PULSE_PWM);
+  appliedPwm[0] = appliedPwm[1] = PULSE_PWM;
   moving = true;
   const int64_t remaining = controlDeadline - esp_timer_get_time();
   if (remaining <= 0 || esp_timer_start_once(pulseTimer, uint64_t(remaining)) != ESP_OK) {
@@ -207,6 +225,13 @@ void buildStatus(JsonDocument &doc, bool includeToken) {
   xSemaphoreTake(motorMutex, portMAX_DELAY);
   doc["ready"] = readyLocked(); doc["moving"] = moving;
   doc["resume_blocked"] = resumeBlocked;
+  doc["velocity_control"] = true; doc["encoder_ready"] = encoderReady;
+  for (int i = 0; i < 2; i++) {
+    doc["count"][i] = encoderCount[i];
+    doc["speed_mm_s"][i] = wheelControl[i].speed();
+    doc["applied_pwm"][i] = appliedPwm[i];
+    doc["startup"][i] = velocityMode && wheelControl[i].startup();
+  }
   doc["navigation_active"] = navigationActive; doc["control_seq"] = controlSeq;
   doc["control_mode"] = navigationActive ? "navigation" : moving ? "pulse" : "idle";
   doc["control_session"] = String(controlSession);
@@ -291,7 +316,10 @@ void navigationStartRequest() {
     navigationActive = true; haveControlSeq = false; controlSeq = 0;
     if (!armDeadlineLocked(esp_timer_get_time() + int64_t(NAV_INITIAL_MS) * 1000)) result = 503;
     else {
-      if (!resuming) resumeBlocked = false;
+      if (!resuming) {
+        resumeBlocked = false;
+        for (int i = 0; i < 2; i++) wheelControl[i].clearFault();
+      }
       strlcpy(stopReason, "navigation", sizeof(stopReason)); markStatus();
     }
   }
@@ -303,7 +331,43 @@ void navigationStartRequest() {
   JsonDocument ack; ack["accepted"] = true; ack["session"] = session; sendJson(200, ack);
 }
 
-void applyNavigationPacket(const char *session, uint32_t sequence, bool stopCommand, int left, int right) {
+bool applySignedPwmLocked(int left, int right) {
+  if (stopHeld() || emergencyRequested) { stopLocked("button_stop", true); return false; }
+  const int wheel[] = {left, right};
+  const bool anyMotion = left != 0 || right != 0;
+  for (int i = 0; i < 2; i++) {
+    const int8_t direction = wheel[i] < 0 ? -1 : 1;
+    if (wheel[i] != 0 && direction != lastDirection[i]) {
+      ledcWrite(i, 0);
+      digitalWrite(PH_PIN[i], ((direction > 0) != INVERTIR[i]) ? HIGH : LOW);
+      lastDirection[i] = direction;
+    }
+  }
+  if (anyMotion && !driversAwake) {
+    ledcWrite(0, 0); ledcWrite(1, 0);
+    if (stopHeld() || emergencyRequested) { stopLocked("button_stop", true); return false; }
+    for (int i = 0; i < 2; i++) {
+      digitalWrite(PH_PIN[i], ((lastDirection[i] > 0) != INVERTIR[i]) ? HIGH : LOW);
+      digitalWrite(SLEEP_PIN[i], HIGH);
+    }
+    driversAwake = true;
+    // La ISR puede bajar SLEEP entre el check anterior y este despertar.
+    if (stopHeld() || emergencyRequested) { stopLocked("button_stop", true); return false; }
+    delay(3);
+  }
+  if (stopHeld() || emergencyRequested) { stopLocked("button_stop", true); return false; }
+  if (driversAwake && (digitalRead(FAULT_PIN[0]) == LOW || digitalRead(FAULT_PIN[1]) == LOW)) {
+    driverFault = true; stopLocked("driver_fault", true); return false;
+  }
+  if (stopHeld() || emergencyRequested) { stopLocked("button_stop", true); return false; }
+  ledcWrite(0, abs(left)); ledcWrite(1, abs(right));
+  appliedPwm[0] = left; appliedPwm[1] = right;
+  moving = anyMotion;
+  return true;
+}
+
+void applyNavigationPacket(const char *session, uint32_t sequence, bool stopCommand,
+                           bool velocityCommand, int left, int right) {
   xSemaphoreTake(motorMutex, portMAX_DELAY);
   if (!navigationActive || strcmp(controlSession, session) != 0) {
     xSemaphoreGive(motorMutex); return;
@@ -325,36 +389,25 @@ void applyNavigationPacket(const char *session, uint32_t sequence, bool stopComm
     stopLocked(stopHeld() || emergencyRequested ? "button_stop" : "not_ready", true);
     esp_timer_stop(pulseTimer); xSemaphoreGive(motorMutex); return;
   }
-  const int wheel[] = {left, right};
   const bool anyMotion = left != 0 || right != 0;
-  // Cortar EN antes de cambiar PH, aunque el otro motor conserve su sentido.
-  for (int i = 0; i < 2; i++) {
-    const int8_t direction = wheel[i] < 0 ? -1 : 1;
-    if (wheel[i] != 0 && direction != lastDirection[i]) {
-      ledcWrite(i, 0);
-      digitalWrite(PH_PIN[i], ((direction > 0) != INVERTIR[i]) ? HIGH : LOW);
-      lastDirection[i] = direction;
+  if (velocityCommand) {
+    if (!encoderReady) {
+      stopLocked("encoder_fault", true); esp_timer_stop(pulseTimer);
+      xSemaphoreGive(motorMutex); return;
     }
-  }
-  if (anyMotion && !driversAwake) {
-    ledcWrite(0, 0); ledcWrite(1, 0);
-    // El primer sentido también se fija al despertar desde el arranque.
+    if (!velocityMode) outputsOffLocked(false);
+    velocityMode = true;
+    wheelControl[0].setTarget(left); wheelControl[1].setTarget(right);
     for (int i = 0; i < 2; i++) {
-      digitalWrite(PH_PIN[i], ((lastDirection[i] > 0) != INVERTIR[i]) ? HIGH : LOW);
-      digitalWrite(SLEEP_PIN[i], HIGH);
+      if (wheelControl[i].target() == 0) { ledcWrite(i, 0); appliedPwm[i] = 0; }
     }
-    driversAwake = true; delay(3);
+    moving = anyMotion;
+  } else {
+    if (velocityMode) outputsOffLocked(false);
+    if (!applySignedPwmLocked(left, right)) {
+      esp_timer_stop(pulseTimer); xSemaphoreGive(motorMutex); return;
+    }
   }
-  if (stopHeld() || emergencyRequested) {
-    stopLocked("button_stop", true); esp_timer_stop(pulseTimer);
-    xSemaphoreGive(motorMutex); return;
-  }
-  if (driversAwake && (digitalRead(FAULT_PIN[0]) == LOW || digitalRead(FAULT_PIN[1]) == LOW)) {
-    driverFault = true; stopLocked("driver_fault", true); esp_timer_stop(pulseTimer);
-    xSemaphoreGive(motorMutex); return;
-  }
-  ledcWrite(0, abs(left)); ledcWrite(1, abs(right));
-  moving = anyMotion;
   if (armDeadlineLocked(now + int64_t(NAV_LEASE_MS) * 1000)) {
     controlSeq = sequence; haveControlSeq = true;
     strlcpy(stopReason, "navigation", sizeof(stopReason)); markStatus();
@@ -386,11 +439,84 @@ void serviceNavigationUDP() {
     const char *command = request["command"].as<const char *>();
     if (request["command"].as<JsonString>().size() != strlen(command)) continue;
     const bool stopping = strcmp(command, "stop") == 0;
-    if (!stopping && strcmp(command, "drive") != 0) continue;
+    const bool velocity = strcmp(command, "velocity") == 0;
+    if (!stopping && !velocity && strcmp(command, "drive") != 0) continue;
     const int left = request["left"].as<int>(), right = request["right"].as<int>();
     if (left < -100 || left > 100 || right < -100 || right > 100 ||
         request["lease_ms"].as<int>() != int(NAV_LEASE_MS) || (stopping && (left != 0 || right != 0))) continue;
-    applyNavigationPacket(session, request["seq"].as<uint32_t>(), stopping, left, right);
+    applyNavigationPacket(session, request["seq"].as<uint32_t>(), stopping, velocity, left, right);
+  }
+}
+
+bool configureEncoder(int i) {
+  const pcnt_unit_t unit = static_cast<pcnt_unit_t>(i);
+  pcnt_config_t config = {};
+  config.unit = unit; config.counter_h_lim = 30000; config.counter_l_lim = -30000;
+  config.lctrl_mode = PCNT_MODE_KEEP; config.hctrl_mode = PCNT_MODE_REVERSE;
+  config.pulse_gpio_num = ENC_A[i]; config.ctrl_gpio_num = ENC_B[i]; config.channel = PCNT_CHANNEL_0;
+  config.pos_mode = PCNT_COUNT_INC; config.neg_mode = PCNT_COUNT_DEC;
+  if (pcnt_unit_config(&config) != ESP_OK) return false;
+  config.pulse_gpio_num = ENC_B[i]; config.ctrl_gpio_num = ENC_A[i]; config.channel = PCNT_CHANNEL_1;
+  config.pos_mode = PCNT_COUNT_DEC; config.neg_mode = PCNT_COUNT_INC;
+  if (pcnt_unit_config(&config) != ESP_OK) return false;
+  return pcnt_counter_pause(unit) == ESP_OK && pcnt_intr_disable(unit) == ESP_OK &&
+    pcnt_set_filter_value(unit, 80) == ESP_OK && pcnt_filter_enable(unit) == ESP_OK &&
+    pcnt_counter_clear(unit) == ESP_OK && pcnt_counter_resume(unit) == ESP_OK;
+}
+
+bool readEncodersLocked(double dt) {
+  for (int i = 0; i < 2; i++) {
+    int16_t actual;
+    if (pcnt_get_counter_value(static_cast<pcnt_unit_t>(i), &actual) != ESP_OK) return false;
+    int delta = int(actual) - int(previousPCNT[i]);
+    if (delta < -15000) delta += 30000;
+    if (delta > 15000) delta -= 30000;
+    previousPCNT[i] = actual;
+    if (abs(delta) > 100.0 + 16000.0 * dt) return false;
+    encoderCount[i] += int64_t(SIGNO_ENCODER[i]) * delta;
+  }
+  return true;
+}
+
+void motorControlTask(void *) {
+  TickType_t tick = xTaskGetTickCount();
+  int64_t previousTime = esp_timer_get_time(), lastTelemetry = previousTime;
+  for (;;) {
+    // Si se necesitan ambos cerrojos, el orden es UDP -> motor. Ningún HTTP,
+    // I2C ni escritura USB forma parte de esta tarea de control de 100 Hz.
+    if (xSemaphoreTake(udpMutex, 0) == pdTRUE) {
+      serviceNavigationUDP();
+      xSemaphoreGive(udpMutex);
+    }
+    const int64_t now = esp_timer_get_time();
+    const double dt = (now - previousTime) * 1e-6;
+    previousTime = now;
+    xSemaphoreTake(motorMutex, portMAX_DELAY);
+    if (stopHeld() || emergencyRequested) {
+      stopLocked("button_stop", true); esp_timer_stop(pulseTimer);
+    } else if (driversAwake && (digitalRead(FAULT_PIN[0]) == LOW || digitalRead(FAULT_PIN[1]) == LOW)) {
+      driverFault = true; stopLocked("driver_fault", true); esp_timer_stop(pulseTimer);
+    } else if ((navigationActive || moving) && now >= controlDeadline) {
+      stopLocked(navigationActive ? "control_timeout" : "completed", false);
+      esp_timer_stop(pulseTimer);
+    }
+    if (encoderReady && !readEncodersLocked(dt)) {
+      encoderReady = false; stopLocked("encoder_fault", true); esp_timer_stop(pulseTimer);
+    }
+    int command[2] = {};
+    for (int i = 0; i < 2; i++) command[i] = wheelControl[i].update(encoderCount[i], now * 1e-6);
+    if (velocityMode && navigationActive) {
+      if (!readyLocked() || !encoderReady) {
+        stopLocked(!encoderReady ? "encoder_fault" : "not_ready", true); esp_timer_stop(pulseTimer);
+      } else if (wheelControl[0].stalled() || wheelControl[1].stalled()) {
+        stopLocked("encoder_stall", true); esp_timer_stop(pulseTimer);
+      } else if (!applySignedPwmLocked(command[0], command[1])) {
+        esp_timer_stop(pulseTimer);
+      }
+    }
+    if (now - lastTelemetry >= 100000) { markStatus(); lastTelemetry = now; }
+    xSemaphoreGive(motorMutex);
+    vTaskDelayUntil(&tick, pdMS_TO_TICKS(10));
   }
 }
 
@@ -510,6 +636,10 @@ void serviceUSB() {
       doc["device"] = "RobotRacers"; doc["version"] = 1; doc["error"] = usbError; usbError[0] = 0;
     } else if (statusDirty.exchange(false)) buildStatus(doc, true);
     else return;
+    if (measureJson(doc) >= sizeof(usbOutput) - 1) {
+      doc.clear(); doc["device"] = "RobotRacers"; doc["version"] = 1;
+      doc["error"] = "status_too_large";
+    }
     outputLength = serializeJson(doc, usbOutput, sizeof(usbOutput) - 1);
     usbOutput[outputLength++] = '\n';
   }
@@ -523,7 +653,9 @@ void setup() {
   pinMode(TURBINA_PIN, OUTPUT); digitalWrite(TURBINA_PIN, LOW);
   pinMode(44, INPUT_PULLUP); pinMode(STOP_PIN, INPUT_PULLUP);
   motorMutex = xSemaphoreCreateMutex();
-  hardwareOK = motorMutex != nullptr;
+  udpMutex = xSemaphoreCreateMutex();
+  hardwareOK = motorMutex != nullptr && udpMutex != nullptr;
+  encoderReady = true;
   for (int i = 0; i < 2; i++) {
     pinMode(SLEEP_PIN[i], OUTPUT); digitalWrite(SLEEP_PIN[i], LOW);
     pinMode(PWM_PIN[i], OUTPUT); digitalWrite(PWM_PIN[i], LOW);
@@ -531,6 +663,8 @@ void setup() {
     pinMode(FAULT_PIN[i], INPUT_PULLUP);
     if (ledcSetup(i, 20000, 8) == 0) hardwareOK = false;
     ledcAttachPin(PWM_PIN[i], i); ledcWrite(i, 0);
+    if (!configureEncoder(i)) { encoderReady = false; hardwareOK = false; }
+    wheelControl[i].reset(0, esp_timer_get_time() * 1e-6);
   }
   attachInterrupt(digitalPinToInterrupt(STOP_PIN), emergencyISR, FALLING);
   Serial.begin(115200);
@@ -550,6 +684,14 @@ void setup() {
   }
   rgb.begin(); rgb.clear(); rgb.show();
   lastPowerCheck = millis() - 1000;
+  if (hardwareOK && xTaskCreatePinnedToCore(motorControlTask, "wheel_control", 8192,
+                                           nullptr, 3, &motorTask, 1) != pdPASS) {
+    hardwareOK = false; encoderReady = false;
+    if (motorMutex) {
+      xSemaphoreTake(motorMutex, portMAX_DELAY); outputsOffLocked(true); xSemaphoreGive(motorMutex);
+    }
+  }
+  if (!hardwareOK) encoderReady = false;
 }
 
 void loop() {
@@ -571,28 +713,43 @@ void loop() {
   }
   if (!active && uint32_t(millis() - lastPowerCheck) >= 1000) {
     lastPowerCheck = millis();
+    xSemaphoreTake(motorMutex, portMAX_DELAY);
     const bool previous = powerInitOK;
-    if (!powerInitOK && hardwareOK && !stopHeld()) powerInitOK = configurePower();
-    else if (powerInitOK) { uint8_t value; powerInitOK = readRegister(7, value) && !(value & 0xE0); }
-    if (!powerInitOK) stopMotors("power_unavailable", true);
+    xSemaphoreGive(motorMutex);
+    bool nextPower = previous;
+    if (!previous && hardwareOK && !stopHeld()) nextPower = configurePower();
+    else if (previous) { uint8_t value; nextPower = readRegister(7, value) && !(value & 0xE0); }
+    xSemaphoreTake(motorMutex, portMAX_DELAY);
+    powerInitOK = nextPower;
+    if (!powerInitOK) { stopLocked("power_unavailable", true); esp_timer_stop(pulseTimer); }
     if (powerInitOK != previous) markStatus();
+    xSemaphoreGive(motorMutex);
   }
   const wl_status_t wifi = WiFi.status();
   const String ip = WiFi.localIP().toString();
   if (wifi != previousWifi || ip != previousIP) { previousWifi = wifi; previousIP = ip; markStatus(); }
   if (wifi != WL_CONNECTED && udpStarted) {
-    stopMotors("wifi_disconnected", true); navigationUDP.stop(); udpStarted = false;
+    stopMotors("wifi_disconnected", true);
+    // No anidar motor -> UDP: detener motores libera su mutex primero.
+    xSemaphoreTake(udpMutex, portMAX_DELAY);
+    navigationUDP.stop(); udpStarted = false;
+    xSemaphoreGive(udpMutex);
   }
-  if (wifi == WL_CONNECTED && !udpStarted) udpStarted = navigationUDP.begin(NAV_UDP_PORT) == 1;
+  if (wifi == WL_CONNECTED && !udpStarted && udpMutex) {
+    xSemaphoreTake(udpMutex, portMAX_DELAY);
+    udpStarted = navigationUDP.begin(NAV_UDP_PORT) == 1;
+    xSemaphoreGive(udpMutex);
+  }
   if (wifi == WL_CONNECTED && !serverStarted) { server.begin(); serverStarted = true; }
   if (serverStarted) server.handleClient();
-  serviceNavigationUDP();
   if (savedSSID.length() && wifi != WL_CONNECTED && uint32_t(millis() - lastWifiRetry) >= 10000) {
     lastWifiRetry = millis(); WiFi.reconnect();
   }
   serviceUSB();
   xSemaphoreTake(motorMutex, portMAX_DELAY);
-  const bool canRun = readyLocked(), isMoving = moving, fault = driverFault || !hardwareOK;
+  const bool canRun = readyLocked(), isMoving = moving;
+  const bool fault = driverFault || !hardwareOK || !encoderReady ||
+    wheelControl[0].stalled() || wheelControl[1].stalled();
   xSemaphoreGive(motorMutex);
   const uint32_t color = fault ? rgb.Color(30,0,0) : isMoving ? rgb.Color(0,0,35)
     : canRun && wifi == WL_CONNECTED ? rgb.Color(0,25,0) : rgb.Color(18,10,0);
