@@ -23,7 +23,8 @@ def main():
         opener.daemon = True
         opener.start()
     try:
-        uvicorn.run("simulation.webcam.app:app", host="127.0.0.1", port=args.port, log_level="info")
+        uvicorn.run("simulation.webcam.app:app", host="127.0.0.1", port=args.port, log_level="info",
+                    access_log=False, timeout_graceful_shutdown=2)
     finally:
         if opener is not None:
             opener.cancel()

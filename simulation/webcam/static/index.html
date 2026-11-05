@@ -11,6 +11,7 @@
     .camera-label-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}.camera-label-row label{margin:0}.refresh-cameras{display:inline-flex;align-items:center;gap:5px;padding:3px 0;border:0;background:none;color:var(--accent);font-size:10px}.refresh-cameras:hover:not(:disabled){text-decoration:underline}.viewport-label{min-width:0}.viewport-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.view-mode{flex-shrink:0}
     .layout>section,.sidebar{min-width:0}.viewport-label{min-width:0}.viewport-label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.view-mode{white-space:nowrap;flex-shrink:0}@media(max-width:760px){.layout{grid-template-columns:minmax(0,1fr)}}
     .robot-controls{padding:23px}.robot-controls .section-label{margin-bottom:16px}.robot-status{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;margin-bottom:7px}.robot-status:before{content:"";width:7px;height:7px;border-radius:50%;background:#91a29d;flex-shrink:0}.robot-status[data-mode="ready"]:before{background:#1b9970;box-shadow:0 0 0 3px #1b997012}.robot-status[data-mode="busy"]:before{background:#c38b2b}.robot-status[data-mode="error"]:before{background:#c4594d}.robot-address{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;margin-bottom:8px;overflow-wrap:anywhere}.robot-address:empty{display:none}.robot-message{font-size:11px;color:var(--muted);line-height:1.6;margin:0 0 18px;overflow-wrap:anywhere}.pulse-detail{text-align:center;font-size:10px;color:var(--muted);margin:9px 0 11px;font-variant-numeric:tabular-nums}.robot-stop{color:#955048}.wifi-config{margin-top:19px;padding-top:17px;border-top:1px solid var(--line)}.wifi-config summary{font-size:11px;color:var(--muted);cursor:pointer;line-height:1.6}.wifi-config form{margin-top:17px}.wifi-config label{margin:14px 0 8px}.wifi-config .camera-label-row label{margin:0}.wifi-config input{width:100%;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:#fff9;color:#24463e;font:inherit;font-size:12px}.wifi-config input:focus-visible{outline:3px solid #4b9e90;outline-offset:3px}.wifi-config .hint{margin:8px 0 14px}.wifi-config .button{margin-top:16px}.robot-note{font-size:10px;line-height:1.65;color:var(--muted);margin:14px 0 0}.robot-help{margin-top:13px}.robot-help summary{font-size:10px;color:var(--muted);cursor:pointer}.robot-help p{font-size:10px;line-height:1.65;color:var(--muted);margin:7px 0 0}@media(max-width:1050px){.robot-controls{padding:19px}}@media(max-width:760px){.guide{grid-column:1/-1}}
+    .navigation-controls{padding:23px}.navigation-controls .section-label{margin-bottom:16px}.navigation-status{font-size:12px;font-weight:600;margin:0 0 8px;color:#365d50}.navigation-status[data-mode="error"]{color:#a23e35}.navigation-status[data-mode="active"]{color:#916015}.navigation-instruction{font-size:12px;color:var(--muted);line-height:1.65;margin:0 0 16px;min-height:39px}.navigation-calibration{font-size:10px;color:var(--muted);margin:0 0 13px;display:flex;align-items:center;justify-content:space-between;gap:8px}.navigation-distance{font-variant-numeric:tabular-nums;white-space:nowrap}.navigation-controls .calibrate-button{margin:0 0 11px;font-size:11px;padding:10px 12px}.navigation-note{font-size:10px;color:var(--muted);margin:14px 0 0;text-align:center;line-height:1.6}.navigation-overlay{position:absolute;pointer-events:none;overflow:visible}.navigation-overlay[hidden],.navigation-overlay [hidden]{display:none}.viewport[data-selectable="true"]{cursor:crosshair}.calibration-dot{fill:#ffc96b;stroke:#142321;stroke-width:2}.navigation-target{fill:#9af1e12b;stroke:#6ce5ce;stroke-width:2}.navigation-tether{stroke:#6ce5ce;stroke-width:2;stroke-linecap:round;stroke-dasharray:6 5}.navigation-center{fill:#bcfff0;stroke:#0a6654;stroke-width:1.5}.navigation-cross{stroke:#bcfff0;stroke-width:1.5;stroke-linecap:round}@media(max-width:1050px){.navigation-controls{padding:19px}}
   </style>
 </head>
 <body>
@@ -32,6 +33,13 @@
           <div class="viewport-head"><div class="viewport-label"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="14" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="m17 10 4-2v8l-4-2" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="12" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg><span id="active-camera-name">Cámara cenital</span></div><span class="view-mode">Imagen sin espejo</span></div>
           <div id="viewport" class="viewport">
             <img id="camera-image" alt="Imagen en directo con recuadro del marcador y flecha hacia el frente del robot">
+            <svg id="navigation-overlay" class="navigation-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden>
+              <line id="navigation-tether" class="navigation-tether" vector-effect="non-scaling-stroke" hidden/>
+              <circle id="navigation-center" class="navigation-center" vector-effect="non-scaling-stroke" hidden/>
+              <circle id="navigation-target" class="navigation-target" vector-effect="non-scaling-stroke" hidden/>
+              <path id="navigation-cross" class="navigation-cross" vector-effect="non-scaling-stroke" fill="none" hidden/>
+              <circle id="navigation-calibration-dot" class="calibration-dot" vector-effect="non-scaling-stroke" hidden/>
+            </svg>
             <div class="empty"><div class="empty-frame" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#aac4b8" stroke-width="1"/></svg></div><h2 id="empty-title">Encuadra el robot</h2><p id="empty-copy">Coloca la webcam sobre el robot e inicia la cámara para ver el seguimiento.</p></div>
           </div>
           <div class="viewport-foot"><span class="status-icon" aria-hidden="true"></span><span id="view-message">El marcador debe quedar plano y completamente visible.</span></div>
@@ -52,13 +60,22 @@
           <button id="stop" class="button secondary" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Detener cámara</button>
           <p id="error" class="error" role="alert" hidden></p>
         </section>
+        <section class="glass navigation-controls" aria-labelledby="navigation-title">
+          <h2 id="navigation-title" class="section-label">Navegación</h2>
+          <p id="navigation-status" class="navigation-status" data-mode="idle" role="status">Preparando navegación</p>
+          <p id="navigation-instruction" class="navigation-instruction">Calibra el centro y el frente del robot antes de elegir un destino.</p>
+          <div class="navigation-calibration"><span id="navigation-calibration-label">Calibración pendiente</span><span id="navigation-distance" class="navigation-distance"></span></div>
+          <button id="navigation-calibrate" class="button secondary calibrate-button" type="button" disabled>Calibrar robot</button>
+          <button id="navigation-start" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="navigation-start-label">Ir al punto</span></button>
+          <button id="navigation-stop" class="button secondary robot-stop" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Detener recorrido</button>
+          <p id="navigation-error" class="error" role="alert" hidden></p>
+          <p class="navigation-note">Área despejada · cámara fija</p>
+        </section>
         <section class="glass robot-controls" aria-labelledby="robot-title">
           <h2 id="robot-title" class="section-label">Robot</h2>
           <div id="robot-status" class="robot-status" data-mode="idle" role="status">Sin conexión</div>
           <div id="robot-address" class="robot-address"></div>
           <p id="robot-message" class="robot-message">Conecta el robot a tu red Wi-Fi para hacer la prueba.</p>
-          <button id="robot-pulse" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="robot-pulse-label">Avanzar 1 segundo</span></button>
-          <p class="pulse-detail">Izquierdo 100 · Derecho 100 · 1000 ms</p>
           <button id="robot-stop" class="button secondary robot-stop" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg><span id="robot-stop-label">Detener</span></button>
           <p id="robot-error" class="error" role="alert" hidden></p>
           <details id="wifi-config" class="wifi-config">
@@ -76,14 +93,18 @@
             </form>
             <p class="robot-note">USB para cargar y configurar. Batería encendida para alimentar los motores.</p>
           </details>
-          <details class="robot-help"><summary>Potencia y duración</summary><p>PWM significa modulación por ancho de pulso: la escala va de 0 a 255. Esta prueba aplica 100 a cada motor. La ESP32 detiene el avance al completar 1 segundo.</p></details>
+          <details class="robot-help"><summary>Prueba manual de motores</summary>
+          <button id="robot-pulse" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="robot-pulse-label">Avanzar 1 segundo</span></button>
+          <p class="pulse-detail">Izquierdo 100 · Derecho 100 · 1000 ms</p>
+            <p>Prueba fija de comunicación: PWM 100 de 255 durante 1 segundo. Para desplazarte con correcciones y velocidad gradual, utiliza Ir al punto.</p>
+          </details>
         </section>
         <section class="glass guide" aria-labelledby="guide-title">
           <h2 id="guide-title" class="section-label">Prueba de orientación</h2>
           <ol class="steps"><li>Coloca el AprilTag plano, con 5 mm de margen blanco y la flecha hacia el frente.</li><li>Gira el robot a mano una vuelta completa. La flecha debe seguir su dirección.</li><li>Tapa el marcador: el seguimiento debe desaparecer.</li></ol>
           <div class="resource-links"><a href="/assets/apriltag-0-40mm.pdf" target="_blank" rel="noopener">Marcador para imprimir<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a><a href="/assets/ubicacion-apriltag.png" target="_blank" rel="noopener">Dónde colocarlo<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a></div>
         </section>
-        <details class="details"><summary>Acerca de las mediciones</summary><p>El centro corresponde al marcador, no al centro del robot. La orientación se mide en la imagen: 0° hacia la derecha y 90° hacia arriba. No se miden distancias reales. La imagen no controla los motores: el avance se activa con su botón.</p></details>
+        <details class="details"><summary>Acerca de las mediciones</summary><p>El centro de la medición corresponde al marcador. La calibración define el centro entre las ruedas y el frente para la navegación. La orientación se mide en la imagen: 0° hacia la derecha y 90° hacia arriba. La distancia indicada es una aproximación en el plano del marcador.</p></details>
       </aside>
     </div>
     <footer class="bottom-note"><span>AprilTag · identificador 0</span><span id="capture-detail">Python + OpenCV</span></footer>
@@ -101,6 +122,12 @@
     let robotConnectBusy = false, robotPulseSubmitting = false, robotStopBusy = false;
     let robotPulsePending = false, robotPulseExpectedId = null, robotPulseResponseReceived = false;
     let robotReadVersion = 0, robotAppliedVersion = 0;
+    let navigationState = null, navigationAvailable = false, navigationBusy = '', navigationStartPending = false;
+    let navigationReadBusy = false, navigationReadVersion = 0, navigationAppliedVersion = 0;
+    let navigationActionVersion = 0, navigationCameraKey = '';
+    let calibrationStage = '', calibrationCenter = null, calibrationAnchor = null;
+    let calibrationCenterTag = null, calibrationProjectionReady = false, calibrationSourceKey = '';
+    let cameraStateReceivedAt = 0;
 
     function announce(text) {
       if (lastAnnouncement !== text) { $('screen-reader-status').textContent = text; lastAnnouncement = text; }
@@ -132,6 +159,7 @@
       if (retryStream !== null) { clearTimeout(retryStream); retryStream = null; }
       image.removeAttribute('src');
       viewport.classList.remove('has-image');
+      $('navigation-overlay').setAttribute('hidden', '');
     }
     function startStream() {
       if (streamActive) return;
@@ -140,6 +168,7 @@
     }
     image.addEventListener('load', () => {
       if (state?.running && connected) viewport.classList.add('has-image');
+      updateNavigationUI();
     });
     image.addEventListener('error', () => {
       if (!state?.running || !connected) return;
@@ -154,6 +183,7 @@
     });
     function render(next) {
       state = next;
+      cameraStateReceivedAt = performance.now();
       const running = !!next.running;
       const opening = !!next.opening;
       const active = running || opening;
@@ -183,6 +213,8 @@
         $('empty-copy').textContent = 'Coloca la webcam sobre el robot e inicia la cámara para ver el seguimiento.';
       }
       updateButtons();
+      checkCalibrationAnchor();
+      updateNavigationUI();
     }
     async function refresh() {
       try {
@@ -191,6 +223,7 @@
         render(next);
       } catch {
         connected = false;
+        cameraStateReceivedAt = 0;
         clearStream();
         $('badge').dataset.mode = 'error';
         $('badge-label').textContent = 'Sin conexión';
@@ -201,6 +234,8 @@
         $('capture-detail').textContent = 'Python + OpenCV';
         announce('Sin conexión con el servicio local.');
         updateButtons();
+        checkCalibrationAnchor();
+        updateNavigationUI();
       }
       setTimeout(refresh, connected ? 200 : 1500);
     }
@@ -326,21 +361,25 @@
       const moving = linked && !!robotState?.moving;
       const configuring = robotIsConfiguring();
       const actionBusy = robotConnectBusy || robotPulseSubmitting || robotStopBusy;
-      $('robot-pulse').disabled = !linked || !robotState?.ready || moving || robotPulsePending || actionBusy || configuring;
-      $('robot-stop').disabled = !moving || robotStopBusy;
+      const navigating = navigationOwnsRobot();
+      const configurationBlocked = navigating && !navigationAllowsReconnect();
+      $('robot-pulse').disabled = !linked || !robotState?.ready || moving || robotPulsePending || actionBusy || configuring || navigating || !!calibrationStage || navigationBusy === 'calibrate';
+      $('robot-stop').disabled = !linked || !(moving || navigating) || robotStopBusy;
       $('robot-pulse-label').textContent = moving ? 'Avanzando…' : robotPulsePending ? 'Confirmando parada…' : 'Avanzar 1 segundo';
       $('robot-stop-label').textContent = robotStopBusy ? 'Deteniendo…' : 'Detener';
-      $('robot-connect').disabled = !robotAvailable || actionBusy || configuring || moving || !$('robot-port').value;
+      $('robot-connect').disabled = !robotAvailable || actionBusy || configuring || moving || configurationBlocked || !$('robot-port').value;
       $('robot-connect-label').textContent = robotConnectBusy || configuring ? 'Conectando…' : 'Conectar robot';
-      const editingDisabled = actionBusy || configuring || moving;
+      const editingDisabled = actionBusy || configuring || moving || configurationBlocked;
       $('robot-port').disabled = editingDisabled || robotPortsLoading;
       $('robot-ssid').disabled = $('robot-password').disabled = editingDisabled;
       $('robot-refresh-ports').disabled = editingDisabled || robotPortsLoading;
     }
     function renderRobot(next, confirmed = false) {
+      const previouslyLinked = !!robotState?.connected;
       robotState = next;
       robotAvailable = true;
       const linked = !!next.connected;
+      if (linked && !previouslyLinked) $('wifi-config').open = false;
       const moving = linked && !!next.moving;
       const idleConfirmed = confirmed && linked && !!next.ready && !moving;
       if (robotPulsePending && robotPulseResponseReceived && idleConfirmed &&
@@ -353,8 +392,9 @@
       $('robot-status').dataset.mode = moving || robotIsConfiguring() ? 'busy' : linked && next.ready ? 'ready' : next.phase === 'error' ? 'error' : 'idle';
       const latency = linked && Number.isFinite(next.round_trip_ms) ? `${number.format(next.round_trip_ms)} ms` : '';
       $('robot-address').textContent = [linked ? next.ip : '', latency].filter(Boolean).join(' · ');
-      $('robot-message').textContent = next.message || (linked ? moving ? 'Avance de 1 segundo en curso.' : next.ready ? 'Pulsa Avanzar para ejecutar una sola prueba.' : 'Esperando que el robot esté listo.' : 'Conecta el robot a tu red Wi-Fi para hacer la prueba.');
+      $('robot-message').textContent = next.message || (linked ? moving ? 'Movimiento en curso.' : next.ready ? 'Listo para recibir una orden.' : 'Esperando que el robot esté listo.' : 'Conecta el robot a tu red Wi-Fi para hacer la prueba.');
       updateRobotButtons();
+      updateNavigationUI();
     }
     async function readRobotState() {
       const version = ++robotReadVersion;
@@ -375,6 +415,7 @@
           $('robot-address').textContent = '';
           $('robot-message').textContent = 'No se pudo consultar el robot. Esperando la conexión con el servicio local.';
           updateRobotButtons();
+          updateNavigationUI();
         }
         return false;
       }
@@ -384,7 +425,7 @@
       setTimeout(pollRobot, online ? 1000 : 1500);
     }
     async function loadRobotPorts() {
-      if (robotPortsLoading || robotConnectBusy || robotPulseSubmitting || robotStopBusy || robotState?.moving || robotIsConfiguring()) return;
+      if (robotPortsLoading || robotConnectBusy || robotPulseSubmitting || robotStopBusy || robotState?.moving || robotIsConfiguring() || (navigationOwnsRobot() && !navigationAllowsReconnect())) return;
       robotPortsLoading = true;
       updateRobotButtons();
       try {
@@ -462,6 +503,10 @@
         robotPulseExpectedId = null;
         robotPulseResponseReceived = true;
         renderRobot(result, true);
+        navigationActionVersion++;
+        navigationBusy = '';
+        navigationStartPending = false;
+        readNavigationState();
       } catch (error) { setRobotError(error.message || 'No se pudo confirmar la parada.'); }
       finally { robotStopBusy = false; updateRobotButtons(); }
     }
@@ -470,6 +515,281 @@
     $('robot-pulse').addEventListener('click', pulseRobot);
     $('robot-stop').addEventListener('click', stopRobot);
     $('robot-port').addEventListener('change', updateRobotButtons);
+    function finitePoint(point) {
+      return Array.isArray(point) && point.length === 2 && point.every(Number.isFinite);
+    }
+    function cameraKey() {
+      return `${state?.camera_id ?? state?.camera_index ?? ''}:${state?.frame_width || 0}x${state?.frame_height || 0}`;
+    }
+    function cameraFrameFresh() {
+      return connected && state?.running && !state.opening && state.frame_width > 0 && state.frame_height > 0 &&
+        cameraStateReceivedAt > 0 && performance.now() - cameraStateReceivedAt < 900 &&
+        viewport.classList.contains('has-image') && image.naturalWidth === state.frame_width && image.naturalHeight === state.frame_height;
+    }
+    function cameraVisionFresh() {
+      return cameraFrameFresh() && !!state.visible && Array.isArray(state.marker_corners) && state.marker_corners.length === 4;
+    }
+    function containedImageGeometry(rect, width, height) {
+      if (!(rect.width > 0 && rect.height > 0 && width > 0 && height > 0)) return null;
+      const scale = Math.min(rect.width / width, rect.height / height);
+      return {left: rect.left + (rect.width - width * scale) / 2, top: rect.top + (rect.height - height * scale) / 2,
+        width: width * scale, height: height * scale, scale};
+    }
+    function nativeImagePoint(clientX, clientY, rect, width, height) {
+      const box = containedImageGeometry(rect, width, height);
+      if (!box || clientX < box.left || clientY < box.top || clientX >= box.left + box.width || clientY >= box.top + box.height) return null;
+      return [(clientX - box.left) / box.scale, (clientY - box.top) / box.scale];
+    }
+    function navigationOwnsRobot() {
+      return !!navigationState?.active || navigationStartPending || navigationBusy === 'start' || navigationBusy === 'stop';
+    }
+    function navigationAllowsReconnect() {
+      return !!navigationState?.active && ['paused_connection', 'reconnecting'].includes(navigationState.phase);
+    }
+    function canEditNavigation() {
+      return navigationAvailable && cameraVisionFresh() && !navigationOwnsRobot() && !navigationBusy &&
+        !robotState?.moving && !robotPulsePending && !robotPulseSubmitting && !robotStopBusy && !robotConnectBusy;
+    }
+    function navigationCalibrated() {
+      const sourceAvailable = state?.frame_width > 0 && state?.frame_height > 0;
+      return !!navigationState?.calibrated && (!sourceAvailable || navigationCameraKey === cameraKey());
+    }
+    function canStartNavigation() {
+      return canEditNavigation() && !calibrationStage && navigationCalibrated() && finitePoint(navigationState?.target_px) &&
+        robotAvailable && !!robotState?.connected && !!robotState.ready;
+    }
+    function setNavigationError(text) {
+      $('navigation-error').textContent = text;
+      $('navigation-error').hidden = !text;
+    }
+    function markerPose() {
+      if (!cameraVisionFresh()) return null;
+      const points = state.marker_corners;
+      if (!points.every(finitePoint)) return null;
+      return {center: [points.reduce((sum, p) => sum + p[0], 0) / 4, points.reduce((sum, p) => sum + p[1], 0) / 4],
+        heading: Number.isFinite(state.heading_deg) ? state.heading_deg : Math.atan2(points[0][1] - points[1][1], points[1][0] - points[0][0]) * 180 / Math.PI,
+        corners: points.map(point => [...point]), key: cameraKey(), metadata: {frame_width: state.frame_width, frame_height: state.frame_height, camera_id: state.camera_id || null}};
+    }
+    function calibrationDrafts() {
+      try {
+        const value = JSON.parse(sessionStorage.getItem('robotracers.calibration-drafts') || '{}');
+        return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+      } catch { return {}; }
+    }
+    function persistCalibrationDraft(remove = false, sourceKey = '') {
+      const key = sourceKey || calibrationAnchor?.key || calibrationSourceKey;
+      if (!key) return;
+      const drafts = calibrationDrafts();
+      if (remove || !calibrationStage || !calibrationAnchor) delete drafts[key];
+      else drafts[key] = {stage: calibrationStage, center_tag: calibrationCenterTag, metadata: calibrationAnchor.metadata};
+      try { sessionStorage.setItem('robotracers.calibration-drafts', JSON.stringify(drafts)); } catch { /* La prueba también funciona sin almacenamiento de sesión. */ }
+    }
+    function synchronizeCalibrationSource() {
+      if (!(state?.frame_width > 0 && state?.frame_height > 0) || (!state.camera_id && !Number.isInteger(state.camera_index))) return;
+      const key = cameraKey();
+      if (key === calibrationSourceKey) return;
+      if (calibrationStage) persistCalibrationDraft();
+      const previous = calibrationSourceKey;
+      calibrationSourceKey = key;
+      calibrationStage = ''; calibrationCenter = null; calibrationCenterTag = null; calibrationAnchor = null; calibrationProjectionReady = false;
+      const draft = calibrationDrafts()[key];
+      if (draft && ['center', 'front'].includes(draft.stage) && draft.metadata?.frame_width === state.frame_width && draft.metadata?.frame_height === state.frame_height && draft.metadata?.camera_id === (state.camera_id || null)) {
+        calibrationStage = draft.stage === 'front' && finitePoint(draft.center_tag) ? 'front' : 'center';
+        calibrationCenterTag = finitePoint(draft.center_tag) ? draft.center_tag : null;
+        calibrationAnchor = {key, metadata: {...draft.metadata}};
+      } else if (previous) setNavigationError('La cámara o su resolución cambió. Calibra esta vista antes de elegir un destino.');
+    }
+    function mapQuadPoint(point, from, to) {
+      if (!finitePoint(point) || !Array.isArray(from) || !Array.isArray(to) || from.length !== 4 || to.length !== 4 || !from.every(finitePoint) || !to.every(finitePoint)) return null;
+      const matrix = [];
+      for (let i = 0; i < 4; i++) {
+        const [x, y] = from[i], [u, v] = to[i];
+        matrix.push([x, y, 1, 0, 0, 0, -u * x, -u * y, u]);
+        matrix.push([0, 0, 0, x, y, 1, -v * x, -v * y, v]);
+      }
+      for (let column = 0; column < 8; column++) {
+        let pivot = column;
+        for (let row = column + 1; row < 8; row++) if (Math.abs(matrix[row][column]) > Math.abs(matrix[pivot][column])) pivot = row;
+        if (Math.abs(matrix[pivot][column]) < 1e-10) return null;
+        [matrix[column], matrix[pivot]] = [matrix[pivot], matrix[column]];
+        const divisor = matrix[column][column];
+        for (let j = column; j < 9; j++) matrix[column][j] /= divisor;
+        for (let row = 0; row < 8; row++) if (row !== column) {
+          const factor = matrix[row][column];
+          for (let j = column; j < 9; j++) matrix[row][j] -= factor * matrix[column][j];
+        }
+      }
+      const h = matrix.map(row => row[8]), [x, y] = point, denominator = h[6] * x + h[7] * y + 1;
+      if (Math.abs(denominator) < 1e-10) return null;
+      const result = [(h[0] * x + h[1] * y + h[2]) / denominator, (h[3] * x + h[4] * y + h[5]) / denominator];
+      return finitePoint(result) ? result : null;
+    }
+    function cancelCalibration(message = '') {
+      persistCalibrationDraft(true);
+      calibrationStage = ''; calibrationCenter = null; calibrationCenterTag = null; calibrationAnchor = null; calibrationProjectionReady = false;
+      if (message) setNavigationError(message);
+      updateNavigationUI();
+    }
+    function checkCalibrationAnchor() {
+      synchronizeCalibrationSource();
+      if (!calibrationStage || !calibrationAnchor) return;
+      const pose = markerPose();
+      calibrationProjectionReady = false;
+      if (!pose || pose.key !== calibrationAnchor.key) return;
+      if (!calibrationCenterTag) { calibrationProjectionReady = true; return; }
+      const projected = mapQuadPoint(calibrationCenterTag, [[0, 0], [1, 0], [1, 1], [0, 1]], pose.corners);
+      if (projected) { calibrationCenter = projected; calibrationProjectionReady = true; }
+    }
+    function beginCalibration() {
+      if (calibrationStage) { cancelCalibration(); return; }
+      if (!canEditNavigation()) return;
+      calibrationAnchor = markerPose();
+      if (!calibrationAnchor) return;
+      calibrationSourceKey = calibrationAnchor.key;
+      calibrationCenter = null; calibrationCenterTag = null; calibrationProjectionReady = true; calibrationStage = 'center';
+      persistCalibrationDraft();
+      setNavigationError(''); updateNavigationUI();
+    }
+    function setSvgVisible(element, visible) {
+      if (visible) element.removeAttribute('hidden'); else element.setAttribute('hidden', '');
+    }
+    function drawNavigationOverlay() {
+      const overlay = $('navigation-overlay');
+      if (!cameraFrameFresh()) { setSvgVisible(overlay, false); return; }
+      const rect = viewport.getBoundingClientRect();
+      const box = containedImageGeometry(rect, state.frame_width, state.frame_height);
+      if (!box) { setSvgVisible(overlay, false); return; }
+      overlay.style.left = `${box.left - rect.left}px`; overlay.style.top = `${box.top - rect.top}px`;
+      overlay.style.width = `${box.width}px`; overlay.style.height = `${box.height}px`;
+      overlay.setAttribute('viewBox', `0 0 ${state.frame_width} ${state.frame_height}`);
+      const target = navigationCameraKey === cameraKey() && finitePoint(navigationState?.target_px) ? navigationState.target_px : null;
+      const center = cameraVisionFresh() && navigationCalibrated() && finitePoint(navigationState?.center_px) ? navigationState.center_px : null;
+      const ring = $('navigation-target'), cross = $('navigation-cross'), tether = $('navigation-tether'), dot = $('navigation-center'), calibrationDot = $('navigation-calibration-dot');
+      if (target) {
+        ring.setAttribute('cx', target[0]); ring.setAttribute('cy', target[1]); ring.setAttribute('r', 13 / box.scale);
+        const arm = 5 / box.scale;
+        cross.setAttribute('d', `M ${target[0] - arm} ${target[1]} H ${target[0] + arm} M ${target[0]} ${target[1] - arm} V ${target[1] + arm}`);
+      }
+      if (center) { dot.setAttribute('cx', center[0]); dot.setAttribute('cy', center[1]); dot.setAttribute('r', 4 / box.scale); }
+      if (center && target) {
+        tether.setAttribute('x1', center[0]); tether.setAttribute('y1', center[1]);
+        tether.setAttribute('x2', target[0]); tether.setAttribute('y2', target[1]);
+      }
+      const preview = cameraVisionFresh() && calibrationProjectionReady && finitePoint(calibrationCenter) && (calibrationStage || navigationBusy === 'calibrate');
+      if (preview) { calibrationDot.setAttribute('cx', calibrationCenter[0]); calibrationDot.setAttribute('cy', calibrationCenter[1]); calibrationDot.setAttribute('r', 5 / box.scale); }
+      setSvgVisible(ring, !!target); setSvgVisible(cross, !!target); setSvgVisible(dot, !!center);
+      setSvgVisible(tether, !!center && !!target); setSvgVisible(calibrationDot, !!preview);
+      setSvgVisible(overlay, !!target || !!center || !!preview);
+    }
+    function updateNavigationUI() {
+      const active = navigationOwnsRobot();
+      const calibrationPaused = !!calibrationStage && (!cameraVisionFresh() || !navigationAvailable || active || !calibrationProjectionReady);
+      const phases = {uncalibrated: 'Calibración pendiente', idle: 'Listo para elegir destino', selected: 'Destino seleccionado', arming: 'Preparando recorrido', turning: 'Girando hacia el punto', advancing: 'Avanzando al punto', settling: 'Estabilizando', arrived: 'Destino alcanzado', stopped: 'Recorrido detenido', stopping: 'Deteniendo recorrido', retrying: 'Recalculando desde la posición actual', error: 'Recorrido detenido', paused_vision: 'En pausa · esperando visión', paused_connection: 'En pausa · esperando conexión', reconnecting: 'Reconectando al robot', paused: 'Recorrido en pausa'};
+      $('navigation-status').textContent = navigationBusy === 'calibrate' ? 'Guardando calibración' : calibrationPaused ? 'Calibración en pausa' : calibrationStage === 'center' ? '1 de 2 · Centro del robot' : calibrationStage === 'front' ? '2 de 2 · Frente del robot' : navigationStartPending && !navigationState?.active ? 'Preparando recorrido' : navigationAvailable ? phases[navigationState?.phase] || 'Navegación' : 'Navegación no disponible';
+      $('navigation-status').dataset.mode = navigationState?.phase === 'error' ? 'error' : active ? 'active' : 'idle';
+      $('navigation-instruction').textContent = calibrationPaused ? 'Tu selección está guardada. Cuando vuelva la visión y la conexión, continúa desde este paso.' : calibrationStage === 'center' ? 'Haz clic en el centro entre las dos ruedas.' : calibrationStage === 'front' ? 'El centro sigue al robot. Haz clic en un punto hacia su frente, en el plano del marcador.' : navigationState?.message || (navigationCalibrated() ? 'Haz clic en la imagen para elegir un destino. Después pulsa Ir al punto.' : 'Calibra el centro y el frente del robot antes de elegir un destino.');
+      $('navigation-calibration-label').textContent = navigationCalibrated() ? 'Centro y frente listos' : 'Calibración pendiente';
+      $('navigation-distance').textContent = cameraVisionFresh() && navigationCalibrated() && Number.isFinite(navigationState?.remaining_mm) ? `≈ ${Math.round(navigationState.remaining_mm)} mm` : '';
+      $('navigation-calibrate').textContent = calibrationStage ? 'Cancelar calibración' : 'Calibrar robot';
+      $('navigation-calibrate').disabled = !!navigationBusy || active || (!calibrationStage && !canEditNavigation());
+      $('navigation-start').disabled = !canStartNavigation();
+      $('navigation-start-label').textContent = active ? navigationState?.phase === 'stopping' ? 'Deteniendo recorrido' : /^(paused|reconnecting)/.test(navigationState?.phase || '') ? 'Recorrido en pausa' : 'Recorrido en curso' : 'Ir al punto';
+      $('navigation-stop').disabled = !active || navigationBusy === 'stop';
+      viewport.dataset.selectable = canEditNavigation() && (!!calibrationStage || navigationCalibrated()) ? 'true' : 'false';
+      updateRobotButtons();
+      drawNavigationOverlay();
+    }
+    function renderNavigation(next, confirmed = false) {
+      navigationState = next; navigationAvailable = true;
+      if (state?.frame_width > 0 && state?.frame_height > 0) navigationCameraKey = cameraKey();
+      if (confirmed && !next.active && navigationBusy !== 'start') navigationStartPending = false;
+      updateNavigationUI();
+    }
+    async function readNavigationState() {
+      if (navigationReadBusy) return;
+      navigationReadBusy = true;
+      const version = ++navigationReadVersion;
+      try {
+        const next = await api('/api/navigation/state');
+        if (version >= navigationAppliedVersion) { navigationAppliedVersion = version; renderNavigation(next, true); }
+      } catch {
+        if (version >= navigationAppliedVersion) {
+          navigationAppliedVersion = version; navigationAvailable = false;
+          updateNavigationUI();
+        }
+      } finally { navigationReadBusy = false; }
+    }
+    async function pollNavigation() {
+      await readNavigationState();
+      checkCalibrationAnchor();
+      updateNavigationUI();
+      setTimeout(pollNavigation, navigationOwnsRobot() || cameraVisionFresh() ? 125 : 500);
+    }
+    async function navigationPost(action, body) {
+      const actionVersion = ++navigationActionVersion;
+      navigationBusy = action;
+      navigationAppliedVersion = ++navigationReadVersion;
+      setNavigationError(''); updateNavigationUI();
+      try {
+        const result = await api(`/api/navigation/${action}`, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body: JSON.stringify(body)});
+        if (actionVersion !== navigationActionVersion) return false;
+        navigationAppliedVersion = ++navigationReadVersion;
+        renderNavigation(result, action === 'stop');
+        return true;
+      } catch (error) {
+        if (actionVersion === navigationActionVersion) setNavigationError(error.message || 'No se pudo completar la solicitud.');
+        return false;
+      } finally {
+        if (actionVersion === navigationActionVersion) {
+          navigationBusy = '';
+          updateNavigationUI();
+        }
+      }
+    }
+    async function selectNavigationPoint(event) {
+      if (!canEditNavigation()) return;
+      const point = nativeImagePoint(event.clientX, event.clientY, viewport.getBoundingClientRect(), state.frame_width, state.frame_height);
+      if (!point) return;
+      if (calibrationStage) {
+        checkCalibrationAnchor();
+        if (!calibrationStage || !calibrationProjectionReady) return;
+        if (calibrationStage === 'center') {
+          const pose = markerPose();
+          const local = pose && mapQuadPoint(point, pose.corners, [[0, 0], [1, 0], [1, 1], [0, 1]]);
+          if (!local) { setNavigationError('No se pudo fijar el centro. Espera una imagen clara del marcador y vuelve a hacer clic.'); return; }
+          calibrationCenter = point; calibrationCenterTag = local; calibrationStage = 'front';
+          persistCalibrationDraft(); updateNavigationUI(); return;
+        }
+        const metadata = calibrationAnchor.metadata;
+        const submittedSource = calibrationAnchor.key;
+        const center = calibrationCenter;
+        const accepted = await navigationPost('calibrate', {center_px: center, front_px: point, ...metadata});
+        if (accepted) {
+          persistCalibrationDraft(true, submittedSource);
+          if (calibrationAnchor?.key === submittedSource) cancelCalibration();
+        } else if (calibrationAnchor?.key === submittedSource) persistCalibrationDraft();
+        updateNavigationUI();
+      } else if (navigationCalibrated()) {
+        await navigationPost('target', {x: point[0], y: point[1], frame_width: state.frame_width, frame_height: state.frame_height, camera_id: state.camera_id || null});
+      }
+    }
+    function startNavigation(event) {
+      if (event?.detail > 1 || !canStartNavigation()) return;
+      navigationStartPending = true;
+      navigationPost('start', {});
+    }
+    function stopNavigation() {
+      if (!navigationOwnsRobot() || navigationBusy === 'stop') return;
+      navigationPost('stop', {});
+    }
+    $('navigation-calibrate').addEventListener('click', beginCalibration);
+    $('navigation-start').addEventListener('click', startNavigation);
+    $('navigation-stop').addEventListener('click', stopNavigation);
+    viewport.addEventListener('click', selectNavigationPoint);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(drawNavigationOverlay).observe(viewport);
+    window.addEventListener('resize', drawNavigationOverlay);
+    updateNavigationUI();
+    pollNavigation();
     updateRobotButtons();
     loadRobotPorts();
     pollRobot();

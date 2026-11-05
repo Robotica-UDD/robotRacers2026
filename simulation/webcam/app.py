@@ -6,6 +6,7 @@ from collections import deque
 from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
+import re
 import sys
 import threading
 import time
@@ -21,6 +22,7 @@ from pydantic import BaseModel, Field
 from .detector import AprilTagDetector, Detection, annotate_frame
 from .devices import discover_cameras, _manual_options
 from .robot_link import RobotLink, make_robot_router
+from .navigation import Navigation, make_navigation_router
 
 LOGGER = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -45,9 +47,17 @@ class CaptureSession:
 
     def __init__(self, capture_factory: Callable | None = None, detector=None,
                  clock: Callable = time.monotonic, stale_after_s: float = 0.75,
-                 startup_timeout_s: float = 5.0):
+                 startup_timeout_s: float = 5.0, *, autoreconnect: bool | None = None,
+                 reconnect_interval_s: float = 1.0, frame_gap_timeout_s: float = 0.4,
+                 camera_discovery: Callable | None = None):
         self.capture_factory = capture_factory or open_camera
         self._uses_default_capture = capture_factory is None
+        # Las cámaras falsas existentes conservan el comportamiento terminal.
+        # La captura real reabre únicamente un identificador físico conocido.
+        self._autoreconnect = self._uses_default_capture if autoreconnect is None else autoreconnect
+        self.reconnect_interval_s = reconnect_interval_s
+        self.frame_gap_timeout_s = frame_gap_timeout_s
+        self._camera_discovery = camera_discovery
         self.detector = detector or AprilTagDetector()
         self.clock = clock
         self.stale_after_s = stale_after_s
@@ -59,8 +69,10 @@ class CaptureSession:
         self._running = False
         self._camera_index: int | None = None
         self._camera_id: str | None = None
+        self._native_camera_id: str | None = None
         self._camera_label: str | None = None
         self._opening = False
+        self.overlay_provider = None
         self._message = "Cámara detenida."
         self._sequence = 0
         self._version = 0
@@ -72,7 +84,7 @@ class CaptureSession:
         self._placeholder_cache: dict[str, bytes] = {}
 
     def start(self, camera_index: int = 0, camera_id: str | None = None,
-              camera_label: str | None = None) -> dict:
+              camera_label: str | None = None, *, logical_camera_id: str | None = None) -> dict:
         if isinstance(camera_index, bool) or not isinstance(camera_index, int) or not 0 <= camera_index <= 9:
             raise ValueError("El índice de cámara debe estar entre 0 y 9.")
         with self._lock:
@@ -81,16 +93,20 @@ class CaptureSession:
             self._stop_event = threading.Event()
             self._running = True
             self._camera_index = camera_index
-            self._camera_id = camera_id
+            logical_id = logical_camera_id or camera_id
+            same_source = logical_id is not None and logical_id == self._camera_id
+            self._camera_id = logical_id
+            self._native_camera_id = camera_id
             self._camera_label = camera_label
             self._opening = True
             self._message = "Abriendo cámara…"
             self._last_frame_at = None
             self._jpeg = None
             self._detection = Detection(False)
-            self._width = self._height = 0
             self._fps = 0.0
-            self._sequence = 0
+            if not same_source:
+                self._width = self._height = 0
+                self._sequence = 0
             self._version += 1
             self._thread = threading.Thread(target=self._capture, args=(camera_index, self._stop_event),
                                             name="robotracers-webcam", daemon=True)
@@ -121,16 +137,96 @@ class CaptureSession:
                     self._message = "Cerrando cámara; esperando al controlador."
         return self.state()
 
+    def _can_reconnect(self, retryable: bool) -> bool:
+        # Un índice puede pasar a pertenecer a otra webcam al retirar el USB.
+        # Sin identidad estable se necesita una nueva selección manual.
+        return bool(self._autoreconnect and retryable and self._camera_id
+                    and not self._camera_id.startswith("index:"))
+
+    @staticmethod
+    def _usb_model(identifier: str | None) -> str | None:
+        # AVFoundation antepone la ubicación del puerto a VID/PID. El sufijo
+        # identifica el modelo, no una unidad física entre dos modelos iguales.
+        if not isinstance(identifier, str) or re.fullmatch(r"0x[0-9a-fA-F]{8,}", identifier) is None:
+            return None
+        return identifier[-8:].lower()
+
+    @classmethod
+    def _usb_alias(cls, catalog: dict, identifier: str | None, label: str | None = None) -> dict | None:
+        model = cls._usb_model(identifier)
+        if not catalog.get("enumerated") or model is None:
+            return None
+        candidates = [item for item in catalog.get("options", [])
+                      if str(item.get("transport", "")).casefold() == "usb"
+                      and cls._usb_model(item.get("id")) == model
+                      and isinstance(item.get("label"), str) and item["label"]
+                      and (label is None or item["label"] == label)]
+        return candidates[0] if len(candidates) == 1 else None
+
     def _capture(self, index: int, stop: threading.Event):
+        retrying = False
+        try:
+            while not stop.is_set():
+                message, retryable = self._capture_once(index, stop, retrying=retrying)
+                if stop.is_set():
+                    break
+                reconnect = self._can_reconnect(retryable)
+                with self._lock:
+                    if stop.is_set():
+                        break
+                    self._opening = reconnect
+                    self._detection = Detection(False)
+                    self._jpeg = None
+                    self._fps = 0.0
+                    self._message = ("Cámara desconectada. Esperando la misma cámara para reconectar…"
+                                     if reconnect else message)
+                    self._version += 1
+                if not reconnect or stop.wait(self.reconnect_interval_s):
+                    break
+                retrying = True
+        finally:
+            with self._lock:
+                self._running = False
+                self._opening = False
+                self._detection = Detection(False)
+                self._jpeg = None
+                self._fps = 0.0
+                self._version += 1
+
+    def _capture_once(self, index: int, stop: threading.Event, *, retrying: bool = False) -> tuple[str, bool]:
+        """Un intento conserva la sesión, secuencia y geometría entre aperturas."""
         capture = None
         timestamps: deque[float] = deque(maxlen=60)
+        stage = "opening"
         try:
-            capture = (open_camera(index, camera_id=self._camera_id) if self._uses_default_capture
+            # Reenumerar tras una pérdida permite seguir la misma webcam cuando
+            # macOS cambia su ubicación USB. El alias requiere modelo y nombre
+            # iguales y una sola candidata; nunca sustituye por la cámara del Mac.
+            provider = self._camera_discovery
+            if provider is None and retrying and self._uses_default_capture:
+                provider = discover_cameras
+            if provider is not None and self._native_camera_id and not self._native_camera_id.startswith("index:"):
+                catalog = provider(force=True)
+                selected = next((item for item in catalog.get("options", [])
+                                 if item.get("id") == self._native_camera_id), None)
+                if selected is None:
+                    selected = self._usb_alias(catalog, self._native_camera_id, self._camera_label)
+                if not catalog.get("enumerated") or selected is None:
+                    raise RuntimeError("La cámara seleccionada no está conectada.")
+                index = selected["index"]
+                if type(index) is not int or not 0 <= index <= 9:
+                    raise RuntimeError("La cámara seleccionada no tiene un índice válido.")
+                with self._lock:
+                    self._camera_index = index
+                    self._native_camera_id = selected["id"]
+            if stop.is_set():
+                return "Cámara detenida.", False
+            capture = (open_camera(index, camera_id=self._native_camera_id) if self._uses_default_capture
                        else self.capture_factory(index))
             with self._lock:
                 self._active_capture = capture
             if stop.is_set():
-                return
+                return "Cámara detenida.", False
             if not capture.isOpened():
                 raise RuntimeError(getattr(capture, "error_message", None) or
                                    "No se pudo abrir la cámara. Revisa el índice y el permiso de Cámara en macOS.")
@@ -142,7 +238,9 @@ class CaptureSession:
             # formato. Un primer read() vacío no implica una desconexión.
             startup_deadline = time.monotonic() + self.startup_timeout_s
             received_first_frame = False
+            empty_since = None
             while not stop.is_set():
+                stage = "reading"
                 okay, pixels = capture.read()
                 received = self.clock()
                 if stop.is_set():
@@ -156,8 +254,16 @@ class CaptureSession:
                                 self._message = "Preparando la cámara; esperando la primera imagen…"
                         stop.wait(0.05)
                         continue
-                    raise RuntimeError("Cámara desconectada o sin imágenes. Detén e inicia la captura para reintentar.")
+                    if received_first_frame:
+                        now = time.monotonic()
+                        empty_since = now if empty_since is None else empty_since
+                        if now - empty_since < self.frame_gap_timeout_s:
+                            stop.wait(0.03)
+                            continue
+                    raise RuntimeError("La cámara dejó de entregar imágenes. Comprueba la conexión USB.")
                 received_first_frame = True
+                empty_since = None
+                stage = "processing"
                 # El proceso de captura marca la recepción antes del traslado;
                 # no se presenta un fotograma antiguo como recién capturado.
                 capture_stamp = getattr(capture, "frame_capture_stamp", None)
@@ -168,7 +274,8 @@ class CaptureSession:
                 elif pixels.shape[2] == 4:
                     pixels = cv2.cvtColor(pixels, cv2.COLOR_BGRA2BGR)
                 detection = self.detector.process(pixels)
-                display = annotate_frame(pixels, detection)
+                pose = self.overlay_provider(detection) if self.overlay_provider else None
+                display = annotate_frame(pixels, detection, pose)
                 encoded, jpeg = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 if not encoded:
                     raise RuntimeError("No se pudo preparar la imagen de cámara.")
@@ -189,17 +296,18 @@ class CaptureSession:
                     self._message = "Robot detectado." if detection.visible else "Buscando AprilTag 0…"
         except Exception as exc:
             LOGGER.warning("Captura detenida: %s", exc)
-            with self._lock:
-                if not stop.is_set():
-                    self._message = str(exc) if isinstance(exc, RuntimeError) else "Error de captura. Revisa la cámara y vuelve a iniciar."
+            message = str(exc) if isinstance(exc, RuntimeError) else "Error de captura. Revisa la cámara y vuelve a iniciar."
+            return message, stage in ("opening", "reading")
         finally:
-            # Invalidar antes de liberar: algunos controladores tardan en cerrar.
+            # Ocultar la pose antes de liberar; no reiniciar la geometría ni la
+            # secuencia que utilizan la calibración y el objetivo seleccionados.
             with self._lock:
-                self._running = False
-                self._opening = False
                 self._detection = Detection(False)
                 self._jpeg = None
                 self._fps = 0.0
+                if not stop.is_set() and self._can_reconnect(stage in ("opening", "reading")):
+                    self._opening = True
+                    self._message = "Cámara desconectada. Esperando la misma cámara para reconectar…"
                 self._version += 1
             if capture is not None:
                 try:
@@ -209,17 +317,20 @@ class CaptureSession:
             with self._lock:
                 if self._active_capture is capture:
                     self._active_capture = None
+        return "Cámara detenida.", False
 
     def _state_locked(self) -> dict:
         age = None if self._last_frame_at is None else max(0.0, self.clock() - self._last_frame_at)
         stale = age is not None and age > self.stale_after_s
         visible = bool(self._running and not self._stop_event.is_set() and not stale and self._detection.visible)
-        message = "Sin fotograma reciente. Esperando cámara…" if self._running and stale else self._message
+        message = ("Sin fotograma reciente. Esperando cámara…"
+                   if self._running and stale and not self._opening else self._message)
         return {
             "running": self._running, "visible": visible, "message": message,
             "opening": self._opening,
             "camera_index": self._camera_index, "frame_width": self._width, "frame_height": self._height,
-            "camera_id": self._camera_id, "camera_label": self._camera_label,
+            "camera_id": self._camera_id, "native_camera_id": self._native_camera_id,
+            "camera_label": self._camera_label,
             "fps": round(self._fps, 2) if self._running and not stale else 0.0,
             "processing_ms": round(self._detection.processing_ms, 2), "sequence": self._sequence,
             "center_px": list(self._detection.center_px) if visible else None,
@@ -236,6 +347,7 @@ class CaptureSession:
     def _placeholder(self, message: str) -> bytes:
         # Texto principal en la interfaz; OpenCV usa aquí solo caracteres ASCII.
         label = ("Sin imagen reciente" if message.startswith("Sin fotograma") else
+                 "Esperando camara" if "reconectar" in message else
                  "Abriendo camara" if message.startswith("Abriendo") else "Camara detenida")
         with self._lock:
             cached = self._placeholder_cache.get(label)
@@ -273,17 +385,27 @@ def create_app(capture_factory: Callable | None = None, detector=None,
     robot = robot_link if robot_link is not None else RobotLink(
         runtime_path=Path(__file__).resolve().parents[1] / ".runtime/robot-link.json"
         if capture_factory is None else None)
+    navigation = Navigation(camera, robot, runtime_path=
+        Path(__file__).resolve().parents[1] / ".runtime/navigation-state.json"
+        if capture_factory is None else None)
+    camera.overlay_provider = navigation.overlay_pose
+    robot.set_navigation_cancel_callback(navigation.cancel_local)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
-        yield
-        await asyncio.to_thread(camera.stop)
-        await asyncio.to_thread(robot.close)
+        try:
+            yield
+        finally:
+            await asyncio.to_thread(navigation.close)
+            await asyncio.to_thread(camera.stop)
+            await asyncio.to_thread(robot.close)
 
     application = FastAPI(title="RobotRacers · Cámara", lifespan=lifespan)
     application.state.camera = camera
     application.state.robot = robot
+    application.state.navigation = navigation
     application.include_router(make_robot_router(robot))
+    application.include_router(make_navigation_router(navigation))
 
     @application.middleware("http")
     async def uncached(request: Request, call_next):
@@ -306,11 +428,16 @@ def create_app(capture_factory: Callable | None = None, detector=None,
     @application.post("/api/start")
     def start(payload: StartRequest):
         catalog = choices(force=True)
+        previous = camera.state()
+        logical_hint = previous.get("camera_id") or navigation.saved_camera_id()
+        previous_label = previous.get("camera_label") if previous.get("camera_id") == logical_hint else None
         selected = None
         if payload.camera_id and not payload.camera_id.startswith("index:"):
             if catalog.get("enumerated"):
                 selected = next((item for item in catalog["options"]
                                  if item.get("id") == payload.camera_id), None)
+                if selected is None and payload.camera_id == logical_hint:
+                    selected = camera._usb_alias(catalog, logical_hint, previous_label)
             if selected is None:
                 raise HTTPException(409, "La cámara seleccionada ya no está disponible. Actualiza la lista y vuelve a seleccionarla.")
         else:
@@ -319,9 +446,22 @@ def create_app(capture_factory: Callable | None = None, detector=None,
         index = selected["index"] if selected is not None else payload.camera_index
         if not 0 <= index <= 9:
             raise HTTPException(422, "El índice de cámara debe estar entre 0 y 9.")
+        logical_id = None
+        if selected is not None and logical_hint:
+            if selected.get("id") == logical_hint:
+                logical_id = logical_hint
+            elif (str(selected.get("transport", "")).casefold() == "usb"
+                  and camera._usb_model(logical_hint) is not None
+                  and camera._usb_model(logical_hint) == camera._usb_model(selected.get("id"))
+                  and (previous_label is None or previous_label == selected.get("label"))):
+                alias = camera._usb_alias(catalog, logical_hint, previous_label)
+                if alias is None or alias.get("id") != selected.get("id"):
+                    raise HTTPException(409, "Hay varias cámaras USB del mismo modelo. No se puede confirmar cuál conserva la calibración.")
+                logical_id = logical_hint
         try:
             return camera.start(index, selected.get("id") if selected else None,
-                                selected.get("label") if selected else None)
+                                selected.get("label") if selected else None,
+                                logical_camera_id=logical_id)
         except RuntimeError as exc:
             raise HTTPException(409, str(exc)) from exc
 

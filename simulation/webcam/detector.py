@@ -78,7 +78,7 @@ class AprilTagDetector:
                          corners.tolist(), duration, len(found))
 
 
-def annotate_frame(frame: np.ndarray, detection: Detection) -> np.ndarray:
+def annotate_frame(frame: np.ndarray, detection: Detection, robot_pose: dict | None = None) -> np.ndarray:
     """Copia visual: nunca modifica el fotograma usado por el detector."""
     result = frame.copy()
     if not detection.visible or detection.marker_corners is None or detection.center_px is None:
@@ -90,9 +90,17 @@ def annotate_frame(frame: np.ndarray, detection: Detection) -> np.ndarray:
     direction = (corners[1] + corners[2] - corners[0] - corners[3]) / 2
     direction /= np.linalg.norm(direction)
     length = max(35.0, float(np.linalg.norm(corners[1] - corners[0])) * 0.85)
+    marker_center = tuple(np.rint(center).astype(int))
+    cv2.drawMarker(result, marker_center, (255, 255, 255), cv2.MARKER_CROSS, 16, 2, cv2.LINE_AA)
+    if robot_pose is not None:
+        center = np.asarray(robot_pose["center_px"], dtype=float)
+        direction = np.asarray(robot_pose["front_px"], dtype=float) - center
+        norm = float(np.linalg.norm(direction))
+        if norm > 0:
+            direction /= norm
+        cv2.circle(result, tuple(np.rint(center).astype(int)), 5, (255, 210, 85), -1, cv2.LINE_AA)
     start = tuple(np.rint(center).astype(int))
     end = tuple(np.rint(center + length * direction).astype(int))
-    cv2.drawMarker(result, start, (255, 255, 255), cv2.MARKER_CROSS, 16, 2, cv2.LINE_AA)
     cv2.arrowedLine(result, start, end, (255, 210, 85), 3, cv2.LINE_AA, tipLength=0.22)
     label = (max(4, min(result.shape[1] - 85, end[0] + 8)),
              max(22, min(result.shape[0] - 8, end[1] - 8)))
