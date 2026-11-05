@@ -35,6 +35,13 @@ en las vistas Orbital, Cenital y Cámara. Durante una misión la línea sigue el
 objetivo activo; en espera sigue el destino seleccionado. [Cómo funciona el
 seguimiento visual](docs/seguimiento-visual.md).
 
+## Probar una webcam real
+
+Para probar una webcam real sin simulador ni ROS 2, ejecuta
+`./simulation/webcam/run.command`. Abre un panel independiente en
+http://127.0.0.1:8010/ con detección del marcador y orientación del robot.
+Consulta [montaje del marcador y prueba de cámara](docs/prueba-webcam.md).
+
 ## Referencia física
 
 | Parámetro | Valor | Procedencia |
