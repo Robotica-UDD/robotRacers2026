@@ -108,14 +108,14 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
 
 ## Límites del control y de la medición
 
-| Parámetro del programa | Valor inicial |
+| Parámetro del programa | Valor configurado |
 |---|---|
 | Frecuencia del control de movimiento | 20 Hz |
 | Distancia máxima al seleccionar o iniciar | 600 mm |
 | Paso de giro a avance | Error de orientación de hasta 8° |
 | Volver a girar durante el avance | Error mayor de 25° |
-| Velocidad de avance | De 30 a 85 mm/s según la distancia, con corrección diferencial; ninguna rueda supera 85 mm/s |
-| Velocidad de giro | Ruedas opuestas entre 15 y 40 mm/s, aproximadamente de 9 a 24°/s con separación de 190 mm |
+| Velocidad de avance | Base de 50 a 100 mm/s según la distancia, con corrección diferencial; ninguna rueda supera 100 mm/s |
+| Velocidad de giro | Ruedas opuestas entre 20 y 53 mm/s, aproximadamente de 12 a 32°/s con separación de 190 mm |
 | Subida y bajada de consigna en Python | 120 y 180 mm/s², respectivamente |
 | Cambio de sentido o de movimiento | Pasa por cero antes de invertir; frena ambas ruedas antes de cambiar entre giro y avance |
 | Control local de velocidad | 100 Hz en la ESP32, con realimentación de ambos encoders |
@@ -134,6 +134,12 @@ y la llegada desde la cámara, aplica una rampa a la velocidad solicitada y env�
 las consignas a la ESP32. El firmware incrementa el esfuerzo de arranque
 hasta observar movimiento en los encoders y después regular la velocidad de
 cada rueda. Una orden de 0/0 detiene también ese esfuerzo de arranque.
+
+El mínimo de 50 mm/s se aplica a la velocidad base de avance antes de corregir
+la orientación. La rueda interior puede recibir una velocidad inferior para
+respetar la curva. No se fuerza un mínimo independiente de PWM ni se modifica
+el cero de parada; las rampas también pasan por velocidades inferiores al mínimo
+de marcha al arrancar y frenar.
 
 El arranque comienza en PWM 35 y aumenta hasta un máximo de 160, de manera
 independiente para cada rueda, hasta registrar dos cuentas en el sentido pedido.

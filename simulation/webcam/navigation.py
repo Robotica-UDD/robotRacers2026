@@ -550,15 +550,15 @@ class Navigation:
         """Consignas físicas por rueda en mm/s; el firmware regula con encoders."""
         if mode == "turning":
             angle = abs(math.degrees(bearing))
-            target_rate = min(24., max(9., angle * .6))
-            magnitude = max(15., min(40., 95. * math.radians(target_rate)))
+            target_rate = min(32., max(12., angle * .8))
+            magnitude = max(20., min(53., 95. * math.radians(target_rate)))
             sign = 1 if bearing > 0 else -1
             return _velocity_mm_s(-sign * magnitude), _velocity_mm_s(sign * magnitude)
-        speed = 30. + 55. * min(1., max(0., distance) / .15)
+        speed = 50. + 50. * min(1., max(0., distance) / .15)
         angular_rate = max(-math.radians(12), min(math.radians(12), bearing * 1.5))
         correction = 95. * angular_rate
         left, right = speed - correction, speed + correction
-        scale = min(1., 85. / max(abs(left), abs(right)))
+        scale = min(1., 100. / max(abs(left), abs(right)))
         return _velocity_mm_s(left * scale), _velocity_mm_s(right * scale)
 
     def _run(self, calibration, target, session, boot_id):

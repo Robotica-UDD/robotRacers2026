@@ -192,7 +192,7 @@ def test_start_moves_then_settles_and_stops_at_selected_point(rig):
     assert nav.start()["active"] is True
     wait_for(lambda: bool(robot.drives))
     wait_for(lambda: any(left > 0 and right > 0 for left, right in robot.drives))
-    assert all(0 <= left <= 85 and 0 <= right <= 85 for left, right in robot.drives)
+    assert all(0 <= left <= 100 and 0 <= right <= 100 for left, right in robot.drives)
     camera.pose(x=900.)
     wait_for(lambda: not nav.state()["active"])
     assert nav.state()["phase"] == "arrived"
@@ -211,7 +211,7 @@ def test_turn_sign_and_small_forward_correction_are_positive_left(rig):
     wait_for(lambda: bool(robot.drives))
     wait_for(lambda: any(left < 0 and right > 0 for left, right in robot.drives))
     left, right = next(command for command in robot.drives if command != (0, 0))
-    assert -40 <= left < 0 and 0 < right <= 40
+    assert -53 <= left < 0 and 0 < right <= 53
     # Una vez orientado, una pequeña desviación mantiene avance con corrección.
     camera.pose(heading=math.radians(40))  # Destino a 45°, quedan 5° a izquierda.
     wait_for(lambda: any(l >= 0 and r > l for l, r in robot.drives))
@@ -229,8 +229,8 @@ def test_commands_are_bounded_physical_wheel_velocities(bearing):
     for mode in ("turning", "advancing"):
         left, right = Navigation._wheel_commands(mode, bearing, .1, .3)
         assert -100 <= left <= 100 and -100 <= right <= 100
-    assert Navigation._wheel_commands("turning", .5, .1, 0) == (-28, 28)
-    assert Navigation._wheel_commands("turning", -.5, .1, 0) == (28, -28)
+    assert Navigation._wheel_commands("turning", .5, .1, 0) == (-38, 38)
+    assert Navigation._wheel_commands("turning", -.5, .1, 0) == (38, -38)
     if bearing > 0:
         left, right = Navigation._wheel_commands("advancing", bearing, .1, .3)
         assert left < right
@@ -240,11 +240,11 @@ def test_commands_are_bounded_physical_wheel_velocities(bearing):
 
 
 def test_speed_reduces_with_distance_and_angle_continuously():
-    assert Navigation._wheel_commands("advancing", 0, .3, .3) == (85, 85)
+    assert Navigation._wheel_commands("advancing", 0, .3, .3) == (100, 100)
     near = Navigation._wheel_commands("advancing", 0, .03, .3)
-    assert near == (41, 41)
-    assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-40, 40)
-    assert Navigation._wheel_commands("turning", math.radians(10), .3, .3) == (-15, 15)
+    assert near == (60, 60)
+    assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-53, 53)
+    assert Navigation._wheel_commands("turning", math.radians(10), .3, .3) == (-20, 20)
 
 
 def test_lost_vision_pauses_without_stale_motion_and_resumes_same_target(rig):
@@ -348,7 +348,7 @@ def test_no_progress_retries_without_cancelling_or_increasing_cap(rig):
     wait_for(lambda: nav.state()["phase"] == "retrying")
     assert nav.state()["active"] is True and robot.stops == 0
     wait_for(lambda: nav.state()["phase"] == "advancing")
-    assert all(abs(left) <= 85 and abs(right) <= 85 for left, right in robot.drives)
+    assert all(abs(left) <= 100 and abs(right) <= 100 for left, right in robot.drives)
 
 
 def test_elapsed_duration_is_diagnostic_and_does_not_cancel(rig):
@@ -535,13 +535,14 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal):
         assert result["remaining_mm"] <= 26
         first_left, first_right = next(command for command in robot.drives if command != (0, 0))
         if abs(initial_bearing) <= 8:
-            assert 0 < first_left <= 85 and 0 < first_right <= 85
+            assert 0 < first_left <= 100 and 0 < first_right <= 100
         elif initial_bearing > 0:
-            assert -40 <= first_left < 0 and 0 < first_right <= 40
+            assert -53 <= first_left < 0 and 0 < first_right <= 53
         else:
-            assert 0 < first_left <= 40 and -40 <= first_right < 0
+            assert 0 < first_left <= 53 and -53 <= first_right < 0
         assert any(left > 0 and right > 0 for left, right in robot.drives)
         assert robot.drives[-1] == (0, 0) and robot.stops == 1 and robot.starts == 1
+        assert all(abs(left) <= 100 and abs(right) <= 100 for left, right in robot.drives)
         assert result["last_left"] == 0 and result["last_right"] == 0
         assert result["elapsed_ms"] > 0 and result["sequence"] > 1
     finally:
@@ -557,7 +558,7 @@ def test_diagnostic_state_tracks_live_bearing_commands_and_elapsed_time(rig):
     nav.start()
     wait_for(lambda: bool(robot.drives))
     state = nav.state()
-    assert -40 <= state["last_left"] <= 0 and 0 <= state["last_right"] <= 40
+    assert -53 <= state["last_left"] <= 0 and 0 <= state["last_right"] <= 53
     assert state["sequence"] == camera.state()["sequence"]
     time.sleep(.02)
     assert nav.state()["elapsed_ms"] > state["elapsed_ms"]
@@ -809,16 +810,16 @@ def test_metric_acceleration_ramp_and_reverse_require_an_intermediate_zero():
 
 def test_physical_targets_use_geometry_and_do_not_limit_motor_pwm_from_visual_speed(rig):
     _, _, nav = rig
-    assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (85, 85)
-    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-40, 40)
+    assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (100, 100)
+    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-53, 53)
     for visual_speed in (-1., 0., .05, .1, 1.):
         nav._measured_speed = visual_speed  # Diagnóstico; no modifica la consigna física.
-        assert nav._wheel_commands("advancing", 0., .3, 0.) == (85, 85)
+        assert nav._wheel_commands("advancing", 0., .3, 0.) == (100, 100)
         left, right = nav._wheel_commands("advancing", .1, .3, 0.)
-        assert 0 <= left < right <= 85
-    # 40 mm/s por rueda opuesta equivale a ~24°/s con ejes a190 mm.
+        assert 0 <= left < right <= 100
+    # 53 mm/s por rueda opuesta equivale a ~32°/s con ejes a190 mm.
     left, right = nav._wheel_commands("turning", math.pi / 2, .3, 0.)
-    assert math.degrees((right - left) / 190.) == pytest.approx(24., abs=.2)
+    assert math.degrees((right - left) / 190.) == pytest.approx(32., abs=.2)
 
 
 def test_visual_velocity_estimate_uses_distinct_frames_and_metric_tag_scale(rig):
@@ -1002,7 +1003,29 @@ def test_brief_hold_never_confirms_arrival_and_manual_stop_overrides_it(rig):
 
 
 def test_moderate_speed_increase_keeps_precision_floor():
-    assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (85, 85)
-    assert Navigation._wheel_commands("advancing", 0., 0., 0.) == (30, 30)
-    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-40, 40)
-    assert math.degrees(80. / 190.) == pytest.approx(24., abs=.2)
+    assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (100, 100)
+    assert Navigation._wheel_commands("advancing", 0., 0., 0.) == (50, 50)
+    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-53, 53)
+    assert math.degrees(106. / 190.) == pytest.approx(32., abs=.2)
+
+
+def test_forward_floor_does_not_clamp_inner_wheel_and_distort_steering():
+    left, right = Navigation._wheel_commands("advancing", .3, .03, 0.)
+    assert (left, right) == (40, 80)  # Centro a60 mm/s, corrección diferencial conservada.
+    assert left < 50 and (left + right) / 2 == 60
+    for bearing in (-.4, -.1, 0., .1, .4):
+        left, right = Navigation._wheel_commands("advancing", bearing, .6, 0.)
+        assert 0 <= left <= 100 and 0 <= right <= 100
+
+
+def test_speed_floor_never_applies_to_arrival_or_manual_stop(rig):
+    _, robot, nav = rig
+    calibrate(nav)
+    target(nav, 640., 480.)
+    nav.start()
+    wait_for(lambda: not nav.state()["active"])
+    assert nav.state()["phase"] == "arrived"
+    assert robot.drives and all(command == (0, 0) for command in robot.drives)
+    assert nav.state()["left_target_mm_s"] == nav.state()["right_target_mm_s"] == 0
+    nav.stop()
+    assert nav.state()["left_target_mm_s"] == nav.state()["right_target_mm_s"] == 0
