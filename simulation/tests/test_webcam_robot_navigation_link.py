@@ -220,6 +220,52 @@ def test_manual_stop_latch_survives_overwritten_reason(harness):
     assert harness.link._snapshot()["resume_blocked"] is False
 
 
+def test_velocity_commands_are_millimeters_per_second_and_keep_lease(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True)
+    harness.link.start_navigation(require_velocity=True)
+    assert harness.udp.packets == []
+    harness.link.drive_velocity_navigation(70, -33)
+    packet = harness.udp.commands("velocity")[0]
+    assert (packet["left"], packet["right"], packet["lease_ms"], packet["seq"]) == (70, -33, 300, 1)
+    harness.link.drive_velocity_navigation(0, 0)
+    assert harness.udp.commands("velocity")[-1]["seq"] == 2
+
+
+@pytest.mark.parametrize("capabilities", [{}, {"velocity_control": True}, {"encoder_ready": True},
+                                           {"velocity_control": True, "encoder_ready": False}])
+def test_fresh_status_must_confirm_encoder_velocity_capability(harness, capabilities):
+    harness.http.status.update(capabilities)
+    with pytest.raises(RobotLinkError):
+        harness.link.start_navigation(require_velocity=True)
+    assert harness.http.actions("/navigation/start") == []
+    assert harness.udp.packets == []
+
+
+def test_velocity_never_falls_back_to_raw_pwm(harness):
+    harness.link.start_navigation()
+    with pytest.raises(RobotLinkError):
+        harness.link.drive_velocity_navigation(70, 70)
+    assert harness.udp.packets == []
+
+
+def test_encoder_telemetry_is_exposed_without_secrets(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True,
+        encoder_counts=[12, -8], speed_mm_s=[70.5, -32.2], applied_pwm=[105, -90], startup=[False, True])
+    harness.link.start_navigation(require_velocity=True)
+    state = harness.link._snapshot()
+    assert state["encoder_counts"] == [12, -8]
+    assert state["speed_mm_s"] == [70.5, -32.2]
+    assert state["applied_pwm"] == [105, -90]
+    assert state["startup"] == [False, True]
+    assert "token" not in state
+
+
+def test_physical_firmware_count_alias_is_exposed(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True, count=[-30, 42])
+    harness.link.start_navigation(require_velocity=True)
+    assert harness.link._snapshot()["encoder_counts"] == [-30, 42]
+
+
 def test_constructing_saved_link_and_closing_never_sends_commands(harness):
     assert harness.http.calls == []
     assert harness.udp.packets == []

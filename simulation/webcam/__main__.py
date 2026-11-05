@@ -9,7 +9,7 @@ import uvicorn
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Prueba del robot con webcam y AprilTag, sin motores ni ROS 2.")
+    parser = argparse.ArgumentParser(description="Control del robot con webcam, AprilTag y encoders, sin ROS 2.")
     parser.add_argument("--port", type=int, default=8010, help="Puerto local (predeterminado: 8010).")
     parser.add_argument("--no-browser", action="store_true", help="No abrir el navegador automáticamente.")
     args = parser.parse_args()

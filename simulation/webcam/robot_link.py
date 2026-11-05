@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -27,6 +28,16 @@ MAX_JSON_BYTES = 8192
 RUNTIME = Path(__file__).resolve().parents[1] / ".runtime" / "robot-link.json"
 PRIVATE_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in
                          ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
+
+
+def _numeric_pair(value, *, integers=False):
+    if not isinstance(value, list) or len(value) != 2:
+        return None
+    if any(isinstance(item, bool) or not isinstance(item, (int, float))
+           or abs(item) > 1e12 or not math.isfinite(item)
+           or (integers and type(item) is not int) for item in value):
+        return None
+    return list(value)
 
 
 class RobotLinkError(RuntimeError):
@@ -168,7 +179,9 @@ class RobotLink:
                        "connected": False, "ready": False, "moving": False, "ip": None,
                        "port": None, "round_trip_ms": None, "last_id": None, "stop_reason": None,
                        "navigation_active": False, "control_session": None, "control_seq": 0,
-                       "boot_id": None, "resume_blocked": False}
+                       "boot_id": None, "resume_blocked": False, "velocity_control": False,
+                       "encoder_ready": False, "encoder_counts": None, "speed_mm_s": None,
+                       "applied_pwm": None, "startup": None}
         self._load_pair()
 
     def _load_pair(self):
@@ -266,14 +279,24 @@ class RobotLink:
                 reason = None
             self._state.update(phase="error" if not connected else "moving" if moving else "ready" if ready else "connected",
                                message="El robot perdió la conexión Wi-Fi." if not connected else
+                               "Controlando la velocidad con encoders." if moving and status.get("navigation_active") and status.get("velocity_control") else
                                "Ejecutando prueba de 1 segundo." if moving else
+                               "Robot listo; encoders disponibles." if ready and status.get("encoder_ready") else
                                "Robot listo para la prueba." if ready else "Robot enlazado; comprueba alimentación y estado de los drivers.",
                                connected=connected, ready=ready, moving=moving,
                                round_trip_ms=round(elapsed, 1), last_id=last_id, stop_reason=reason,
                                navigation_active=status.get("navigation_active") is True,
                                control_session=status.get("control_session"),
                                control_seq=status.get("control_seq", 0), boot_id=status.get("boot_id"),
-                               resume_blocked=status.get("resume_blocked") is True)
+                               resume_blocked=status.get("resume_blocked") is True,
+                               velocity_control=status.get("velocity_control") is True,
+                               encoder_ready=status.get("encoder_ready") is True,
+                               encoder_counts=_numeric_pair(status.get("encoder_counts", status.get("count")), integers=True),
+                               speed_mm_s=_numeric_pair(status.get("speed_mm_s")),
+                               applied_pwm=_numeric_pair(status.get("applied_pwm"), integers=True),
+                               startup=(list(status["startup"]) if isinstance(status.get("startup"), list)
+                                        and len(status["startup"]) == 2
+                                        and all(type(item) is bool for item in status["startup"]) else None))
             self._last_refresh = time.monotonic()
 
     def _error(self, message):
@@ -445,7 +468,7 @@ class RobotLink:
     def set_navigation_cancel_callback(self, callback):
         self._navigation_cancel_callback = callback
 
-    def start_navigation(self, *, resume=False):
+    def start_navigation(self, *, resume=False, require_velocity=False):
         """Arma una sesión nueva sin aplicar velocidad ni reintentar órdenes."""
         if not self._io_lock.acquire(timeout=self.http_timeout_s + .2):
             raise RobotLinkError("El enlace está ocupado; vuelve a intentarlo.", 409)
@@ -458,8 +481,10 @@ class RobotLink:
                 pair = dict(self._pair)
             remote, elapsed = self._read_status(pair)
             self._apply_status(remote, elapsed)
+            if require_velocity and (remote.get("velocity_control") is not True or remote.get("encoder_ready") is not True):
+                raise RobotLinkError("Falta cargar el firmware de velocidad con encoders o los encoders no están listos.", 409)
             if resume and (remote.get("resume_blocked") is True or remote.get("stop_reason") in
-                           {"button_stop", "driver_fault", "remote", "remote_stop", "manual_stop"}):
+                           {"button_stop", "driver_fault", "encoder_stall", "encoder_fault", "encoder_error", "remote", "remote_stop", "manual_stop"}):
                 raise RobotLinkError("El robot recibió una parada. El recorrido requiere un nuevo inicio explícito.", 423)
             if not remote["ready"] or remote["moving"] or remote.get("navigation_active"):
                 raise RobotLinkError("El robot no está disponible para iniciar el recorrido.", 409)
@@ -482,18 +507,27 @@ class RobotLink:
             self._io_lock.release()
 
     def drive_navigation(self, left, right):
+        return self._drive_command("drive", left, right)
+
+    def drive_velocity_navigation(self, left_mm_s, right_mm_s):
+        """Consignas de velocidad de rueda en mm/s; el ESP32 regula el PWM."""
+        return self._drive_command("velocity", left_mm_s, right_mm_s)
+
+    def _drive_command(self, command, left, right):
         if any(type(value) is not int or not -100 <= value <= 100 for value in (left, right)):
             raise RobotLinkError("Las velocidades deben ser enteros entre -100 y 100.", 422)
         with self._udp_lock:
             with self._lock:
                 if self._closed.is_set() or not self._navigation_session or not self._pair:
                     raise RobotLinkError("El recorrido no tiene una sesión activa.", 409)
+                if command == "velocity" and (not self._state["velocity_control"] or not self._state["encoder_ready"]):
+                    raise RobotLinkError("El control por encoders no está disponible; el robot debe detenerse.", 409)
                 pair = dict(self._pair)
                 session = self._navigation_session
                 self._navigation_sequence = (self._navigation_sequence + 1) & 0xffffffff
                 sequence = self._navigation_sequence
             packet = {"token": pair["token"], "session": session, "seq": sequence,
-                      "command": "drive", "left": left, "right": right, "lease_ms": 300}
+                      "command": command, "left": left, "right": right, "lease_ms": 300}
             self._send_navigation_packet(pair, packet)
 
     def _send_navigation_packet(self, pair, packet):

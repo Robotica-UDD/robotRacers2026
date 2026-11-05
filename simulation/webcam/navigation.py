@@ -38,7 +38,7 @@ def _finite(value, label: str) -> float:
     return result
 
 
-def _pwm(value: float) -> int:
+def _velocity_mm_s(value: float) -> int:
     return round(max(-100., min(100., value)))
 
 
@@ -49,8 +49,8 @@ class Navigation:
     RESUME_STABLE_SECONDS = .15
     RESUME_FRAMES = 3
     RESUME_RETRY_SECONDS = 1.
-    PWM_RISE_PER_SECOND = 60.
-    PWM_FALL_PER_SECOND = 120.
+    SPEED_RISE_MM_S2 = 100.
+    SPEED_FALL_MM_S2 = 150.
     RETRY_PAUSE_SECONDS = .5
     SETTLE_SECONDS = .40
     MAX_DURATION_SECONDS = 30.
@@ -289,6 +289,7 @@ class Navigation:
                     "bearing_deg": (round(math.degrees(observation["bearing_rad"]), 2)
                                     if observation and observation["bearing_rad"] is not None else None),
                     "last_left": self._last_left, "last_right": self._last_right,
+                    "left_target_mm_s": self._last_left, "right_target_mm_s": self._last_right,
                     "measured_speed_mps": self._measured_speed if observation else None,
                     "measured_turn_deg_s": self._measured_turn if observation else None,
                     "elapsed_ms": (round((time.monotonic() - self._started_at) * 1000)
@@ -330,6 +331,8 @@ class Navigation:
             remote = self.robot.state()
             if not remote.get("connected") or not remote.get("ready"):
                 raise NavigationError("Conecta el robot y comprueba que esté listo antes de iniciar.")
+            if remote.get("velocity_control") is not True or remote.get("encoder_ready") is not True:
+                raise NavigationError("Se requiere el firmware de control de velocidad y encoders disponibles.")
             if remote.get("moving") or remote.get("navigation_active"):
                 raise NavigationError("El robot ya tiene un movimiento en curso.")
             self._active = True
@@ -348,7 +351,7 @@ class Navigation:
             boot_id = remote.get("boot_id")
         launched = False
         try:
-            ack = self.robot.start_navigation()
+            ack = self.robot.start_navigation(require_velocity=True)
             session = ack.get("session") if isinstance(ack, dict) else None
             if not isinstance(session, str) or not session or len(session) > 128:
                 raise NavigationError("El robot no confirmó la sesión. No se reenviará automáticamente.", 502)
@@ -403,7 +406,7 @@ class Navigation:
                 self._ramp_values, self._ramp_stamp = [0., 0.], None
 
     def _drive(self, left, right):
-        self.robot.drive_navigation(left, right)
+        self.robot.drive_velocity_navigation(left, right)
         with self._lock:
             self._last_left, self._last_right = left, right
 
@@ -414,7 +417,7 @@ class Navigation:
         self._drive(0, 0)
 
     @staticmethod
-    def _ramp_value(current, target, seconds, rise=60., fall=120.):
+    def _ramp_value(current, target, seconds, rise=100., fall=150.):
         # Una inversión llega primero a cero; el signo nuevo empieza en otro ciclo.
         effective = 0. if current * target < 0 else float(target)
         rate = fall if abs(effective) < abs(current) else rise
@@ -428,9 +431,9 @@ class Navigation:
                        else max(0., min(.1, now - self._ramp_stamp)))
             self._ramp_stamp = now
             self._ramp_values = [self._ramp_value(current, desired, seconds,
-                                self.PWM_RISE_PER_SECOND, self.PWM_FALL_PER_SECOND)
+                                self.SPEED_RISE_MM_S2, self.SPEED_FALL_MM_S2)
                                  for current, desired in zip(self._ramp_values, (left, right))]
-            outputs = [_pwm(value) for value in self._ramp_values]
+            outputs = [_velocity_mm_s(value) for value in self._ramp_values]
         self._drive(*outputs)
 
     def _update_motion_estimate(self, frame, observation, now):
@@ -479,7 +482,7 @@ class Navigation:
 
         def arm():
             try:
-                ack = self.robot.start_navigation(resume=True)
+                ack = self.robot.start_navigation(resume=True, require_velocity=True)
                 session = ack.get("session") if isinstance(ack, dict) else None
                 if not isinstance(session, str) or not session or len(session) > 128:
                     raise NavigationError("No se confirmó la nueva sesión.")
@@ -525,23 +528,20 @@ class Navigation:
                 self._phase, self._message = phase, message
 
     @staticmethod
-    def _wheel_commands(mode, bearing, distance, mode_elapsed, *, measured_speed=None, measured_turn=None):
+    def _wheel_commands(mode, bearing, distance, mode_elapsed):
+        """Consignas físicas por rueda en mm/s; el firmware regula con encoders."""
         if mode == "turning":
             angle = abs(math.degrees(bearing))
-            magnitude = 45. + 10. * min(1., angle / 40.)
-            target_rate = min(20., max(8., angle))
-            if measured_turn is not None:
-                magnitude *= target_rate / max(target_rate, abs(measured_turn))
-            magnitude = max(20., min(55., magnitude))
+            target_rate = min(20., max(9., angle * .5))
+            magnitude = max(15., min(33., 95. * math.radians(target_rate)))
             sign = 1 if bearing > 0 else -1
-            return _pwm(-sign * magnitude), _pwm(sign * magnitude)
-        speed = 55. + 10. * min(1., max(0., distance) / .15)
-        target_speed = .07 * min(1., max(.5, distance / .15))
-        if measured_speed is not None:
-            speed *= target_speed / max(target_speed, measured_speed)
-        speed = max(20., min(65., speed))
-        correction = max(-8., min(8., math.degrees(bearing) * .3))
-        return round(max(0., min(65., speed - correction))), round(max(0., min(65., speed + correction)))
+            return _velocity_mm_s(-sign * magnitude), _velocity_mm_s(sign * magnitude)
+        speed = 30. + 40. * min(1., max(0., distance) / .15)
+        angular_rate = max(-math.radians(12), min(math.radians(12), bearing * 1.5))
+        correction = 95. * angular_rate
+        left, right = speed - correction, speed + correction
+        scale = min(1., 70. / max(abs(left), abs(right)))
+        return _velocity_mm_s(left * scale), _velocity_mm_s(right * scale)
 
     def _run(self, calibration, target, session, boot_id):
         armed_at = last_tick = time.monotonic()
@@ -589,7 +589,14 @@ class Navigation:
                 stable = (observation is not None and stable_frames >= self.RESUME_FRAMES
                           and stable_since is not None and tick - stable_since >= self.RESUME_STABLE_SECONDS)
                 remote = self.robot.state()  # Snapshot; el refresco HTTP se hace fuera de este hilo.
+                if remote.get("connected") and (remote.get("velocity_control") is not True
+                                                or remote.get("encoder_ready") is not True):
+                    raise NavigationError("El control de velocidad con encoders dejó de estar disponible.")
                 reason = remote.get("stop_reason")
+                if reason in {"encoder_stall", "encoder_fault", "encoder_error"}:
+                    raise NavigationError("No hubo respuesta del encoder durante 5 segundos. Revisa la rueda y el cableado."
+                                          if reason == "encoder_stall" else
+                                          "No se pudo leer un encoder. Revisa la conexión antes de iniciar de nuevo.")
                 if remote.get("resume_blocked") is True:
                     raise NavigationError("El robot mantiene una parada manual o un fallo. Recorrido cancelado.")
                 if reason in {"button_stop", "driver_fault", "remote", "remote_stop", "manual_stop"}:
@@ -730,8 +737,7 @@ class Navigation:
                     if mode == "adjusting":
                         left = right = 0
                     else:
-                        left, right = self._wheel_commands(mode, bearing, distance, active_seconds - mode_started,
-                            measured_speed=self._measured_speed, measured_turn=self._measured_turn)
+                        left, right = self._wheel_commands(mode, bearing, distance, active_seconds - mode_started)
                 try:
                     self._ramp_drive(left, right)
                     was_controlling = True

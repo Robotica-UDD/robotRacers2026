@@ -76,6 +76,7 @@
           <div id="robot-status" class="robot-status" data-mode="idle" role="status">Sin conexión</div>
           <div id="robot-address" class="robot-address"></div>
           <p id="robot-message" class="robot-message">Conecta el robot a tu red Wi-Fi para hacer la prueba.</p>
+          <p id="robot-wheel-speed" class="pulse-detail" hidden></p>
           <button id="robot-stop" class="button secondary robot-stop" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg><span id="robot-stop-label">Detener</span></button>
           <p id="robot-error" class="error" role="alert" hidden></p>
           <details id="wifi-config" class="wifi-config">
@@ -388,11 +389,15 @@
         robotPulseExpectedId = null;
       }
       const labels = {disconnected: 'Sin conexión', provisioning: 'Configurando Wi-Fi', configuring: 'Configurando Wi-Fi', connecting: 'Conectando al robot', connected: 'Enlace establecido', error: 'Error de conexión'};
-      $('robot-status').textContent = moving ? 'Avanzando' : linked && next.ready ? 'Listo para avanzar' : labels[next.phase] || 'Esperando al robot';
+      $('robot-status').textContent = moving ? 'En movimiento' : linked && next.ready ? 'Listo para avanzar' : labels[next.phase] || 'Esperando al robot';
       $('robot-status').dataset.mode = moving || robotIsConfiguring() ? 'busy' : linked && next.ready ? 'ready' : next.phase === 'error' ? 'error' : 'idle';
       const latency = linked && Number.isFinite(next.round_trip_ms) ? `${number.format(next.round_trip_ms)} ms` : '';
       $('robot-address').textContent = [linked ? next.ip : '', latency].filter(Boolean).join(' · ');
       $('robot-message').textContent = next.message || (linked ? moving ? 'Movimiento en curso.' : next.ready ? 'Listo para recibir una orden.' : 'Esperando que el robot esté listo.' : 'Conecta el robot a tu red Wi-Fi para hacer la prueba.');
+      const wheelSpeeds = next.speed_mm_s;
+      const showWheelSpeeds = linked && next.encoder_ready && Array.isArray(wheelSpeeds) && wheelSpeeds.length === 2 && wheelSpeeds.every(Number.isFinite);
+      $('robot-wheel-speed').hidden = !showWheelSpeeds;
+      $('robot-wheel-speed').textContent = showWheelSpeeds ? `Ruedas · Izq. ${Math.round(wheelSpeeds[0])} mm/s · Der. ${Math.round(wheelSpeeds[1])} mm/s` : '';
       updateRobotButtons();
       updateNavigationUI();
     }
@@ -556,7 +561,8 @@
     }
     function canStartNavigation() {
       return canEditNavigation() && !calibrationStage && navigationCalibrated() && finitePoint(navigationState?.target_px) &&
-        robotAvailable && !!robotState?.connected && !!robotState.ready;
+        robotAvailable && !!robotState?.connected && !!robotState.ready &&
+        robotState.velocity_control === true && robotState.encoder_ready === true;
     }
     function setNavigationError(text) {
       $('navigation-error').textContent = text;
@@ -688,6 +694,10 @@
       $('navigation-status').textContent = navigationBusy === 'calibrate' ? 'Guardando calibración' : calibrationPaused ? 'Calibración en pausa' : calibrationStage === 'center' ? '1 de 2 · Centro del robot' : calibrationStage === 'front' ? '2 de 2 · Frente del robot' : navigationStartPending && !navigationState?.active ? 'Preparando recorrido' : navigationAvailable ? phases[navigationState?.phase] || 'Navegación' : 'Navegación no disponible';
       $('navigation-status').dataset.mode = navigationState?.phase === 'error' ? 'error' : active ? 'active' : 'idle';
       $('navigation-instruction').textContent = calibrationPaused ? 'Tu selección está guardada. Cuando vuelva la visión y la conexión, continúa desde este paso.' : calibrationStage === 'center' ? 'Haz clic en el centro entre las dos ruedas.' : calibrationStage === 'front' ? 'El centro sigue al robot. Haz clic en un punto hacia su frente, en el plano del marcador.' : navigationState?.message || (navigationCalibrated() ? 'Haz clic en la imagen para elegir un destino. Después pulsa Ir al punto.' : 'Calibra el centro y el frente del robot antes de elegir un destino.');
+      if (!active && !calibrationStage && robotState?.connected && robotState?.ready && robotState.velocity_control !== true) {
+        $('navigation-status').textContent = 'Actualización del robot pendiente';
+        $('navigation-instruction').textContent = 'Carga el firmware con encoders por USB. Tu calibración y tu destino están guardados.';
+      }
       $('navigation-calibration-label').textContent = navigationCalibrated() ? 'Centro y frente listos' : 'Calibración pendiente';
       $('navigation-distance').textContent = cameraVisionFresh() && navigationCalibrated() && Number.isFinite(navigationState?.remaining_mm) ? `≈ ${Math.round(navigationState.remaining_mm)} mm` : '';
       $('navigation-calibrate').textContent = calibrationStage ? 'Cancelar calibración' : 'Calibrar robot';
