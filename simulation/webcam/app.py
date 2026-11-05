@@ -1,0 +1,272 @@
+"""Servicio local de webcam y detección. No importa ni conecta controladores."""
+from __future__ import annotations
+
+import asyncio
+from collections import deque
+from contextlib import asynccontextmanager
+import logging
+from pathlib import Path
+import sys
+import threading
+import time
+from typing import Callable
+
+import cv2
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+import numpy as np
+from pydantic import BaseModel, Field
+
+from .detector import AprilTagDetector, Detection, annotate_frame
+
+LOGGER = logging.getLogger(__name__)
+STATIC = Path(__file__).parent / "static"
+ASSETS = Path(__file__).parent / "assets"
+
+
+def open_camera(index: int):
+    """Solo se invoca tras pulsar Iniciar; AVFoundation es el backend de macOS."""
+    if sys.platform == "darwin":
+        return cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
+    return cv2.VideoCapture(index)
+
+
+class CaptureSession:
+    """Un único lector de cámara; conserva solo el fotograma más reciente.
+
+    Abrir, leer y liberar pertenecen al mismo hilo. Si el controlador bloquea
+    read(), Detener invalida la detección inmediatamente y espera un tiempo
+    acotado; no se abre otra cámara mientras el lector anterior siga activo.
+    """
+
+    def __init__(self, capture_factory: Callable | None = None, detector=None,
+                 clock: Callable = time.monotonic, stale_after_s: float = 0.75):
+        self.capture_factory = capture_factory or open_camera
+        self.detector = detector or AprilTagDetector()
+        self.clock = clock
+        self.stale_after_s = stale_after_s
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._stop_event = threading.Event()
+        self._running = False
+        self._camera_index: int | None = None
+        self._message = "Cámara detenida."
+        self._sequence = 0
+        self._version = 0
+        self._width = self._height = 0
+        self._fps = 0.0
+        self._last_frame_at: float | None = None
+        self._detection = Detection(False)
+        self._jpeg: bytes | None = None
+        self._placeholder_cache: dict[str, bytes] = {}
+
+    def start(self, camera_index: int = 0) -> dict:
+        if isinstance(camera_index, bool) or not isinstance(camera_index, int) or not 0 <= camera_index <= 9:
+            raise ValueError("El índice de cámara debe estar entre 0 y 9.")
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                raise RuntimeError("La cámara anterior sigue activa. Detén la captura y espera a que se cierre.")
+            self._stop_event = threading.Event()
+            self._running = True
+            self._camera_index = camera_index
+            self._message = "Abriendo cámara…"
+            self._last_frame_at = None
+            self._jpeg = None
+            self._detection = Detection(False)
+            self._width = self._height = 0
+            self._fps = 0.0
+            self._sequence = 0
+            self._version += 1
+            self._thread = threading.Thread(target=self._capture, args=(camera_index, self._stop_event),
+                                            name="robotracers-webcam", daemon=True)
+            self._thread.start()
+        return self.state()
+
+    def stop(self) -> dict:
+        with self._lock:
+            self._stop_event.set()
+            self._running = False
+            self._detection = Detection(False)
+            self._jpeg = None
+            self._last_frame_at = None
+            self._fps = 0.0
+            self._message = "Cámara detenida."
+            self._version += 1
+            worker = self._thread
+        if worker is not None and worker is not threading.current_thread():
+            worker.join(timeout=2.0)
+            if worker.is_alive():
+                with self._lock:
+                    self._message = "Cerrando cámara; esperando al controlador."
+        return self.state()
+
+    def _capture(self, index: int, stop: threading.Event):
+        capture = None
+        timestamps: deque[float] = deque(maxlen=60)
+        try:
+            capture = self.capture_factory(index)
+            if not capture.isOpened():
+                raise RuntimeError("No se pudo abrir la cámara. Revisa el índice y el permiso de Cámara en macOS.")
+            if hasattr(capture, "set"):
+                for prop, value in ((cv2.CAP_PROP_FRAME_WIDTH, 1280), (cv2.CAP_PROP_FRAME_HEIGHT, 720),
+                                    (cv2.CAP_PROP_FPS, 30), (cv2.CAP_PROP_BUFFERSIZE, 1)):
+                    capture.set(prop, value)
+            while not stop.is_set():
+                okay, pixels = capture.read()
+                received = self.clock()
+                if stop.is_set():
+                    break
+                if not okay or pixels is None or pixels.size == 0:
+                    raise RuntimeError("Cámara desconectada o sin imágenes. Detén e inicia la captura para reintentar.")
+                if pixels.ndim == 2:
+                    pixels = cv2.cvtColor(pixels, cv2.COLOR_GRAY2BGR)
+                elif pixels.shape[2] == 4:
+                    pixels = cv2.cvtColor(pixels, cv2.COLOR_BGRA2BGR)
+                detection = self.detector.process(pixels)
+                display = annotate_frame(pixels, detection)
+                encoded, jpeg = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                if not encoded:
+                    raise RuntimeError("No se pudo preparar la imagen de cámara.")
+                timestamps.append(received)
+                elapsed = timestamps[-1] - timestamps[0]
+                fps = (len(timestamps) - 1) / elapsed if elapsed > 0 else 0.0
+                with self._lock:
+                    if stop.is_set():
+                        break
+                    self._sequence += 1
+                    self._version += 1
+                    self._detection = detection
+                    self._last_frame_at = received
+                    self._width, self._height = pixels.shape[1], pixels.shape[0]
+                    self._fps = fps
+                    self._jpeg = jpeg.tobytes()
+                    self._message = "Robot detectado." if detection.visible else "Buscando AprilTag 0…"
+        except Exception as exc:
+            LOGGER.warning("Captura detenida: %s", exc)
+            with self._lock:
+                if not stop.is_set():
+                    self._message = str(exc) if isinstance(exc, RuntimeError) else "Error de captura. Revisa la cámara y vuelve a iniciar."
+        finally:
+            # Invalidar antes de liberar: algunos controladores tardan en cerrar.
+            with self._lock:
+                self._running = False
+                self._detection = Detection(False)
+                self._jpeg = None
+                self._fps = 0.0
+                self._version += 1
+            if capture is not None:
+                try:
+                    capture.release()
+                except Exception:
+                    LOGGER.exception("No se pudo liberar la cámara")
+
+    def _state_locked(self) -> dict:
+        age = None if self._last_frame_at is None else max(0.0, self.clock() - self._last_frame_at)
+        stale = age is not None and age > self.stale_after_s
+        visible = bool(self._running and not self._stop_event.is_set() and not stale and self._detection.visible)
+        message = "Sin fotograma reciente. Esperando cámara…" if self._running and stale else self._message
+        return {
+            "running": self._running, "visible": visible, "message": message,
+            "camera_index": self._camera_index, "frame_width": self._width, "frame_height": self._height,
+            "fps": round(self._fps, 2) if self._running and not stale else 0.0,
+            "processing_ms": round(self._detection.processing_ms, 2), "sequence": self._sequence,
+            "center_px": list(self._detection.center_px) if visible else None,
+            "heading_deg": self._detection.heading_deg if visible else None,
+            "marker_corners": self._detection.marker_corners if visible else None,
+            "marker_id": 0, "frame_age_ms": None if age is None else round(age * 1000, 1),
+            "heading_convention": "0° derecha, 90° arriba; ángulo en la imagen sin espejo.",
+        }
+
+    def state(self) -> dict:
+        with self._lock:
+            return self._state_locked()
+
+    def _placeholder(self, message: str) -> bytes:
+        # Texto principal en la interfaz; OpenCV usa aquí solo caracteres ASCII.
+        label = ("Sin imagen reciente" if message.startswith("Sin fotograma") else
+                 "Abriendo camara" if message.startswith("Abriendo") else "Camara detenida")
+        with self._lock:
+            cached = self._placeholder_cache.get(label)
+        if cached is not None:
+            return cached
+        pixels = np.full((720, 1280, 3), (24, 20, 17), np.uint8)
+        cv2.putText(pixels, label, (430, 365), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (185, 190, 191), 1, cv2.LINE_AA)
+        _, encoded = cv2.imencode(".jpg", pixels, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        data = encoded.tobytes()
+        with self._lock:
+            self._placeholder_cache[label] = data
+        return data
+
+    def frame(self) -> tuple[tuple[int, bool], bytes]:
+        with self._lock:
+            status = self._state_locked()
+            stale = self._last_frame_at is not None and self.clock() - self._last_frame_at > self.stale_after_s
+            jpeg = self._jpeg if self._running and not stale else None
+            token = (self._version, stale)
+        return token, jpeg if jpeg is not None else self._placeholder(status["message"])
+
+
+class StartRequest(BaseModel):
+    camera_index: int = Field(default=0, ge=0, le=9, strict=True)
+
+
+def create_app(capture_factory: Callable | None = None, detector=None,
+               clock: Callable = time.monotonic, stale_after_s: float = 0.75) -> FastAPI:
+    camera = CaptureSession(capture_factory, detector, clock, stale_after_s)
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        yield
+        await asyncio.to_thread(camera.stop)
+
+    application = FastAPI(title="RobotRacers · Cámara", lifespan=lifespan)
+    application.state.camera = camera
+
+    @application.middleware("http")
+    async def uncached(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @application.get("/")
+    def index():
+        return FileResponse(STATIC / "index.html")
+
+    @application.get("/api/state")
+    def state():
+        return camera.state()
+
+    @application.get("/api/cameras")
+    def cameras():
+        return {"enumerated": False, "options": [{"index": i, "label": f"Cámara {i}"} for i in range(6)]}
+
+    @application.post("/api/start")
+    def start(payload: StartRequest):
+        try:
+            return camera.start(payload.camera_index)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @application.post("/api/stop")
+    def stop():
+        return camera.stop()
+
+    @application.get("/api/stream")
+    async def stream(request: Request):
+        async def latest_frames():
+            previous = None
+            while not await request.is_disconnected():
+                token, jpeg = camera.frame()
+                if token != previous:
+                    previous = token
+                    yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(jpeg)).encode()
+                           + b"\r\n\r\n" + jpeg + b"\r\n")
+                await asyncio.sleep(1 / 30)
+        return StreamingResponse(latest_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
+
+    application.mount("/assets", StaticFiles(directory=ASSETS, check_dir=False), name="assets")
+    return application
+
+
+app = create_app()

@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>RobotRacers · Visión</title>
+  <style>
+    :root{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#183736;background:#eaf1ef;font-synthesis:none;--muted:#647976;--line:rgba(33,77,71,.12);--accent:#0d6d5e;--glass:rgba(255,255,255,.71)}
+    *{box-sizing:border-box}body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(ellipse at 3% 0%,#cfe6df 0,transparent 48%),radial-gradient(ellipse at 95% 100%,#d8e3ed 0,transparent 46%),#edf2ef}button,select,a{-webkit-tap-highlight-color:transparent}button,select{font:inherit}button,a,select{touch-action:manipulation}button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #4b9e90;outline-offset:4px}button{cursor:pointer}button:disabled{cursor:default;opacity:.48}svg{display:block;flex-shrink:0}a{color:var(--accent)}.app{width:min(1540px,100%);margin:auto;padding:32px 36px 24px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:20px;margin-bottom:28px}.brand{display:flex;align-items:center;gap:13px}.brand-mark{width:42px;height:42px;display:grid;place-items:center;background:#173c36;color:white;border-radius:13px;box-shadow:0 5px 14px #173c361c}.brand-name{font-size:14px;font-weight:750;letter-spacing:.02em}.brand-caption{font-size:12px;color:var(--muted);margin-top:3px}.local{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);white-space:nowrap}.local:before{content:"";width:6px;height:6px;background:#6a8980;border-radius:100%}.heading{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:22px;gap:16px}h1{font-size:clamp(26px,3vw,36px);font-weight:600;letter-spacing:-.045em;margin:0 0 7px}.lead{margin:0;font-size:14px;line-height:1.5;color:var(--muted)}.badge{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#ffffff88;border-radius:99px;padding:9px 13px;font-size:12px;white-space:nowrap}.badge .dot{width:7px;height:7px;border-radius:100%;background:#91a29d}.badge[data-mode="visible"]{color:#06634f;background:#e1f5eb}.badge[data-mode="visible"] .dot{background:#1b9970;box-shadow:0 0 0 4px #1b997012}.badge[data-mode="searching"]{color:#916015;background:#fff5dc}.badge[data-mode="searching"] .dot{background:#c38b2b}.badge[data-mode="error"]{color:#a23e35;background:#fcece8}.badge[data-mode="error"] .dot{background:#c4594d}.layout{display:grid;grid-template-columns:minmax(0,1fr) 302px;gap:22px;align-items:start}.glass{background:var(--glass);border:1px solid #ffffffc9;border-radius:22px;box-shadow:0 12px 45px #1e443b09,0 1px 2px #1e443b05;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px)}.viewport-card{overflow:hidden}.viewport-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px}.viewport-label{font-size:13px;font-weight:650;display:flex;gap:9px;align-items:center}.view-mode{font-size:11px;color:var(--muted)}.viewport{position:relative;aspect-ratio:4/3;background:#142321;isolation:isolate;overflow:hidden;margin:0 10px;border-radius:14px}.viewport:before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at center,#2e494244,transparent 70%),linear-gradient(#96b9ad05 1px,transparent 1px),linear-gradient(90deg,#96b9ad05 1px,transparent 1px);background-size:auto,44px 44px,44px 44px;z-index:-1}.viewport img{width:100%;height:100%;object-fit:contain;display:none;transform:none}.viewport.has-image img{display:block}.empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;color:#c3d2cc;text-align:center}.viewport.has-image .empty{display:none}.empty-frame{position:relative;width:102px;height:102px;margin-bottom:25px;opacity:.65;background:linear-gradient(#aac4b8,#aac4b8) left top/23px 1px,linear-gradient(#aac4b8,#aac4b8) left top/1px 23px,linear-gradient(#aac4b8,#aac4b8) right top/23px 1px,linear-gradient(#aac4b8,#aac4b8) right top/1px 23px,linear-gradient(#aac4b8,#aac4b8) left bottom/23px 1px,linear-gradient(#aac4b8,#aac4b8) left bottom/1px 23px,linear-gradient(#aac4b8,#aac4b8) right bottom/23px 1px,linear-gradient(#aac4b8,#aac4b8) right bottom/1px 23px;background-repeat:no-repeat;display:grid;place-items:center}.empty h2{font-size:16px;font-weight:500;margin:0 0 9px;color:#dce7e1}.empty p{font-size:12px;color:#94aaa0;line-height:1.65;margin:0;max-width:270px}.viewport-foot{padding:16px 22px;min-height:52px;display:flex;align-items:center;gap:9px;color:var(--muted);font-size:12px;line-height:1.5}.status-icon{width:6px;height:6px;border-radius:100%;background:#91a29d;flex-shrink:0}.metrics{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:17px;overflow:hidden;margin-top:16px}.metric{background:#f7faf8d9;padding:17px 19px;min-width:0}.metric-label{color:var(--muted);font-size:11px;margin-bottom:8px;display:flex;align-items:center;gap:6px}.metric-value{font-size:23px;letter-spacing:-.035em;font-weight:550;white-space:nowrap;font-variant-numeric:tabular-nums}.metric-value small{font-size:11px;letter-spacing:0;color:var(--muted);font-weight:400;margin-left:4px}.metric-center{font-size:18px;line-height:28px}.sidebar{display:flex;flex-direction:column;gap:16px}.controls,.guide{padding:23px}.section-label{font-size:13px;font-weight:650;margin:0 0 22px;display:flex;align-items:center;gap:8px}label{display:block;font-size:12px;color:var(--muted);margin-bottom:9px}.select-wrap{position:relative}select{width:100%;padding:12px 35px 12px 13px;color:#24463e;border:1px solid var(--line);border-radius:11px;background:#fff9;appearance:none;-webkit-appearance:none;cursor:pointer;font-size:13px}.select-wrap svg{position:absolute;right:13px;top:16px;pointer-events:none;color:#688178}.hint{font-size:11px;line-height:1.6;margin:9px 0 20px;color:var(--muted)}.button{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:13px 16px;border-radius:11px;font-size:13px;font-weight:600;border:1px solid transparent;transition:background .16s,box-shadow .16s}.primary{background:var(--accent);color:#fff;box-shadow:0 5px 12px #0d6d5e16}.primary:hover:not(:disabled){background:#085a4d}.secondary{background:#ffffff7d;color:#36584e;border-color:var(--line);margin-top:9px}.secondary:hover:not(:disabled){background:#fff}.error{margin:15px 0 0;padding:12px;border:1px solid #c4584133;border-radius:10px;background:#fff0ea;color:#9b3d2d;font-size:12px;line-height:1.55;overflow-wrap:anywhere}.error[hidden]{display:none}.guide .section-label{margin-bottom:16px}.steps{list-style:none;padding:0;margin:0;counter-reset:step}.steps li{position:relative;padding:0 0 16px 26px;color:#4f6c62;font-size:12px;line-height:1.6;counter-increment:step}.steps li:before{content:counter(step);position:absolute;left:0;top:1px;width:17px;height:17px;border-radius:6px;background:#e3ede7;color:#527867;font-size:10px;display:grid;place-items:center}.steps li:last-child{padding-bottom:0}.resource-links{display:grid;gap:9px;margin-top:22px;padding-top:17px;border-top:1px solid var(--line)}.resource-links a{display:flex;align-items:center;justify-content:space-between;gap:8px;text-decoration:none;font-size:12px;line-height:1.5}.resource-links a:hover{text-decoration:underline}.details{padding:0 2px}.details summary{color:var(--muted);font-size:11px;cursor:pointer;padding:3px 0}.details p{color:var(--muted);font-size:11px;line-height:1.7;margin:8px 0 0}.bottom-note{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:20px;color:#7a8d86;font-size:11px;line-height:1.6}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(min-width:1500px){.viewport{aspect-ratio:16/11}}@media(max-width:1050px){.app{padding:25px}.layout{grid-template-columns:minmax(0,1fr) 260px;gap:16px}.controls,.guide{padding:19px}.metric{padding:15px 14px}.metric-value{font-size:21px}.metric-center{font-size:16px}}@media(max-width:760px){.app{padding:22px 16px}.topbar{margin-bottom:27px}.brand-mark{width:37px;height:37px;border-radius:11px}.heading{align-items:flex-start}.heading .badge{margin-top:6px;padding:8px 10px;font-size:11px}.lead{max-width:270px;font-size:12px}.layout{grid-template-columns:1fr}.sidebar{display:grid;grid-template-columns:1fr 1fr;align-items:start}.details{grid-column:1/-1}.viewport-head{padding:15px 17px}.viewport-foot{padding:14px 17px}.metrics{margin-top:12px}.metric-label{font-size:10px}.metric-value{font-size:21px}.metric-center{font-size:17px}.local{font-size:11px}}@media(max-width:440px){.sidebar{display:flex}.heading{flex-wrap:wrap;gap:7px}.heading .badge{margin-top:2px}.heading{margin-bottom:17px}.metrics{grid-template-columns:1fr 1fr}.metric:last-child{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px}.metric:last-child .metric-label{margin:0}.metric{padding:14px 16px}.metric-center{font-size:18px}.viewport{margin:0 7px}.viewport-head{padding:14px}.view-mode{font-size:10px}.bottom-note{margin-top:16px}.brand-caption{font-size:11px}}
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="8" y="8" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11 11h2v2h-2z" fill="currentColor"/></svg></div>
+        <div><div class="brand-name">RobotRacers</div><div class="brand-caption">Visión por cámara</div></div>
+      </div>
+      <div class="local">Conexión local</div>
+    </header>
+    <div class="heading">
+      <div><h1>Visión del robot</h1><p class="lead">Comprueba su posición y orientación desde arriba.</p></div>
+      <div id="badge" class="badge" data-mode="idle" role="status"><span class="dot"></span><span id="badge-label">Cámara detenida</span></div>
+    </div>
+    <div class="layout">
+      <section aria-label="Vista de cámara y mediciones">
+        <div class="glass viewport-card">
+          <div class="viewport-head"><div class="viewport-label"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="14" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="m17 10 4-2v8l-4-2" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="12" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg><span>Cámara cenital</span></div><span class="view-mode">Imagen sin espejo</span></div>
+          <div id="viewport" class="viewport">
+            <img id="camera-image" alt="Imagen en directo con recuadro del marcador y flecha hacia el frente del robot">
+            <div class="empty"><div class="empty-frame" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#aac4b8" stroke-width="1"/></svg></div><h2 id="empty-title">Encuadra el robot</h2><p id="empty-copy">Coloca la webcam sobre el robot e inicia la cámara para ver el seguimiento.</p></div>
+          </div>
+          <div class="viewport-foot"><span class="status-icon" aria-hidden="true"></span><span id="view-message">El marcador debe quedar plano y completamente visible.</span></div>
+        </div>
+        <div class="metrics" aria-label="Mediciones en la imagen">
+          <div class="metric"><div class="metric-label">Frecuencia</div><div class="metric-value"><span id="fps">—</span><small>imágenes/s</small></div></div>
+          <div class="metric"><div class="metric-label">Orientación en imagen</div><div class="metric-value"><span id="heading">—</span><small>°</small></div></div>
+          <div class="metric"><div class="metric-label">Centro del marcador</div><div class="metric-value metric-center"><span id="center">—</span><small>px</small></div></div>
+        </div>
+      </section>
+      <aside class="sidebar">
+        <section class="glass controls" aria-labelledby="camera-title">
+          <h2 id="camera-title" class="section-label">Captura</h2>
+          <label for="camera-select">Índice de cámara</label>
+          <div class="select-wrap"><select id="camera-select" aria-describedby="camera-hint"><option value="0">Cámara 0</option><option value="1">Cámara 1</option><option value="2">Cámara 2</option><option value="3">Cámara 3</option><option value="4">Cámara 4</option><option value="5">Cámara 5</option><option value="6">Cámara 6</option><option value="7">Cámara 7</option><option value="8">Cámara 8</option><option value="9">Cámara 9</option></select><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <p id="camera-hint" class="hint">Si no aparece imagen, prueba otro índice.</p>
+          <button id="start" class="button primary" type="button"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="start-label">Iniciar cámara</span></button>
+          <button id="stop" class="button secondary" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Detener cámara</button>
+          <p id="error" class="error" role="alert" hidden></p>
+        </section>
+        <section class="glass guide" aria-labelledby="guide-title">
+          <h2 id="guide-title" class="section-label">Prueba de orientación</h2>
+          <ol class="steps"><li>Coloca el AprilTag horizontal, con la flecha apuntando al frente.</li><li>Gira el robot a mano una vuelta completa. La flecha debe seguir su dirección.</li><li>Tapa el marcador: el seguimiento debe desaparecer.</li></ol>
+          <div class="resource-links"><a href="/assets/apriltag-0-40mm.pdf" target="_blank" rel="noopener">Marcador para imprimir<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a><a href="/assets/ubicacion-apriltag.png" target="_blank" rel="noopener">Dónde colocarlo<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a></div>
+        </section>
+        <details class="details"><summary>Acerca de las mediciones</summary><p>El centro corresponde al marcador, no al centro del robot. La orientación se mide en la imagen: 0° hacia la derecha y 90° hacia arriba. Esta prueba no mide distancias reales ni envía órdenes a los motores.</p></details>
+      </aside>
+    </div>
+    <footer class="bottom-note"><span>AprilTag · identificador 0</span><span id="capture-detail">Python + OpenCV</span></footer>
+    <div id="screen-reader-status" class="sr-only" aria-live="polite"></div>
+  </main>
+  <script>
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const image = $('camera-image'), viewport = $('viewport');
+    const number = new Intl.NumberFormat('es-CL', {maximumFractionDigits: 1});
+    let state = null, busy = false, connected = false, streamActive = false;
+    let retryStream = null, lastAnnouncement = '';
+
+    function announce(text) {
+      if (lastAnnouncement !== text) { $('screen-reader-status').textContent = text; lastAnnouncement = text; }
+    }
+    function errorMessage(value) {
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value)) return value.map(item => item.msg || String(item)).join('. ');
+      return 'No se pudo completar la solicitud.';
+    }
+    async function api(path, options = {}) {
+      const response = await fetch(path, {...options, cache: 'no-store', signal: AbortSignal.timeout(8000)});
+      let result;
+      try { result = await response.json(); } catch { result = {}; }
+      if (!response.ok) throw new Error(errorMessage(result.detail || result.message || `Error ${response.status}`));
+      return result;
+    }
+    function setError(text) { $('error').textContent = text; $('error').hidden = !text; }
+    function updateButtons() {
+      const running = !!state?.running;
+      $('start').disabled = busy || running || !connected;
+      $('stop').disabled = busy || !running || !connected;
+      $('camera-select').disabled = busy || running;
+      $('start-label').textContent = busy ? 'Un momento…' : 'Iniciar cámara';
+    }
+    function clearStream() {
+      streamActive = false;
+      if (retryStream !== null) { clearTimeout(retryStream); retryStream = null; }
+      image.removeAttribute('src');
+      viewport.classList.remove('has-image');
+    }
+    function startStream() {
+      if (streamActive) return;
+      streamActive = true;
+      image.src = `/api/stream?t=${Date.now()}`;
+    }
+    image.addEventListener('load', () => {
+      if (state?.running && connected) viewport.classList.add('has-image');
+    });
+    image.addEventListener('error', () => {
+      if (!state?.running || !connected) return;
+      streamActive = false;
+      viewport.classList.remove('has-image');
+      $('empty-title').textContent = 'Esperando imagen';
+      $('empty-copy').textContent = 'La captura está activa. Intentando recuperar la vista.';
+      if (retryStream === null) retryStream = setTimeout(() => {
+        retryStream = null;
+        if (state?.running && connected) startStream();
+      }, 2000);
+    });
+    function render(next) {
+      state = next;
+      const running = !!next.running;
+      const visible = running && !!next.visible && Array.isArray(next.center_px) && Number.isFinite(next.heading_deg);
+      $('badge').dataset.mode = visible ? 'visible' : running ? 'searching' : 'idle';
+      const label = visible ? 'Robot detectado' : running ? 'Buscando marcador' : 'Cámara detenida';
+      $('badge-label').textContent = label;
+      announce(label);
+      $('view-message').textContent = next.message || (visible ? 'Marcador visible. La flecha indica el frente.' : running ? 'Mantén el marcador completo dentro de la imagen.' : 'El marcador debe quedar plano y completamente visible.');
+      $('fps').textContent = running && Number.isFinite(next.fps) ? number.format(next.fps) : '—';
+      const heading = visible ? Math.round(((next.heading_deg % 360 + 360) % 360) * 10) / 10 % 360 : null;
+      $('heading').textContent = visible ? number.format(heading) : '—';
+      $('center').textContent = visible ? `${Math.round(next.center_px[0])}, ${Math.round(next.center_px[1])}` : '—';
+      const dimensions = running && next.frame_width && next.frame_height ? `${next.frame_width} × ${next.frame_height} px` : '';
+      const processing = running && Number.isFinite(next.processing_ms) ? `Procesamiento ${number.format(next.processing_ms)} ms` : '';
+      $('capture-detail').textContent = [dimensions, processing].filter(Boolean).join(' · ') || 'Python + OpenCV';
+      if (running) {
+        $('empty-title').textContent = 'Esperando imagen';
+        $('empty-copy').textContent = 'La cámara se está preparando. Mantén el marcador visible desde arriba.';
+        if (Number.isInteger(next.camera_index)) $('camera-select').value = String(next.camera_index);
+        startStream();
+      } else {
+        clearStream();
+        $('empty-title').textContent = 'Encuadra el robot';
+        $('empty-copy').textContent = 'Coloca la webcam sobre el robot e inicia la cámara para ver el seguimiento.';
+      }
+      updateButtons();
+    }
+    async function refresh() {
+      try {
+        const next = await api('/api/state');
+        connected = true;
+        render(next);
+      } catch {
+        connected = false;
+        clearStream();
+        $('badge').dataset.mode = 'error';
+        $('badge-label').textContent = 'Sin conexión';
+        $('view-message').textContent = 'No se pudo conectar al servicio local. Comprueba que siga abierto.';
+        $('empty-title').textContent = 'Sin conexión';
+        $('empty-copy').textContent = 'Esperando al servicio de cámara.';
+        $('fps').textContent = $('heading').textContent = $('center').textContent = '—';
+        $('capture-detail').textContent = 'Python + OpenCV';
+        announce('Sin conexión con el servicio local.');
+        updateButtons();
+      }
+      setTimeout(refresh, connected ? 200 : 1500);
+    }
+    async function command(action) {
+      if (busy) return;
+      busy = true; setError(''); updateButtons();
+      try {
+        await api(`/api/${action}`, {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          ...(action === 'start' ? {body: JSON.stringify({camera_index: Number($('camera-select').value)})} : {})
+        });
+        const next = await api('/api/state');
+        connected = true; render(next);
+      } catch (error) { setError(error.message || 'No se pudo cambiar la captura.'); }
+      finally { busy = false; updateButtons(); }
+    }
+    $('start').addEventListener('click', () => command('start'));
+    $('stop').addEventListener('click', () => command('stop'));
+    async function cameraOptions() {
+      try {
+        const result = await api('/api/cameras');
+        const labels = new Map((result.options || []).map(item => [item.index, item.label]));
+        for (const option of $('camera-select').options) {
+          option.textContent = labels.get(Number(option.value)) || `Cámara ${option.value}`;
+        }
+      } catch { /* Los índices siguen disponibles aunque no se consulte la lista. */ }
+    }
+    updateButtons();
+    cameraOptions();
+    refresh();
+  </script>
+</body>
+</html>
