@@ -114,9 +114,9 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
 | Distancia máxima al seleccionar o iniciar | 600 mm |
 | Paso de giro a avance | Error de orientación de hasta 8° |
 | Volver a girar durante el avance | Error mayor de 25° |
-| Velocidad de avance | De 30 a 70 mm/s según la distancia, con corrección diferencial; ninguna rueda supera 70 mm/s |
-| Velocidad de giro | Ruedas opuestas entre 15 y 33 mm/s, aproximadamente de 9 a 20°/s con separación de 190 mm |
-| Subida y bajada de consigna en Python | 100 y 150 mm/s², respectivamente |
+| Velocidad de avance | De 30 a 85 mm/s según la distancia, con corrección diferencial; ninguna rueda supera 85 mm/s |
+| Velocidad de giro | Ruedas opuestas entre 15 y 40 mm/s, aproximadamente de 9 a 24°/s con separación de 190 mm |
+| Subida y bajada de consigna en Python | 120 y 180 mm/s², respectivamente |
 | Cambio de sentido o de movimiento | Pasa por cero antes de invertir; frena ambas ruedas antes de cambiar entre giro y avance |
 | Control local de velocidad | 100 Hz en la ESP32, con realimentación de ambos encoders |
 | Inicio de la parada | Distancia estimada de hasta 25 mm |
@@ -125,12 +125,13 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
 | Tiempo sin progreso observado | Tras 5 segundos activos, pausa 0,5 segundos, vuelve a estimar y reintenta con los mismos topes |
 | Imagen requerida al iniciar | Antigüedad de hasta 200 ms |
 | Imagen requerida para conducir | Observación actual visible, con antigüedad de hasta 150 ms |
+| Fallo breve de detección | Hasta 100 ms desde la última captura válida, mantiene el último mando sin acelerar; exige misma cámara activa e imagen reciente |
 | Recuperación del seguimiento | Al menos 3 fotogramas distintos y 150 ms de detección estable |
 
 Las órdenes de navegación expresan **milímetros por segundo por rueda**, con el
 signo indicando la dirección. No son valores PWM. Python coordina la orientación
 y la llegada desde la cámara, aplica una rampa a la velocidad solicitada y envía
-las consignas a la ESP32. El firmware debe incrementar el esfuerzo de arranque
+las consignas a la ESP32. El firmware incrementa el esfuerzo de arranque
 hasta observar movimiento en los encoders y después regular la velocidad de
 cada rueda. Una orden de 0/0 detiene también ese esfuerzo de arranque.
 
@@ -188,10 +189,17 @@ la sesión y rechaza los paquetes atrasados de esa sesión. La parada explícita
 se envía por UDP y también por HTTP. Este mecanismo no depende de que el
 navegador siga abierto ni de que Python pueda enviar una orden posterior.
 
-Cuando falta una observación actual válida, el servicio envía consignas 0/0 y
-muestra una espera de imagen. No utiliza la pose anterior para seguir moviéndose.
-Tras tres fotogramas distintos y al menos 150 ms de seguimiento estable, vuelve
-a calcular el giro y el avance desde la posición observada, conservando el destino.
+Si falla brevemente la detección, pero la misma cámara sigue activa y entregando
+imágenes recientes, el servicio conserva el último mando mientras la última
+captura válida tenga hasta 100 ms. No aumenta la consigna ni calcula nuevas
+correcciones o una llegada usando la pose anterior. Esto evita frenar y volver
+a arrancar por un fotograma sin marcador. La comprobación se realiza a 20 Hz;
+los 100 ms son un umbral del programa, no un tiempo físico de parada garantizado.
+
+Si la detección no vuelve dentro de ese margen, envía 0/0 y espera. La cámara
+desconectada, una imagen atrasada, una fuente distinta o una parada manual no
+usan ese margen. Tras tres fotogramas distintos y al menos 150 ms de seguimiento
+estable, recalcula desde la posición observada, conservando el destino.
 
 Si falla el enlace, caduca la sesión o se reinicia el robot, la misión espera
 la conexión. Descarta la sesión local y envía una parada UDP de mejor esfuerzo,
@@ -219,6 +227,11 @@ por compatibilidad y ahora también representan mm/s, **no PWM**. Incluye ademá
 orientación relativa al destino, velocidad y giro estimados visualmente, tiempo
 transcurrido y secuencia de imagen. El estado del robot informa las velocidades
 de encoder por rueda, los contadores y el PWM aplicado por el controlador local.
+Los contadores `vision_pauses`, `brief_vision_gaps` y `mode_switches` permiten
+revisar cuántas pausas de seguimiento, entradas al margen breve y cambios de
+estado ocurrieron durante el intento. `vision_grace_active` indica cuándo se
+está conservando el último mando. Estos datos ayudan a contrastar un video de
+los tirones; por sí solos no identifican su causa física.
 La latencia HTTP de la
 tarjeta Robot mide una consulta de estado; no mide el recorrido completo desde
 la captura de imagen hasta la aplicación de una consigna.
