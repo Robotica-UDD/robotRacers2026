@@ -55,6 +55,10 @@ continúa hacia el mismo destino cuando recupera el seguimiento y la conexión.
 D48 y las paradas manuales cancelan el recorrido. Consulta
 [navegación con webcam y sus límites](docs/navegacion-webcam.md).
 
+Para cargar el firmware con arranque por encoders, conecta el robot por USB,
+déjalo detenido y ejecuta [`upload_robot.command`](simulation/webcam/upload_robot.command).
+El actualizador compila, comprueba el reposo y carga sin borrar la red guardada.
+
 ## Referencia física
 
 | Parámetro | Valor | Procedencia |
