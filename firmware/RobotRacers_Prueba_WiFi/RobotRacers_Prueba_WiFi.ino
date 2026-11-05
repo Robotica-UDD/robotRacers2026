@@ -1,9 +1,10 @@
-// Última modificación: 2026-11-05 14:46 | America/Santiago (UTC-03).
-// ESP32-S3, Arduino-ESP32 2.0.14. Prueba WiFi: 100/100 durante 1000 ms.
+// Última modificación: 2026-11-05 15:19 | America/Santiago (UTC-03).
+// ESP32-S3, Arduino-ESP32 2.0.14. Pulso HTTP y navegación UDP con vencimiento local.
 // La duración se cumple en un temporizador local; el encendido nunca mueve motores.
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
+#include <WiFiUdp.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>
@@ -20,9 +21,12 @@ const bool INVERTIR[] = {false, true};
 const uint8_t STOP_PIN = 48, TURBINA_PIN = 12;
 const int PULSE_PWM = 100;
 const uint32_t PULSE_MS = 1000;
+const uint32_t NAV_LEASE_MS = 300, NAV_INITIAL_MS = 1000;
+const uint16_t NAV_UDP_PORT = 4210;
 const size_t MAX_LINE = 512, MAX_ID = 64;
 
 WebServer server(80);
+WiFiUDP navigationUDP;
 Preferences preferences;
 Adafruit_NeoPixel rgb(1, 45, NEO_GRB + NEO_KHZ800);
 SemaphoreHandle_t motorMutex = nullptr;
@@ -32,10 +36,14 @@ volatile bool emergencyRequested = false;
 bool moving = false, driversAwake = false, driverFault = false;
 bool powerInitOK = false, hardwareOK = false, storageOK = false;
 bool serverStarted = false;
-int64_t pulseDeadline = 0;
+bool udpStarted = false, navigationActive = false, haveControlSeq = false;
+uint32_t controlSeq = 0;
+int8_t lastDirection[2] = {1, 1};
+int64_t controlDeadline = 0;
 char bootId[17] = {}, token[33] = {}, lastId[MAX_ID + 1] = {};
+char controlSession[MAX_ID + 1] = {}, retiredSessions[8][MAX_ID + 1] = {};
 char stopReason[40] = "boot", recentIds[8][MAX_ID + 1] = {};
-uint8_t nextRecent = 0;
+uint8_t nextRecent = 0, nextRetired = 0;
 String robotMac, savedSSID, savedPassword;
 uint32_t lastPowerCheck = 0, lastWifiRetry = 0;
 wl_status_t previousWifi = WL_NO_SHIELD;
@@ -65,12 +73,25 @@ void outputsOffLocked(bool sleepDrivers) {
   moving = false;
 }
 
+void invalidateNavigationLocked() {
+  if (navigationActive) {
+    strlcpy(retiredSessions[nextRetired], controlSession, sizeof(retiredSessions[nextRetired]));
+    nextRetired = (nextRetired + 1) % 8;
+  }
+  navigationActive = false;
+  controlSession[0] = 0;
+  haveControlSeq = false;
+}
+
 void stopLocked(const char *reason, bool sleepDrivers) {
+  const bool wasNavigation = navigationActive;
+  invalidateNavigationLocked();
   outputsOffLocked(sleepDrivers);
   if (strcmp(stopReason, reason) != 0) {
     strlcpy(stopReason, reason, sizeof(stopReason));
     markStatus();
   }
+  if (wasNavigation) markStatus();
 }
 
 void stopMotors(const char *reason, bool sleepDrivers) {
@@ -84,9 +105,10 @@ void stopMotors(const char *reason, bool sleepDrivers) {
 
 void timerExpired(void *) {
   xSemaphoreTake(motorMutex, portMAX_DELAY);
-  // Un callback ya encolado de un pulso anterior no cancela uno nuevo.
-  if (moving && esp_timer_get_time() >= pulseDeadline) {
-    stopLocked("completed", false); // PWM cero + nSLEEP alto: freno activo.
+  // Cada pulso o paquete válido actualiza controlDeadline bajo este mutex.
+  // Un callback anterior ya encolado no cancela una concesión renovada.
+  if ((moving || navigationActive) && esp_timer_get_time() >= controlDeadline) {
+    stopLocked(navigationActive ? "control_timeout" : "completed", false);
     markStatus();
   }
   xSemaphoreGive(motorMutex);
@@ -130,6 +152,9 @@ bool seenId(const char *id) {
 // Devuelve HTTP200/409/503; la comprobación y el arranque son una operación.
 int beginPulse(const char *id, bool &replayed, bool &isMoving) {
   xSemaphoreTake(motorMutex, portMAX_DELAY);
+  if (navigationActive) {
+    replayed = false; isMoving = moving; xSemaphoreGive(motorMutex); return 409;
+  }
   replayed = seenId(id);
   if (replayed) { isMoving = moving; xSemaphoreGive(motorMutex); return 200; }
   if (moving || !readyLocked()) {
@@ -138,6 +163,7 @@ int beginPulse(const char *id, bool &replayed, bool &isMoving) {
   outputsOffLocked(true);
   for (int i = 0; i < 2; i++) {
     digitalWrite(PH_PIN[i], (true != INVERTIR[i]) ? HIGH : LOW);
+    lastDirection[i] = 1;
     digitalWrite(SLEEP_PIN[i], HIGH);
   }
   driversAwake = true;
@@ -151,10 +177,10 @@ int beginPulse(const char *id, bool &replayed, bool &isMoving) {
     xSemaphoreGive(motorMutex); return 409;
   }
   esp_timer_stop(pulseTimer);
-  pulseDeadline = esp_timer_get_time() + int64_t(PULSE_MS) * 1000;
+  controlDeadline = esp_timer_get_time() + int64_t(PULSE_MS) * 1000;
   ledcWrite(0, PULSE_PWM); ledcWrite(1, PULSE_PWM);
   moving = true;
-  const int64_t remaining = pulseDeadline - esp_timer_get_time();
+  const int64_t remaining = controlDeadline - esp_timer_get_time();
   if (remaining <= 0 || esp_timer_start_once(pulseTimer, uint64_t(remaining)) != ESP_OK) {
     stopLocked("timer_error", true); isMoving = false;
     xSemaphoreGive(motorMutex); return 503;
@@ -174,6 +200,9 @@ void buildStatus(JsonDocument &doc, bool includeToken) {
   doc["connected"] = WiFi.status() == WL_CONNECTED;
   xSemaphoreTake(motorMutex, portMAX_DELAY);
   doc["ready"] = readyLocked(); doc["moving"] = moving;
+  doc["navigation_active"] = navigationActive; doc["control_seq"] = controlSeq;
+  doc["control_mode"] = navigationActive ? "navigation" : moving ? "pulse" : "idle";
+  doc["control_session"] = String(controlSession);
   // JSON conserva copias: callback y loop pueden modificar el estado después.
   doc["last_id"] = String(lastId); doc["stop_reason"] = String(stopReason);
   xSemaphoreGive(motorMutex);
@@ -191,11 +220,160 @@ void sendError(int code, const char *reason) {
   sendJson(code, doc);
 }
 
+bool tokenMatches(const char *supplied, size_t length) {
+  uint8_t difference = length == 32 ? 0 : 1;
+  for (size_t i = 0; i < 32; i++) difference |= token[i] ^ (i < length ? supplied[i] : 0);
+  return difference == 0;
+}
+
 bool authorized() {
   const String supplied = server.header("X-Robot-Token");
-  uint8_t difference = supplied.length() == 32 ? 0 : 1;
-  for (size_t i = 0; i < 32; i++) difference |= token[i] ^ (i < supplied.length() ? supplied[i] : 0);
-  return difference == 0;
+  return tokenMatches(supplied.c_str(), supplied.length());
+}
+
+bool validSession(const char *value, size_t length) {
+  if (length != 36 && length != 32) return false;
+  for (size_t i = 0; i < length; i++) {
+    const bool separator = length == 36 && (i == 8 || i == 13 || i == 18 || i == 23);
+    if (separator ? value[i] != '-' : !isxdigit(uint8_t(value[i]))) return false;
+  }
+  return true;
+}
+
+bool armDeadlineLocked(int64_t deadline) {
+  esp_timer_stop(pulseTimer);
+  controlDeadline = deadline;
+  const int64_t remaining = controlDeadline - esp_timer_get_time();
+  if (remaining <= 0 || esp_timer_start_once(pulseTimer, uint64_t(remaining)) != ESP_OK) {
+    stopLocked("timer_error", true); return false;
+  }
+  return true;
+}
+
+void navigationStartRequest() {
+  if (!authorized()) { sendError(403, "unauthorized"); return; }
+  const String body = server.arg("plain");
+  JsonDocument request;
+  if (body.length() > MAX_LINE || deserializeJson(request, body) || !request.is<JsonObject>() ||
+      request.size() != 1 || !request["session"].is<const char *>()) {
+    sendError(400, "invalid_session"); return;
+  }
+  const char *session = request["session"].as<const char *>();
+  const size_t length = request["session"].as<JsonString>().size();
+  if (strlen(session) != length || !validSession(session, length)) {
+    sendError(400, "invalid_session"); return;
+  }
+  int result = 200;
+  xSemaphoreTake(motorMutex, portMAX_DELAY);
+  if (navigationActive && esp_timer_get_time() >= controlDeadline) stopLocked("control_timeout", false);
+  bool retired = false;
+  for (const auto &entry : retiredSessions) if (entry[0] && strcmp(entry, session) == 0) retired = true;
+  if (navigationActive) {
+    if (strcmp(controlSession, session) != 0) result = 409;
+    // Repetir HTTP no renueva la concesión ni reinicia los motores.
+  } else if (moving || !readyLocked() || retired) result = 409;
+  else if (!udpStarted) result = 503;
+  else {
+    outputsOffLocked(false);
+    strlcpy(controlSession, session, sizeof(controlSession));
+    navigationActive = true; haveControlSeq = false; controlSeq = 0;
+    if (!armDeadlineLocked(esp_timer_get_time() + int64_t(NAV_INITIAL_MS) * 1000)) result = 503;
+    else { strlcpy(stopReason, "navigation", sizeof(stopReason)); markStatus(); }
+  }
+  xSemaphoreGive(motorMutex);
+  if (result != 200) { sendError(result, result == 409 ? "not_ready_or_busy" : "navigation_unavailable"); return; }
+  JsonDocument ack; ack["accepted"] = true; ack["session"] = session; sendJson(200, ack);
+}
+
+void applyNavigationPacket(const char *session, uint32_t sequence, bool stopCommand, int left, int right) {
+  xSemaphoreTake(motorMutex, portMAX_DELAY);
+  if (!navigationActive || strcmp(controlSession, session) != 0) {
+    xSemaphoreGive(motorMutex); return;
+  }
+  const int64_t now = esp_timer_get_time();
+  if (now >= controlDeadline) {
+    stopLocked("control_timeout", false); esp_timer_stop(pulseTimer);
+    xSemaphoreGive(motorMutex); return;
+  }
+  if (haveControlSeq && int32_t(sequence - controlSeq) <= 0) {
+    xSemaphoreGive(motorMutex); return;
+  }
+  if (stopCommand) {
+    controlSeq = sequence;
+    stopLocked("navigation_stop", false); esp_timer_stop(pulseTimer);
+    xSemaphoreGive(motorMutex); return;
+  }
+  if (!readyLocked()) {
+    stopLocked(stopHeld() || emergencyRequested ? "button_stop" : "not_ready", true);
+    esp_timer_stop(pulseTimer); xSemaphoreGive(motorMutex); return;
+  }
+  const int wheel[] = {left, right};
+  const bool anyMotion = left != 0 || right != 0;
+  // Cortar EN antes de cambiar PH, aunque el otro motor conserve su sentido.
+  for (int i = 0; i < 2; i++) {
+    const int8_t direction = wheel[i] < 0 ? -1 : 1;
+    if (wheel[i] != 0 && direction != lastDirection[i]) {
+      ledcWrite(i, 0);
+      digitalWrite(PH_PIN[i], ((direction > 0) != INVERTIR[i]) ? HIGH : LOW);
+      lastDirection[i] = direction;
+    }
+  }
+  if (anyMotion && !driversAwake) {
+    ledcWrite(0, 0); ledcWrite(1, 0);
+    // El primer sentido también se fija al despertar desde el arranque.
+    for (int i = 0; i < 2; i++) {
+      digitalWrite(PH_PIN[i], ((lastDirection[i] > 0) != INVERTIR[i]) ? HIGH : LOW);
+      digitalWrite(SLEEP_PIN[i], HIGH);
+    }
+    driversAwake = true; delay(3);
+  }
+  if (stopHeld() || emergencyRequested) {
+    stopLocked("button_stop", true); esp_timer_stop(pulseTimer);
+    xSemaphoreGive(motorMutex); return;
+  }
+  if (driversAwake && (digitalRead(FAULT_PIN[0]) == LOW || digitalRead(FAULT_PIN[1]) == LOW)) {
+    driverFault = true; stopLocked("driver_fault", true); esp_timer_stop(pulseTimer);
+    xSemaphoreGive(motorMutex); return;
+  }
+  ledcWrite(0, abs(left)); ledcWrite(1, abs(right));
+  moving = anyMotion;
+  if (armDeadlineLocked(now + int64_t(NAV_LEASE_MS) * 1000)) {
+    controlSeq = sequence; haveControlSeq = true;
+    strlcpy(stopReason, "navigation", sizeof(stopReason)); markStatus();
+  }
+  xSemaphoreGive(motorMutex);
+}
+
+void serviceNavigationUDP() {
+  if (!udpStarted) return;
+  for (int n = 0; n < 8; n++) {
+    const int length = navigationUDP.parsePacket();
+    if (length <= 0) break;
+    if (length > int(MAX_LINE)) { navigationUDP.flush(); continue; }
+    char packet[MAX_LINE + 1];
+    const int received = navigationUDP.read(packet, length);
+    if (received != length) { navigationUDP.flush(); continue; }
+    packet[received] = 0;
+    JsonDocument request;
+    if (deserializeJson(request, packet, size_t(received)) || !request.is<JsonObject>() || request.size() != 7 ||
+        !request["token"].is<const char *>() || !request["session"].is<const char *>() ||
+        !request["command"].is<const char *>() || !request["seq"].is<uint32_t>() ||
+        !request["left"].is<int>() || !request["right"].is<int>() || !request["lease_ms"].is<int>()) continue;
+    const char *suppliedToken = request["token"].as<const char *>();
+    const size_t tokenLength = request["token"].as<JsonString>().size();
+    if (strlen(suppliedToken) != tokenLength || !tokenMatches(suppliedToken, tokenLength)) continue;
+    const char *session = request["session"].as<const char *>();
+    const size_t sessionLength = request["session"].as<JsonString>().size();
+    if (strlen(session) != sessionLength || !validSession(session, sessionLength)) continue;
+    const char *command = request["command"].as<const char *>();
+    if (request["command"].as<JsonString>().size() != strlen(command)) continue;
+    const bool stopping = strcmp(command, "stop") == 0;
+    if (!stopping && strcmp(command, "drive") != 0) continue;
+    const int left = request["left"].as<int>(), right = request["right"].as<int>();
+    if (left < -100 || left > 100 || right < -100 || right > 100 ||
+        request["lease_ms"].as<int>() != int(NAV_LEASE_MS) || (stopping && (left != 0 || right != 0))) continue;
+    applyNavigationPacket(session, request["seq"].as<uint32_t>(), stopping, left, right);
+  }
 }
 
 void pulseRequest() {
@@ -229,6 +407,7 @@ void configureRoutes() {
   const char *headers[] = {"X-Robot-Token"}; server.collectHeaders(headers, 1);
   server.on("/status", HTTP_GET, [] { JsonDocument doc; buildStatus(doc, false); sendJson(200, doc); });
   server.on("/pulse", HTTP_POST, pulseRequest);
+  server.on("/navigation/start", HTTP_POST, navigationStartRequest);
   server.on("/stop", HTTP_POST, [] {
     if (!authorized()) { sendError(403, "unauthorized"); return; }
     stopMotors("remote_stop", false);
@@ -266,7 +445,7 @@ void usbCommand(const char *line) {
   if (strcmp(command, "status") == 0) { markStatus(); return; }
   if (strcmp(command, "wifi") != 0) { strlcpy(usbError, "unknown_command", sizeof(usbError)); return; }
   xSemaphoreTake(motorMutex, portMAX_DELAY);
-  const bool isMoving = moving;
+  const bool isMoving = moving || navigationActive;
   xSemaphoreGive(motorMutex);
   if (isMoving) { strlcpy(usbError, "busy", sizeof(usbError)); return; }
   if (!request["ssid"].is<const char *>() || !request["password"].is<const char *>()) {
@@ -346,7 +525,7 @@ void setup() {
   timerArgs.callback = timerExpired; timerArgs.dispatch_method = ESP_TIMER_TASK; timerArgs.name = "pulse_stop";
   if (esp_timer_create(&timerArgs, &pulseTimer) != ESP_OK) hardwareOK = false;
   snprintf(bootId, sizeof(bootId), "%08lx%08lx", (unsigned long)esp_random(), (unsigned long)esp_random());
-  WiFi.persistent(false); WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(true);
+  WiFi.persistent(false); WiFi.mode(WIFI_STA); WiFi.setSleep(false); WiFi.setAutoReconnect(true);
   robotMac = WiFi.macAddress(); loadSettings(); configureRoutes();
   if (savedSSID.length() && savedSSID.length() <= 32) {
     WiFi.begin(savedSSID.c_str(), savedPassword.c_str()); lastWifiRetry = millis();
@@ -366,7 +545,7 @@ void loop() {
   if (stopNow != previousStopHeld) markStatus();
   previousStopHeld = stopNow;
   xSemaphoreTake(motorMutex, portMAX_DELAY);
-  const bool awake = driversAwake, active = moving;
+  const bool awake = driversAwake, active = moving || navigationActive;
   xSemaphoreGive(motorMutex);
   if (awake && (digitalRead(FAULT_PIN[0]) == LOW || digitalRead(FAULT_PIN[1]) == LOW)) {
     xSemaphoreTake(motorMutex, portMAX_DELAY); driverFault = true; xSemaphoreGive(motorMutex);
@@ -383,8 +562,13 @@ void loop() {
   const wl_status_t wifi = WiFi.status();
   const String ip = WiFi.localIP().toString();
   if (wifi != previousWifi || ip != previousIP) { previousWifi = wifi; previousIP = ip; markStatus(); }
+  if (wifi != WL_CONNECTED && udpStarted) {
+    stopMotors("wifi_disconnected", true); navigationUDP.stop(); udpStarted = false;
+  }
+  if (wifi == WL_CONNECTED && !udpStarted) udpStarted = navigationUDP.begin(NAV_UDP_PORT) == 1;
   if (wifi == WL_CONNECTED && !serverStarted) { server.begin(); serverStarted = true; }
   if (serverStarted) server.handleClient();
+  serviceNavigationUDP();
   if (savedSSID.length() && wifi != WL_CONNECTED && uint32_t(millis() - lastWifiRetry) >= 10000) {
     lastWifiRetry = millis(); WiFi.reconnect();
   }

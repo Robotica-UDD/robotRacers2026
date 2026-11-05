@@ -1,4 +1,4 @@
-"""Prueba acotada de comunicación con el robot: PWM 100/100 durante un segundo.
+"""Enlace local del robot: pulso HTTP y navegación mediante mandos UDP finitos.
 
 La provisión inicial utiliza USB; las acciones posteriores utilizan HTTP en la
 red local. Importar el módulo o construir RobotLink no abre dispositivos ni
@@ -140,7 +140,7 @@ class RobotLink:
     def __init__(self, runtime_path: Path | None = RUNTIME, *, serial_factory: Callable | None = None,
                  http_client=None, ports_provider: Callable | None = None,
                  provision_timeout_s: float = 25., refresh_ttl_s: float = 1.,
-                 http_timeout_s: float = 1.5):
+                 http_timeout_s: float = 1.5, udp_socket_factory: Callable | None = None):
         self.runtime_path = Path(runtime_path) if runtime_path is not None else None
         self.serial_factory = serial_factory or _open_serial
         self.http = http_client or HttpRobotClient()
@@ -150,6 +150,12 @@ class RobotLink:
         self.http_timeout_s = http_timeout_s
         self._lock = threading.Lock()
         self._io_lock = threading.Lock()
+        self._udp_lock = threading.Lock()
+        self._udp_socket_factory = udp_socket_factory or (lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+        self._udp_socket = None
+        self._navigation_session = None
+        self._navigation_sequence = 0
+        self._navigation_cancel_callback = None
         self._closed = threading.Event()
         self._worker: threading.Thread | None = None
         self._serial = None
@@ -158,7 +164,9 @@ class RobotLink:
         self._pending_motion = False
         self._state = {"phase": "disconnected", "message": "Robot sin enlazar.",
                        "connected": False, "ready": False, "moving": False, "ip": None,
-                       "port": None, "round_trip_ms": None, "last_id": None, "stop_reason": None}
+                       "port": None, "round_trip_ms": None, "last_id": None, "stop_reason": None,
+                       "navigation_active": False, "control_session": None, "control_seq": 0,
+                       "boot_id": None}
         self._load_pair()
 
     def _load_pair(self):
@@ -259,7 +267,10 @@ class RobotLink:
                                "Ejecutando prueba de 1 segundo." if moving else
                                "Robot listo para la prueba." if ready else "Robot enlazado; comprueba alimentación y estado de los drivers.",
                                connected=connected, ready=ready, moving=moving,
-                               round_trip_ms=round(elapsed, 1), last_id=last_id, stop_reason=reason)
+                               round_trip_ms=round(elapsed, 1), last_id=last_id, stop_reason=reason,
+                               navigation_active=status.get("navigation_active") is True,
+                               control_session=status.get("control_session"),
+                               control_seq=status.get("control_seq", 0), boot_id=status.get("boot_id"))
             self._last_refresh = time.monotonic()
 
     def _error(self, message):
@@ -294,7 +305,7 @@ class RobotLink:
         with self._lock:
             if self._closed.is_set():
                 raise RobotLinkError("El servicio del robot está cerrado.", 409)
-            if self._state["moving"] or self._pending_motion or (self._worker and self._worker.is_alive()):
+            if self._navigation_session or self._state["moving"] or self._pending_motion or (self._worker and self._worker.is_alive()):
                 raise RobotLinkError("Espera a que termine la operación actual del robot.", 409)
             self._pair = None
             self._state.update(phase="provisioning", message="Comprobando el robot por USB…",
@@ -391,12 +402,12 @@ class RobotLink:
             with self._lock:
                 if self._closed.is_set() or not self._pair:
                     raise RobotLinkError("Enlaza el robot antes de iniciar la prueba.", 409)
-                if self._state["moving"] or self._pending_motion:
+                if self._navigation_session or self._state["moving"] or self._pending_motion:
                     raise RobotLinkError("El robot ya está ejecutando la prueba.", 409)
                 pair = dict(self._pair)
             remote, elapsed = self._read_status(pair)
             self._apply_status(remote, elapsed)
-            if remote["moving"]:
+            if remote["moving"] or remote.get("navigation_active") is True:
                 raise RobotLinkError("El robot ya está ejecutando la prueba.", 409)
             if not remote["ready"]:
                 raise RobotLinkError("El robot no está listo. Comprueba alimentación y drivers.", 409)
@@ -428,7 +439,98 @@ class RobotLink:
         finally:
             self._io_lock.release()
 
-    def stop(self):
+    def set_navigation_cancel_callback(self, callback):
+        self._navigation_cancel_callback = callback
+
+    def start_navigation(self):
+        """Arma una sesión nueva sin aplicar velocidad ni reintentar órdenes."""
+        if not self._io_lock.acquire(timeout=self.http_timeout_s + .2):
+            raise RobotLinkError("El enlace está ocupado; vuelve a intentarlo.", 409)
+        try:
+            with self._lock:
+                if self._closed.is_set() or not self._pair:
+                    raise RobotLinkError("Enlaza el robot antes de iniciar el recorrido.", 409)
+                if self._navigation_session or self._pending_motion or self._state["moving"]:
+                    raise RobotLinkError("El robot ya tiene una operación activa.", 409)
+                pair = dict(self._pair)
+            remote, elapsed = self._read_status(pair)
+            self._apply_status(remote, elapsed)
+            if not remote["ready"] or remote["moving"] or remote.get("navigation_active"):
+                raise RobotLinkError("El robot no está disponible para iniciar el recorrido.", 409)
+            session = str(uuid.uuid4())
+            ack, _ = self._request("POST", pair, "/navigation/start", {"session": session}, authenticated=True)
+            if ack.get("accepted") is not True or ack.get("session") != session:
+                raise RobotLinkError("No se pudo confirmar el inicio; no se reenviará automáticamente.")
+            with self._lock:
+                if self._closed.is_set():
+                    raise RobotLinkError("El servicio del robot está cerrado.", 409)
+                self._navigation_session = session
+                self._navigation_sequence = 0
+                self._state.update(navigation_active=True, control_session=session, control_seq=0,
+                                   moving=False, stop_reason="navigating", message="Recorrido iniciado.")
+                self._last_refresh = time.monotonic()
+            return {"session": session}
+        finally:
+            self._io_lock.release()
+
+    def drive_navigation(self, left, right):
+        if any(type(value) is not int or not -100 <= value <= 100 for value in (left, right)):
+            raise RobotLinkError("Las velocidades deben ser enteros entre -100 y 100.", 422)
+        with self._udp_lock:
+            with self._lock:
+                if self._closed.is_set() or not self._navigation_session or not self._pair:
+                    raise RobotLinkError("El recorrido no tiene una sesión activa.", 409)
+                pair = dict(self._pair)
+                session = self._navigation_session
+                self._navigation_sequence = (self._navigation_sequence + 1) & 0xffffffff
+                sequence = self._navigation_sequence
+            packet = {"token": pair["token"], "session": session, "seq": sequence,
+                      "command": "drive", "left": left, "right": right, "lease_ms": 300}
+            self._send_navigation_packet(pair, packet)
+
+    def _send_navigation_packet(self, pair, packet):
+        try:
+            if self._udp_socket is None:
+                self._udp_socket = self._udp_socket_factory()
+                # UDP solo transporta el último mando; nunca esperar una cola de red.
+                self._udp_socket.setblocking(False)
+            self._udp_socket.sendto(json.dumps(packet, separators=(",", ":")).encode(), (pair["ip"], 4210))
+        except OSError:
+            raise RobotLinkError("No se pudo enviar la velocidad al robot.") from None
+
+    def _stop_udp_navigation(self):
+        with self._udp_lock:
+            with self._lock:
+                session = self._navigation_session
+                pair = dict(self._pair) if self._pair else None
+                self._navigation_session = None
+                self._navigation_sequence = (self._navigation_sequence + 1) & 0xffffffff
+                sequence = self._navigation_sequence
+                self._state.update(navigation_active=False, control_session=None)
+            if session and pair:
+                self._send_navigation_packet(pair, {"token": pair["token"], "session": session,
+                    "seq": sequence, "command": "stop", "left": 0, "right": 0, "lease_ms": 300})
+
+    def stop_navigation(self):
+        return self.stop(notify_navigation=False)
+
+    def abandon_navigation(self):
+        """Invalida el mando local sin esperar HTTP; el destino lo conserva el controlador."""
+        try:
+            self._stop_udp_navigation()
+        except RobotLinkError:
+            pass
+
+    def stop(self, notify_navigation=True):
+        if notify_navigation and self._navigation_cancel_callback:
+            try:
+                self._navigation_cancel_callback("Parada solicitada.")
+            except Exception:
+                pass  # La cancelación del panel nunca debe impedir la parada física.
+        try:
+            self._stop_udp_navigation()
+        except RobotLinkError:
+            pass  # La parada HTTP sigue intentándose; queda además el plazo local de 300 ms.
         with self._io_lock:
             with self._lock:
                 if not self._pair or self._closed.is_set():
@@ -441,6 +543,7 @@ class RobotLink:
                 with self._lock:
                     self._pending_motion = False
                     self._state.update(phase="ready" if remote["ready"] else "connected", moving=False,
+                                       navigation_active=False, control_session=None,
                                        message="Parada enviada al robot.", stop_reason="remote")
                     self._last_refresh = 0.
                 return self._snapshot()
@@ -453,7 +556,15 @@ class RobotLink:
 
     def close(self):
         """Libera USB y lectores; cerrar el servicio nunca ordena movimiento."""
+        try:
+            self._stop_udp_navigation()
+        except RobotLinkError:
+            pass
         self._closed.set()
+        with self._udp_lock:
+            if self._udp_socket is not None:
+                self._udp_socket.close()
+                self._udp_socket = None
         with self._lock:
             serial = self._serial
             worker = self._worker
