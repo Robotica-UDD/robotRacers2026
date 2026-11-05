@@ -16,6 +16,7 @@ from .geometry import Arena,Point
 from .navigation import Navigation,Command
 from .metrics import AlignedEvaluation
 from .vision import CameraReader,CameraVision
+from .tracking import camera_tracking
 
 class DatagramReceiver(asyncio.DatagramProtocol):
     def __init__(self,service):self.service=service
@@ -40,6 +41,8 @@ class RobotService:
             "friction":r["friction"],"skid_friction":r["skid_friction"],"fan_force_n":r["fan_force_n"]}
         self.arena=Arena(a,self.settings["scale"])
         self.goals=[{"id":key,**self.arena.nodes[key].json()} for key in a["mission"]]
+        self.resume_paused=False;self.resume_active_goal=None;self.resume_warning=None
+        self.restore_initial_configuration()
         self.estimator=PoseEstimator(r);self.navigation=Navigation(r["track_width_m"])
         self.reader=CameraReader(self.directory/"camera.frame")
         self.vision=CameraVision(self.directory/"camera_calibration.json")
@@ -54,6 +57,7 @@ class RobotService:
         try:self.scene_seq=max(0,int(json.loads((self.directory/"scene_command.json").read_text()).get("seq",0)))
         except (OSError,ValueError,TypeError,json.JSONDecodeError):pass
         self.scene_pending=None;self.scene_requested=None;self.min_camera_stamp=0.
+        self.camera_sample=None;self.jpeg_sample=None
         self.jpeg=None;self.jpeg_stamp=0.;self.jpeg_lock=threading.Lock();self.last_loop_stamp=None;self.loop_duration_ms=0.
         self.telemetry_latency_ms=None
         self.command_address=(os.getenv("ROBOTRACERS_DRIVER_HOST","127.0.0.1"),int(os.getenv("ROBOTRACERS_COMMAND_PORT","9202")))
@@ -81,7 +85,8 @@ class RobotService:
             if now-stamp>.25 or stamp>now+.1 or sim_time<0:return
             if self.telemetry_seq is not None and seq<=self.telemetry_seq:
                 if self.telemetry_time is not None and now-self.telemetry_time<1:return
-                self.estimator.reset();self.evaluation_metrics.clear();self.status="idle"
+                self.resume_paused=self.resume_paused or self.status in ("running","paused")
+                self.estimator.reset();self.evaluation_metrics.clear();self.status="disconnected"
             for key in ("left_count","right_count"):
                 if not isinstance(message[key],int):raise ValueError("Cuenta incorrecta")
             for key in ("left_velocity","right_velocity","battery_voltage"):finite(message[key])
@@ -94,7 +99,10 @@ class RobotService:
             self.telemetry_latency_ms=max(0.,(now-stamp)*1000)
             self.estimator.predict(message["left_count"],message["right_count"],stamp)
             self.record_estimate(now)
-            if self.status=="disconnected":self.status="idle";self.message="Listo."
+            if self.status=="disconnected":
+                self.status="paused" if self.resume_paused else "idle"
+                self.message="Sesión restaurada en pausa. Esperando localización." if self.resume_paused else "Listo."
+                self.resume_paused=False
         elif kind=="evaluation":
             # Frontera explícita: estas coordenadas jamás llegan al estimador o al planificador.
             self.evaluation={key:finite(message[key]) for key in ("x","y","yaw","sim_time")}
@@ -139,6 +147,7 @@ class RobotService:
 
     def tick(self,now:float):
         if not self.connected(now):
+            if self.status in ("running","paused"):self.resume_paused=True
             if self.status=="running":self.navigation.pause()
             self.status="disconnected";self.message="Simulador desconectado."
             self.send(Command(mode="stop"));return
@@ -165,6 +174,8 @@ class RobotService:
                 frame=self.reader.read()
                 if frame is not None:
                     self.last_frame=frame;self.accepted_frames+=1;self.frame_times.append(frame.capture_stamp)
+                    if self.scene_pending is not None and frame.capture_stamp>=self.min_camera_stamp:
+                        self.camera_sample=(frame,None,self.scene_seq)
                     if self.scene_pending is None and frame.capture_stamp>=self.min_camera_stamp:
                         generation=self.scene_seq
                         outcome=await asyncio.to_thread(self.vision.process,frame)
@@ -172,6 +183,7 @@ class RobotService:
                         # Nunca aplicar entonces el fotograma de la escena anterior.
                         if self.scene_pending is None and generation==self.scene_seq and frame.capture_stamp>=self.min_camera_stamp:
                             self.last_vision=outcome
+                            self.camera_sample=(frame,outcome,generation)
                             if outcome.visible and self.estimator.correct(outcome.measurement,frame.capture_stamp,time.monotonic()):
                                 self.accepted_vision+=1
                                 self.record_estimate(time.monotonic())
@@ -186,6 +198,7 @@ class RobotService:
         if not self.visual_ready(now):raise ValueError("Espera a que la cámara localice el robot.")
         if self.status=="running":return
         if not self.stationary():raise ValueError("Espera a que el robot se detenga antes de iniciar.")
+        self.resume_active_goal=None
         if self.status=="paused" and self.navigation.waypoints and not self.navigation.finished:
             self.navigation.resume(self.sim_time,self.estimator.pose(now))
         else:self.navigation.plan(self.arena,self.estimator.pose(now),self.goals,self.sim_time)
@@ -196,6 +209,7 @@ class RobotService:
         self.send(Command(mode="pause"))
 
     def mission_stop(self):
+        self.resume_paused=False
         self.status="stopped";self.message="Robot detenido.";self.navigation.pause();self.send(Command(mode="stop"))
 
     def scene_command(self,action:str):
@@ -211,6 +225,7 @@ class RobotService:
         os.replace(name,self.directory/"scene_command.json")
         self.scene_pending=self.scene_seq;self.scene_requested=time.monotonic()
         self.estimator.reset();self.evaluation_metrics.clear();self.navigation.clear();self.last_vision=None
+        self.resume_active_goal=None;self.resume_paused=False
         self.min_camera_stamp=self.scene_requested
         self.status="idle";self.message="Actualizando escena."
         self.send(Command(mode="stop"))
@@ -218,16 +233,52 @@ class RobotService:
     def mission_reset(self):
         self.mission_stop();self.scene_command("reset")
 
-    def change_settings(self,changes:dict):
+    def validated_settings(self,changes:dict) -> dict:
         bounds={"speed":(self.arena_config["speed_min"],self.arena_config["speed_max"]),
             "scale":(self.arena_config["scale_min"],self.arena_config["scale_max"]),"mass_kg":(.05,.6),
             "friction":(.05,2.),"skid_friction":(0.,1.),"fan_force_n":(0.,3.)}
-        if not changes or set(changes)-set(bounds):raise ValueError("Ajuste no reconocido.")
+        if not isinstance(changes,dict) or not changes or set(changes)-set(bounds):raise ValueError("Ajuste no reconocido.")
         validated={}
         for key,value in changes.items():
             value=finite(value);minimum,maximum=bounds[key]
             if not minimum<=value<=maximum:raise ValueError(f"{key}: valor fuera del intervalo permitido.")
             validated[key]=value
+        return validated
+
+    @staticmethod
+    def validated_goals(goals:list[dict],arena:Arena) -> list[dict]:
+        if not isinstance(goals,list) or not 1<=len(goals)<=8:raise ValueError("Usa entre uno y ocho objetivos.")
+        result=[];identifiers=set()
+        for goal in goals:
+            if not isinstance(goal,dict):raise ValueError("Objetivo no válido.")
+            identifier=str(goal.get("id",""))
+            if not identifier or len(identifier)>16 or identifier in identifiers:raise ValueError("Los objetivos deben tener nombres únicos.")
+            identifiers.add(identifier)
+            point=arena.projection(Point(finite(goal["x"]),finite(goal["y"])))[0]
+            result.append({"id":identifier,**point.json()})
+        return result
+
+    def restore_initial_configuration(self):
+        """Lee solo ajustes e intenciones; la pose persistida nunca localiza."""
+        path=os.getenv("ROBOTRACERS_RESUME_STATE")
+        if not path:return
+        try:
+            checkpoint=Path(path)
+            if checkpoint.stat().st_size>1024*1024:raise ValueError("Sesión demasiado grande.")
+            payload=json.loads(checkpoint.read_text())
+            settings={**self.settings,**self.validated_settings(payload["settings"])}
+            arena=Arena(self.arena_config,settings["scale"])
+            goals=self.validated_goals(payload["mission"]["goals"],arena)
+            paused=payload.get("status") in ("paused","running")
+            active=payload["mission"].get("active_goal")
+            active=active if isinstance(active,str) and active in {goal["id"] for goal in goals} and paused else None
+            # Publicación atómica: ningún ajuste de un documento inválido se aplica.
+            self.settings=settings;self.arena=arena;self.goals=goals;self.resume_paused=paused;self.resume_active_goal=active
+        except (OSError,ValueError,TypeError,KeyError,OverflowError):
+            self.resume_warning="No se pudo restaurar la sesión; se conservaron los ajustes iniciales."
+
+    def change_settings(self,changes:dict):
+        validated=self.validated_settings(changes)
         structural=bool(set(validated)-{"speed"})
         if structural and not self.stationary():raise ValueError("Detén el robot para modificar la escena.")
         previous_scale=self.settings["scale"];self.settings.update(validated)
@@ -238,15 +289,12 @@ class RobotService:
 
     def change_goals(self,goals:list[dict]):
         if not self.stationary():raise ValueError("Detén el robot para editar los objetivos.")
-        if not 1<=len(goals)<=8:raise ValueError("Usa entre uno y ocho objetivos.")
-        result=[];identifiers=set()
-        for goal in goals:
-            identifier=str(goal.get("id",""))
-            if not identifier or len(identifier)>16 or identifier in identifiers:raise ValueError("Los objetivos deben tener nombres únicos.")
-            identifiers.add(identifier)
-            point=self.arena.projection(Point(finite(goal["x"]),finite(goal["y"])))[0]
-            result.append({"id":identifier,**point.json()})
-        self.goals=result;self.navigation.clear();self.message="Objetivos actualizados."
+        self.goals=self.validated_goals(goals,self.arena);self.resume_active_goal=None
+        self.navigation.clear();self.message="Objetivos actualizados."
+
+    def display_active_goal(self) -> str|None:
+        if self.navigation.active_goal is not None:return self.navigation.active_goal
+        return self.resume_active_goal if self.status=="paused" and not self.navigation.waypoints else None
 
     def state(self,now:float|None=None) -> dict:
         now=time.monotonic() if now is None else now
@@ -263,6 +311,8 @@ class RobotService:
             "contacts":self.evaluation.get("contacts",0),"position_error_m":None,"heading_error_deg":None,
             "command_applied_latency_ms":t.get("command_latency_ms")}
         metrics.update(self.evaluation_metrics.result(now))
+        mission=self.navigation.public(self.goals,pose)
+        mission["active_goal"]=self.display_active_goal()
         return {"status":self.status,"message":self.message,"sim_time":self.sim_time,"pose":pose,
             "robot":{"speed":(t.get("left_velocity",0.)+t.get("right_velocity",0.))/2,
                 "left_speed":t.get("left_velocity",0.),"right_speed":t.get("right_velocity",0.),
@@ -270,7 +320,7 @@ class RobotService:
                 "left_count":t.get("left_count",0),"right_count":t.get("right_count",0),
                 "reflectance":t.get("reflectance",[]),"line_reflectance":t.get("line_reflectance",[]),
                 "command_latency_ms":t.get("command_latency_ms")},
-            "mission":self.navigation.public(self.goals,pose),"settings":self.settings.copy(),
+            "mission":mission,"settings":self.settings.copy(),
             "vision":{"visible":self.visual_ready(now),"latency_ms":None if not self.last_vision else self.last_vision.latency_ms,
                 "calibrated":bool(self.last_vision and self.last_vision.calibrated),
                 "message":"Esperando cámara." if not self.last_vision else self.last_vision.message},
@@ -283,12 +333,22 @@ class RobotService:
             "friction":self.robot_config["friction"],"skid_friction":self.robot_config["skid_friction"],"fan_force_n":0.},
             "webots":{"url":"ws://127.0.0.1:1234","module":"/webots/wwi/WebotsView.js"}}
 
-    def camera_jpeg(self) -> bytes|None:
-        now=time.monotonic()
-        if self.last_frame is None:return None
+    def camera_packet(self) -> tuple[bytes,dict]|None:
+        """Obtiene JPEG original y geometría del mismo fotograma como unidad."""
         with self.jpeg_lock:
             now=time.monotonic()
-            if self.jpeg is None or now-self.jpeg_stamp>=.1:
-                okay,encoded=cv2.imencode(".jpg",self.last_frame.bgra,[cv2.IMWRITE_JPEG_QUALITY,82])
-                if okay:self.jpeg=encoded.tobytes();self.jpeg_stamp=now
-            return self.jpeg
+            sample=self.camera_sample
+            if sample is None or sample[2]!=self.scene_seq or sample[0].capture_stamp<self.min_camera_stamp:return None
+            if self.jpeg is None or self.jpeg_sample is None or self.jpeg_sample[2]!=sample[2] or now-self.jpeg_stamp>=.1:
+                okay,encoded=cv2.imencode(".jpg",sample[0].bgra,[cv2.IMWRITE_JPEG_QUALITY,82])
+                if sample[2]!=self.scene_seq or sample[0].capture_stamp<self.min_camera_stamp:return None
+                if okay:self.jpeg=encoded.tobytes();self.jpeg_stamp=now;self.jpeg_sample=sample
+            if self.jpeg_sample is None or self.jpeg_sample[2]!=self.scene_seq:return None
+            frame,outcome,_=self.jpeg_sample
+            tracking=camera_tracking(frame,outcome,self.robot_config,self.goals,self.display_active_goal(),
+                time.monotonic(),self.vision_timeout)
+            return self.jpeg,tracking
+
+    def camera_jpeg(self) -> bytes|None:
+        packet=self.camera_packet()
+        return None if packet is None else packet[0]

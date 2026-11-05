@@ -99,6 +99,15 @@ def configure(command):
 
 fan_force=0.;contacts=0
 try:
+    # A checkpoint restores a stopped session once, before producing images.
+    # Its observed pose is never supplied to the vision estimator or navigation.
+    resume_path=os.environ.get('ROBOTRACERS_RESUME_STATE')
+    if resume_path:
+        checkpoint=json.loads(Path(resume_path).read_text());settings=checkpoint['settings']
+        configure({'scale':settings['scale'],'robot_mass_kg':settings['mass_kg'],
+            'friction':settings['friction'],'skid_friction':settings['skid_friction'],
+            'start':checkpoint['pose']})
+        fan_force=max(0,min(3,float(settings['fan_force_n'])))
     calibration()
     while robot.step(2 if fan_force else 10)!=-1:
         now=robot.getTime();tick=round(now/.002)

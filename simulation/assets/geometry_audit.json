@@ -5,7 +5,7 @@
   "source_sha256": {
     "simulation/assets/robot/body.obj": "13773c205012ab6a911c12e781623cca0943d9011e054a60de4c8697beea66b0",
     "simulation/assets/manifest.json": "6e5f9f63476bb9efa35fd5b684943adb37f0b489d2bf42c0e31a182b2882095a",
-    "simulation/config/robot.json": "ec9e0e5fae49599392d312b68e9654203886827f8681a1f9e6228fe632d6050f",
+    "simulation/config/robot.json": "69f243585206ce27f270fd29ab7f2cd42844876691686efb76d49b6457968248",
     "simulation/tools/build_world.py": "6a647d5f02ffac4aa534c2fd2fbeaed3230c4f35267e21a09c075152db6a1a29"
   },
   "collision_boxes_from_generator_m": {

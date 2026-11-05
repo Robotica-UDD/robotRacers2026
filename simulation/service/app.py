@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import os
 import math
 import time
+import json
 from pathlib import Path
 from fastapi import FastAPI,HTTPException,WebSocket,WebSocketDisconnect,Body
 from fastapi.responses import FileResponse,Response,HTMLResponse
@@ -49,6 +50,7 @@ def create_app(service:RobotService|None=None,background:bool=True) -> FastAPI:
     async def health():
         return {"service":"ready","connected":service.connected(),"camera":service.reader.path.exists(),
             "runtime_directory":str(service.directory),"scene_pending":service.scene_pending,
+            "resume_warning":service.resume_warning,
             "vision_errors":service.vision_errors,"invalid_packets":service.invalid_packets,
             "client_metrics":app.state.client_metrics}
     @app.post("/api/client-metrics",include_in_schema=False)
@@ -76,9 +78,11 @@ def create_app(service:RobotService|None=None,background:bool=True) -> FastAPI:
         return perform(lambda:service.change_goals(body["goals"]))
     @app.get("/api/camera.jpg")
     async def camera():
-        image=await asyncio.to_thread(service.camera_jpeg)
-        if image is None:raise HTTPException(503,"La cámara todavía no tiene imágenes.")
-        return Response(image,media_type="image/jpeg",headers={"Cache-Control":"no-store"})
+        packet=await asyncio.to_thread(service.camera_packet)
+        if packet is None:raise HTTPException(503,"La cámara todavía no tiene imágenes.")
+        image,tracking=packet
+        return Response(image,media_type="image/jpeg",headers={"Cache-Control":"no-store",
+            "X-RobotRacers-Tracking":json.dumps(tracking,ensure_ascii=True,allow_nan=False,separators=(",",":"))})
     @app.websocket("/api/ws")
     async def websocket(socket:WebSocket):
         await socket.accept()

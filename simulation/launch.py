@@ -3,6 +3,7 @@
 from pathlib import Path
 import argparse
 import json
+import math
 import os
 import signal
 import socket
@@ -27,7 +28,15 @@ def main():
     parser.add_argument('--visible-webots',action='store_true',
         help='Abre la ventana de Webots y activa también su vista 3D local.')
     parser.add_argument('--debug-camera',action='store_true')
+    parser.add_argument('--resume-session',type=Path,
+        help='Restaura ajustes y posición observada de una sesión guardada; permanece en pausa.')
     args=parser.parse_args()
+    if args.resume_session:
+        args.resume_session=args.resume_session.resolve()
+        snapshot=json.loads(args.resume_session.read_text())
+        pose=snapshot.get('pose',{})
+        if any(isinstance(pose.get(key),bool) or not isinstance(pose.get(key),(int,float)) or not math.isfinite(pose[key]) for key in ('x','y','yaw')):
+            raise SystemExit('La sesión no contiene una posición observada válida.')
     RUNTIME.mkdir(exist_ok=True)
     for port in (8000,1234):
         if not available(port):
@@ -44,6 +53,7 @@ def main():
         (RUNTIME/path).unlink(missing_ok=True)
     env=os.environ.copy()
     env.update({'WEBOTS_HOME':str(home),'ROBOTRACERS_ROOT':str(ROOT),'ROBOTRACERS_RUNTIME_DIR':str(RUNTIME),'PYTHONUNBUFFERED':'1'})
+    if args.resume_session:env['ROBOTRACERS_RESUME_STATE']=str(args.resume_session)
     if args.debug_camera:env['ROBOTRACERS_CAPTURE_DEBUG']='1'
     runtime_ini=ROOT/'simulation/webots/controllers/arena_camera/runtime.ini'
     runtime_ini.write_text('[python]\nCOMMAND = '+str(ROOT/'.venv/bin/python')+'\n')

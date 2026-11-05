@@ -9,6 +9,7 @@ import struct
 import time
 import cv2
 import numpy as np
+from .tracking import CameraProjection
 
 HEADER=struct.Struct("<8sIIIIQdd16x")
 
@@ -60,6 +61,8 @@ class VisionResult:
     reprojection_error_px:float|None
     message:str=""
     detection_scale:float=1.
+    marker_corners:list[list[float]]|None=None
+    projection:CameraProjection|None=None
 
 class CameraVision:
     def __init__(self,calibration_path:Path):
@@ -92,20 +95,22 @@ class CameraVision:
 
     def process(self,frame:Frame) -> VisionResult:
         started=time.monotonic()
+        marker_corners=None;projection=None
         def result(measurement=None,message="",markers=0):
             ended=time.monotonic()
             return VisionResult(measurement is not None,measurement,frame.capture_stamp,
                 max(0.,(ended-frame.capture_stamp)*1000),(ended-started)*1000,markers,
-                self.R is not None,self.reprojection_error,message,self.detection_scale)
+                self.R is not None,self.reprojection_error,message,self.detection_scale,marker_corners,projection)
         try:
             config=self._load()
             if frame.bgra.shape[:2]!=(config["height"],config["width"]):
                 return result(message="La resolución de cámara cambió; esperando calibración.")
+            K=np.asarray(config["camera_matrix"],dtype=np.float64)
+            distortion=np.asarray(config.get("dist_coeffs",[0,0,0,0,0]),dtype=np.float64)
+            if self.R is not None:projection=CameraProjection(K.copy(),distortion.copy(),self.R.copy(),self.t.copy())
             gray=cv2.cvtColor(frame.bgra,cv2.COLOR_BGRA2GRAY)
             detections=self.detect(gray,[int(tag["id"]) for tag in config["reference_tags"]])
             if not detections:return result(message="Marcador del robot fuera de vista.")
-            K=np.asarray(config["camera_matrix"],dtype=np.float64)
-            distortion=np.asarray(config.get("dist_coeffs",[0,0,0,0,0]),dtype=np.float64)
             floor_points=[];image_points=[]
             for tag in config["reference_tags"]:
                 if int(tag["id"]) in detections:
@@ -120,6 +125,7 @@ class CameraVision:
                     if error<3. and camera[2]>0:
                         self.R=R;self.t=translation.reshape(3);self.reprojection_error=error
             if self.R is None:return result(message="Esperando referencias del suelo.",markers=len(detections))
+            projection=CameraProjection(K.copy(),distortion.copy(),self.R.copy(),self.t.copy())
             if 0 not in detections:return result(message="Marcador del robot fuera de vista.",markers=len(detections))
             robot_pixels=detections[0]
             if min(np.linalg.norm(robot_pixels-np.roll(robot_pixels,-1,axis=0),axis=1))<7:
@@ -144,6 +150,7 @@ class CameraVision:
             dx,dy=config.get("marker_offset_m",[0.,0.])
             x=center[0]-(math.cos(yaw)*dx-math.sin(yaw)*dy)
             y=center[1]-(math.sin(yaw)*dx+math.cos(yaw)*dy)
+            marker_corners=robot_pixels.tolist()
             return result((float(x),float(y),yaw),markers=len(detections))
         except (OSError,ValueError,KeyError,cv2.error,json.JSONDecodeError) as exc:
             return result(message="Esperando calibración de cámara.")
