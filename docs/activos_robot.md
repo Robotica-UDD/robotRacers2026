@@ -63,6 +63,7 @@ En `simulation/assets/robot/`:
   y otros motores gráficos, conservando metros y colores.
 - `pcb_top.png`: textura de fabricación derivada de la serigrafía y pads RevQ;
   se aplica máscara verde conforme a la configuración de fabricación guardada.
+  Su resolución de 2048 × 1024 cumple el requisito de texturas de Webots.
 - `preview.png/.blend`: escena de inspección del activo, sin comportamiento ni
   colisiones del simulador. No es una captura que certifique la dinámica.
 
@@ -75,6 +76,13 @@ la textura relativa al propio directorio `robot/`.
 procedencia, archivos, huellas SHA-256 y todas las aproximaciones. La malla
 visual **no contiene `Solid`, `Physics` ni `boundingObject`**. Las colisiones y
 la inercia pertenecen a la definición física independiente del robot.
+
+Los archivos se exportan íntegramente como triángulos no degenerados. El
+`IndexedFaceSet` de Webots R2025a admite `ccw`, pero no el campo VRML genérico
+`solid`; por ello se usa `ccw TRUE` y las superficies delgadas que lo necesitan
+se dibujan explícitamente por ambas caras. Los cables se barren sobre una curva
+suave con marcos coherentes para evitar contornos cruzados entre anillos.
+`validation.json` comprueba la geometría serializada y estos campos del formato.
 
 ## Regeneración
 

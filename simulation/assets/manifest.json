@@ -30,18 +30,25 @@
       "robot/body.wrl",
       "robot/body.inc.wbt"
     ],
-    "vertices": 55048,
-    "faces": 14446,
+    "vertices": 96180,
+    "faces": 32060,
+    "geometry_stats": {
+      "input_polygons": 17398,
+      "triangulated_polygons": 14662,
+      "degenerate_triangles_dropped": 0,
+      "crossed_quad_projections": 0,
+      "crossed_quad_details": []
+    },
     "bounds_m": [
       [
         -0.0535,
-        -0.07500000000000001,
-        0.00030000000000000014
+        -0.075,
+        0.0003
       ],
       [
-        0.06999999999999999,
-        0.07500000000000001,
-        0.03422674196148584
+        0.07,
+        0.075,
+        0.035006002
       ]
     ],
     "parts": {
@@ -55,7 +62,7 @@
         ],
         "central_cutout_diameter_m": 0.032,
         "mounting_hole_count": 10,
-        "vertex_count": 5928,
+        "vertex_count": 8892,
         "bounds_m": [
           [
             -0.035,
@@ -70,7 +77,7 @@
         ]
       },
       "C1": {
-        "first_vertex": 5928,
+        "first_vertex": 8892,
         "kind": "PCB component",
         "package": "CAPC2012X110",
         "value": "10uF / 10V X7R",
@@ -81,22 +88,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.030611116,
-            -0.011974037999999998,
+            -0.011974038,
             0.0056
           ],
           [
-            -0.027788884000000007,
-            -0.010625961999999997,
-            0.006845500000000001
+            -0.027788884,
+            -0.010625962,
+            0.0068455
           ]
         ]
       },
       "C2": {
-        "first_vertex": 6048,
+        "first_vertex": 9072,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF / 16V X7R",
@@ -107,22 +114,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.033898214,
-            -0.011446291999999999,
+            -0.011446292,
             0.0056
           ],
           [
-            -0.031501786000000004,
+            -0.031501786,
             -0.010553708,
             0.00659425
           ]
         ]
       },
       "C3": {
-        "first_vertex": 6168,
+        "first_vertex": 9252,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "1uF / 10V X7R",
@@ -133,22 +140,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.026998214000000003,
-            -0.011446291999999999,
+            -0.026998214,
+            -0.011446292,
             0.0056
           ],
           [
-            -0.024601786000000007,
+            -0.024601786,
             -0.010553708,
             0.00659425
           ]
         ]
       },
       "C4": {
-        "first_vertex": 6288,
+        "first_vertex": 9432,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF / 16V X7R",
@@ -159,22 +166,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.025446292000000006,
-            -0.023198214000000005,
+            -0.025446292,
+            -0.023198214,
             0.0056
           ],
           [
-            -0.024553708000000004,
-            -0.020801785999999996,
+            -0.024553708,
+            -0.020801786,
             0.00659425
           ]
         ]
       },
       "J1": {
-        "first_vertex": 6408,
+        "first_vertex": 9612,
         "kind": "PCB component",
         "package": "12401832E402A",
         "value": "12401832E402A",
@@ -185,22 +192,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 936,
+        "vertex_count": 1404,
         "bounds_m": [
           [
-            -0.03630250000000001,
-            -0.040600000000000004,
+            -0.0363025,
+            -0.0406,
             0.0056
           ],
           [
-            -0.025578000000000004,
-            -0.031400000000000004,
-            0.008799999999999999
+            -0.025578,
+            -0.0314,
+            0.0088
           ]
         ]
       },
       "Q1": {
-        "first_vertex": 7344,
+        "first_vertex": 11016,
         "kind": "PCB component",
         "package": "SOT95P237X112-3N",
         "value": "MMBT3904LT1G",
@@ -211,22 +218,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
-            -0.029626810000000003,
-            -0.044737408000000006,
+            -0.02962681,
+            -0.044737408,
             0.0056
           ],
           [
-            -0.026373190000000005,
-            -0.042262591999999995,
-            0.006750000000000001
+            -0.02637319,
+            -0.042262592,
+            0.00675
           ]
         ]
       },
       "R1": {
-        "first_vertex": 7440,
+        "first_vertex": 11160,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -237,22 +244,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.021382602000000004,
+            -0.021382602,
             -0.015947994,
             0.0056
           ],
           [
-            -0.019017398000000005,
+            -0.019017398,
             -0.015052006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R10": {
-        "first_vertex": 7560,
+        "first_vertex": 11340,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -263,22 +270,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.032182602000000005,
+            -0.032182602,
             -0.047447994,
             0.0056
           ],
           [
-            -0.029817398000000005,
+            -0.029817398,
             -0.046552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R11": {
-        "first_vertex": 7680,
+        "first_vertex": 11520,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -289,22 +296,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.028447994000000004,
-            -0.048182602000000005,
+            -0.028447994,
+            -0.048182602,
             0.0056
           ],
           [
-            -0.027552006000000004,
-            -0.045817397999999995,
-            0.0063430000000000005
+            -0.027552006,
+            -0.045817398,
+            0.006343
           ]
         ]
       },
       "R12": {
-        "first_vertex": 7800,
+        "first_vertex": 11700,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -315,22 +322,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.029682602000000006,
+            -0.029682602,
             -0.050447994,
             0.0056
           ],
           [
-            -0.027317398000000003,
+            -0.027317398,
             -0.049552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R2": {
-        "first_vertex": 7920,
+        "first_vertex": 11880,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -341,22 +348,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.017182602000000005,
-            0.010552006000000008,
+            -0.017182602,
+            0.010552006,
             0.0056
           ],
           [
-            -0.014817398000000004,
-            0.011447994000000008,
-            0.0063430000000000005
+            -0.014817398,
+            0.011447994,
+            0.006343
           ]
         ]
       },
       "R3": {
-        "first_vertex": 8040,
+        "first_vertex": 12060,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -367,22 +374,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.017182602000000005,
-            0.013052006000000007,
+            -0.017182602,
+            0.013052006,
             0.0056
           ],
           [
-            -0.014817398000000004,
-            0.013947994000000007,
-            0.0063430000000000005
+            -0.014817398,
+            0.013947994,
+            0.006343
           ]
         ]
       },
       "R4": {
-        "first_vertex": 8160,
+        "first_vertex": 12240,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -393,22 +400,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.03194799400000001,
-            -0.05118260200000001,
+            -0.031947994,
+            -0.051182602,
             0.0056
           ],
           [
-            -0.031052006000000007,
-            -0.04881739799999999,
-            0.0063430000000000005
+            -0.031052006,
+            -0.048817398,
+            0.006343
           ]
         ]
       },
       "R5": {
-        "first_vertex": 8280,
+        "first_vertex": 12420,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -419,22 +426,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.022947994000000003,
-            -0.023182602000000004,
+            -0.022947994,
+            -0.023182602,
             0.0056
           ],
           [
-            -0.022052006000000002,
-            -0.020817397999999997,
-            0.0063430000000000005
+            -0.022052006,
+            -0.020817398,
+            0.006343
           ]
         ]
       },
       "R6": {
-        "first_vertex": 8400,
+        "first_vertex": 12600,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "5.1k 1%",
@@ -445,22 +452,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.029182602000000005,
-            -0.025947994000000002,
+            -0.029182602,
+            -0.025947994,
             0.0056
           ],
           [
-            -0.026817398000000003,
+            -0.026817398,
             -0.025052006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R7": {
-        "first_vertex": 8520,
+        "first_vertex": 12780,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "5.1k 1%",
@@ -471,22 +478,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.031197994000000003,
+            -0.031197994,
             -0.025232602,
             0.0056
           ],
           [
-            -0.030302006000000003,
-            -0.022867397999999994,
-            0.0063430000000000005
+            -0.030302006,
+            -0.022867398,
+            0.006343
           ]
         ]
       },
       "R8": {
-        "first_vertex": 8640,
+        "first_vertex": 12960,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "22R",
@@ -497,22 +504,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.019547994000000003,
-            -0.013432602000000004,
+            -0.019547994,
+            -0.013432602,
             0.0056
           ],
           [
-            -0.018652006000000002,
-            -0.011067397999999997,
-            0.0063430000000000005
+            -0.018652006,
+            -0.011067398,
+            0.006343
           ]
         ]
       },
       "R9": {
-        "first_vertex": 8760,
+        "first_vertex": 13140,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "22R",
@@ -523,22 +530,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.017147994000000003,
-            -0.013432602000000004,
+            -0.017147994,
+            -0.013432602,
             0.0056
           ],
           [
-            -0.016252006000000003,
-            -0.011067397999999997,
-            0.0063430000000000005
+            -0.016252006,
+            -0.011067398,
+            0.006343
           ]
         ]
       },
       "S1": {
-        "first_vertex": 8880,
+        "first_vertex": 13320,
         "kind": "PCB component",
         "package": "B3U-1000P(M)",
         "value": "RESET",
@@ -549,22 +556,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 144,
+        "vertex_count": 216,
         "bounds_m": [
           [
-            -0.012618000000000004,
+            -0.012618,
             -0.0195,
             0.0056
           ],
           [
-            -0.008382000000000004,
-            -0.016999999999999998,
+            -0.008382,
+            -0.017,
             0.00701
           ]
         ]
       },
       "S2": {
-        "first_vertex": 9024,
+        "first_vertex": 13536,
         "kind": "PCB component",
         "package": "B3U-1000P(M)",
         "value": "BOOT",
@@ -575,22 +582,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 144,
+        "vertex_count": 216,
         "bounds_m": [
           [
-            -0.022118000000000006,
-            0.010750000000000008,
+            -0.022118,
+            0.01075,
             0.0056
           ],
           [
-            -0.017882000000000002,
-            0.013250000000000007,
+            -0.017882,
+            0.01325,
             0.00701
           ]
         ]
       },
       "U1": {
-        "first_vertex": 9168,
+        "first_vertex": 13752,
         "kind": "PCB component",
         "package": "ESP32-S3-WROOM-1",
         "value": "ESP32-S3-WROOM-1-N16R8",
@@ -601,22 +608,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 1512,
+        "vertex_count": 2268,
         "bounds_m": [
           [
-            -0.04150000000000001,
+            -0.0415,
             -0.00944,
             0.0056
           ],
           [
-            -0.015560000000000001,
+            -0.01556,
             0.00944,
             0.0084325
           ]
         ]
       },
       "U2": {
-        "first_vertex": 10680,
+        "first_vertex": 16020,
         "kind": "PCB component",
         "package": "SOT95P237X112-3N",
         "value": "TLV803EA30DBZR",
@@ -627,22 +634,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 196,
+        "vertex_count": 264,
         "bounds_m": [
           [
-            -0.025626810000000003,
+            -0.02562681,
             -0.019737408,
             0.0056
           ],
           [
-            -0.022373190000000005,
-            -0.017262591999999997,
+            -0.02237319,
+            -0.017262592,
             0.0067875
           ]
         ]
       },
       "U3": {
-        "first_vertex": 10876,
+        "first_vertex": 16284,
         "kind": "PCB component",
         "package": "SOT95P237X112-3N",
         "value": "TPD2E2U06QDBZRQ1",
@@ -653,22 +660,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 196,
+        "vertex_count": 264,
         "bounds_m": [
           [
-            -0.024626810000000006,
-            -0.03873740800000001,
+            -0.02462681,
+            -0.038737408,
             0.0056
           ],
           [
-            -0.021373190000000004,
-            -0.036262591999999996,
+            -0.02137319,
+            -0.036262592,
             0.0067875
           ]
         ]
       },
       "U4": {
-        "first_vertex": 11072,
+        "first_vertex": 16548,
         "kind": "PCB component",
         "package": "SOT95P237X112-3N",
         "value": "TPD2E2U06QDBZRQ1",
@@ -679,22 +686,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 196,
+        "vertex_count": 264,
         "bounds_m": [
           [
             -0.03362681,
-            -0.044737408000000006,
+            -0.044737408,
             0.0056
           ],
           [
-            -0.030373190000000005,
-            -0.042262591999999995,
+            -0.03037319,
+            -0.042262592,
             0.0067875
           ]
         ]
       },
       "U10": {
-        "first_vertex": 11268,
+        "first_vertex": 16812,
         "kind": "PCB component",
         "package": "TI_DRL0008A",
         "value": "TPS62933DRLR",
@@ -705,22 +712,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 316,
+        "vertex_count": 444,
         "bounds_m": [
           [
-            -0.030888000000000002,
-            0.025950000000000008,
+            -0.030888,
+            0.02595,
             0.0056
           ],
           [
-            -0.029112000000000006,
-            0.028050000000000005,
+            -0.029112,
+            0.02805,
             0.0067875
           ]
         ]
       },
       "R100": {
-        "first_vertex": 11584,
+        "first_vertex": 17256,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -731,22 +738,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.034182602000000006,
-            0.027052006000000007,
+            -0.034182602,
+            0.027052006,
             0.0056
           ],
           [
-            -0.031817398000000004,
-            0.027947994000000007,
-            0.0063430000000000005
+            -0.031817398,
+            0.027947994,
+            0.006343
           ]
         ]
       },
       "C100": {
-        "first_vertex": 11704,
+        "first_vertex": 17436,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -757,22 +764,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.022946292000000004,
-            0.02380178600000001,
+            -0.022946292,
+            0.023801786,
             0.0056
           ],
           [
             -0.022053708,
-            0.026198214000000008,
+            0.026198214,
             0.00659425
           ]
         ]
       },
       "C101": {
-        "first_vertex": 11824,
+        "first_vertex": 17616,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -783,22 +790,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.027735038000000004,
-            0.026988884000000008,
+            -0.027735038,
+            0.026988884,
             0.0056
           ],
           [
-            -0.026064962000000004,
-            0.031011116000000005,
+            -0.026064962,
+            0.031011116,
             0.00709675
           ]
         ]
       },
       "C102": {
-        "first_vertex": 11944,
+        "first_vertex": 17796,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -809,22 +816,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.024335038000000003,
-            0.026988884000000008,
+            -0.024335038,
+            0.026988884,
             0.0056
           ],
           [
-            -0.022664962000000004,
-            0.031011116000000005,
+            -0.022664962,
+            0.031011116,
             0.00709675
           ]
         ]
       },
       "C103": {
-        "first_vertex": 12064,
+        "first_vertex": 17976,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -835,22 +842,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.03169821400000001,
-            0.02955370800000001,
+            -0.031698214,
+            0.029553708,
             0.0056
           ],
           [
-            -0.029301786000000003,
-            0.03044629200000001,
+            -0.029301786,
+            0.030446292,
             0.00659425
           ]
         ]
       },
       "C104": {
-        "first_vertex": 12184,
+        "first_vertex": 18156,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -861,22 +868,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.029898214000000003,
-            0.023953708000000004,
+            -0.029898214,
+            0.023953708,
             0.0056
           ],
           [
-            -0.027501786000000004,
-            0.024846292000000006,
+            -0.027501786,
+            0.024846292,
             0.00659425
           ]
         ]
       },
       "L10": {
-        "first_vertex": 12304,
+        "first_vertex": 18336,
         "kind": "PCB component",
         "package": "YSPI0530_REVN",
         "value": "4.7uH/5030",
@@ -887,22 +894,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
-            -0.03270000000000001,
-            0.017276000000000007,
+            -0.0327,
+            0.017276,
             0.0056
           ],
           [
-            -0.027300000000000005,
+            -0.0273,
             0.023124,
             0.0087925
           ]
         ]
       },
       "C105": {
-        "first_vertex": 12400,
+        "first_vertex": 18480,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -913,22 +920,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.034011116,
-            0.012664962000000007,
+            0.012664962,
             0.0056
           ],
           [
-            -0.029988884000000004,
-            0.014335038000000007,
+            -0.029988884,
+            0.014335038,
             0.00709675
           ]
         ]
       },
       "C106": {
-        "first_vertex": 12520,
+        "first_vertex": 18660,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -939,22 +946,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.029011116,
-            0.014664962000000007,
+            0.014664962,
             0.0056
           ],
           [
-            -0.024988884000000006,
-            0.016335038000000007,
+            -0.024988884,
+            0.016335038,
             0.00709675
           ]
         ]
       },
       "R101": {
-        "first_vertex": 12640,
+        "first_vertex": 18840,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -965,22 +972,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.026682602000000003,
-            0.024602006000000006,
+            -0.026682602,
+            0.024602006,
             0.0056
           ],
           [
-            -0.024317398000000004,
-            0.025497994000000006,
-            0.0063430000000000005
+            -0.024317398,
+            0.025497994,
+            0.006343
           ]
         ]
       },
       "R102": {
-        "first_vertex": 12760,
+        "first_vertex": 19020,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "22k",
@@ -991,22 +998,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.026182602000000003,
-            0.02155200600000001,
+            -0.026182602,
+            0.021552006,
             0.0056
           ],
           [
-            -0.023817398000000004,
-            0.02244799400000001,
-            0.0063430000000000005
+            -0.023817398,
+            0.022447994,
+            0.006343
           ]
         ]
       },
       "R103": {
-        "first_vertex": 12880,
+        "first_vertex": 19200,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -1017,22 +1024,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.023982602000000002,
-            0.018552006000000006,
+            -0.023982602,
+            0.018552006,
             0.0056
           ],
           [
             -0.021617398,
-            0.019447994000000007,
-            0.0063430000000000005
+            0.019447994,
+            0.006343
           ]
         ]
       },
       "U11": {
-        "first_vertex": 13000,
+        "first_vertex": 19380,
         "kind": "PCB component",
         "package": "TI_RYQ0021A",
         "value": "TPS55289RYQR",
@@ -1043,22 +1050,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 652,
+        "vertex_count": 948,
         "bounds_m": [
           [
-            0.018324000000000003,
-            0.04832400000000001,
+            0.018324,
+            0.048324,
             0.0056
           ],
           [
-            0.021675999999999997,
-            0.05367600000000001,
+            0.021676,
+            0.053676,
             0.0069875
           ]
         ]
       },
       "R110": {
-        "first_vertex": 13652,
+        "first_vertex": 20328,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -1069,7 +1076,7 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.022552006,
@@ -1078,13 +1085,13 @@
           ],
           [
             0.023447994,
-            0.057182602000000006,
-            0.0063430000000000005
+            0.057182602,
+            0.006343
           ]
         ]
       },
       "R111": {
-        "first_vertex": 13772,
+        "first_vertex": 20508,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "23.2k",
@@ -1095,22 +1102,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022317398000000002,
-            0.05855200600000001,
+            0.022317398,
+            0.058552006,
             0.0056
           ],
           [
-            0.024682601999999998,
-            0.05944799400000001,
-            0.0063430000000000005
+            0.024682602,
+            0.059447994,
+            0.006343
           ]
         ]
       },
       "R112": {
-        "first_vertex": 13892,
+        "first_vertex": 20688,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "49.9k",
@@ -1121,22 +1128,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.013867398000000001,
-            0.061702006000000004,
+            0.013867398,
+            0.061702006,
             0.0056
           ],
           [
-            0.016232601999999995,
+            0.016232602,
             0.062597994,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "C110": {
-        "first_vertex": 14012,
+        "first_vertex": 20868,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1147,22 +1154,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.017188883999999998,
-            0.05766496200000001,
+            0.017188884,
+            0.057664962,
             0.0056
           ],
           [
-            0.021211115999999995,
-            0.059335038000000014,
+            0.021211116,
+            0.059335038,
             0.00709675
           ]
         ]
       },
       "C111": {
-        "first_vertex": 14132,
+        "first_vertex": 21048,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1173,22 +1180,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.017188883999999998,
+            0.017188884,
             0.061164962,
             0.0056
           ],
           [
-            0.021211115999999995,
-            0.06283503800000001,
+            0.021211116,
+            0.062835038,
             0.00709675
           ]
         ]
       },
       "C112": {
-        "first_vertex": 14252,
+        "first_vertex": 21228,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -1199,22 +1206,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.018051786,
-            0.054803708000000007,
+            0.054803708,
             0.0056
           ],
           [
             0.020448214,
-            0.05569629200000001,
+            0.055696292,
             0.00659425
           ]
         ]
       },
       "C113": {
-        "first_vertex": 14372,
+        "first_vertex": 21408,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1225,22 +1232,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.023164962,
-            0.04898888400000001,
+            0.048988884,
             0.0056
           ],
           [
             0.024835038,
-            0.053011116000000004,
+            0.053011116,
             0.00709675
           ]
         ]
       },
       "C114": {
-        "first_vertex": 14492,
+        "first_vertex": 21588,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -1251,22 +1258,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.022803708,
-            0.045801786000000004,
+            0.045801786,
             0.0056
           ],
           [
             0.023696292,
-            0.04819821400000001,
+            0.048198214,
             0.00659425
           ]
         ]
       },
       "L11": {
-        "first_vertex": 14612,
+        "first_vertex": 21768,
         "kind": "PCB component",
         "package": "IHLP4040DZ_01_4R7",
         "value": "4.7uH/9.5A",
@@ -1277,22 +1284,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 144,
+        "vertex_count": 216,
         "bounds_m": [
           [
-            0.0069500000000000004,
-            0.04494000000000001,
+            0.00695,
+            0.04494,
             0.0056
           ],
           [
             0.01705,
-            0.05706000000000001,
+            0.05706,
             0.0098125
           ]
         ]
       },
       "C115": {
-        "first_vertex": 14756,
+        "first_vertex": 21984,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -1303,22 +1310,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.025303708,
-            0.045801786000000004,
+            0.045801786,
             0.0056
           ],
           [
-            0.026196292000000003,
-            0.04819821400000001,
+            0.026196292,
+            0.048198214,
             0.00659425
           ]
         ]
       },
       "R113": {
-        "first_vertex": 14876,
+        "first_vertex": 22164,
         "kind": "PCB component",
         "package": "RESC3216X70",
         "value": "12mR/1W",
@@ -1329,22 +1336,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.013988884,
-            0.04316496200000001,
+            0.043164962,
             0.0056
           ],
           [
             0.018011116,
-            0.044835038000000015,
+            0.044835038,
             0.0064435
           ]
         ]
       },
       "R114": {
-        "first_vertex": 14996,
+        "first_vertex": 22344,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -1355,7 +1362,7 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.026552006,
@@ -1364,13 +1371,13 @@
           ],
           [
             0.027447994,
-            0.05268260200000001,
-            0.0063430000000000005
+            0.052682602,
+            0.006343
           ]
         ]
       },
       "R115": {
-        "first_vertex": 15116,
+        "first_vertex": 22524,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -1381,22 +1388,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.024517398,
-            0.05455200600000001,
+            0.054552006,
             0.0056
           ],
           [
-            0.02688260199999999,
-            0.05544799400000001,
-            0.0063430000000000005
+            0.026882602,
+            0.055447994,
+            0.006343
           ]
         ]
       },
       "C116": {
-        "first_vertex": 15236,
+        "first_vertex": 22704,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -1407,22 +1414,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.022303708,
-            0.040301786000000006,
+            0.040301786,
             0.0056
           ],
           [
             0.023196292,
-            0.04269821400000001,
+            0.042698214,
             0.00659425
           ]
         ]
       },
       "C117": {
-        "first_vertex": 15356,
+        "first_vertex": 22884,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1433,22 +1440,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.019164962,
-            0.042788884000000006,
+            0.042788884,
             0.0056
           ],
           [
             0.020835038,
-            0.04681111600000001,
+            0.046811116,
             0.00709675
           ]
         ]
       },
       "C118": {
-        "first_vertex": 15476,
+        "first_vertex": 23064,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1459,22 +1466,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.008988883999999999,
-            0.042814962000000005,
+            0.008988884,
+            0.042814962,
             0.0056
           ],
           [
-            0.013011116000000001,
-            0.04448503800000001,
+            0.013011116,
+            0.044485038,
             0.00709675
           ]
         ]
       },
       "C119": {
-        "first_vertex": 15596,
+        "first_vertex": 23244,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1485,22 +1492,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.006164962,
-            0.04148888400000001,
+            0.041488884,
             0.0056
           ],
           [
             0.007835038,
-            0.045511116000000004,
+            0.045511116,
             0.00709675
           ]
         ]
       },
       "C120": {
-        "first_vertex": 15716,
+        "first_vertex": 23424,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1511,22 +1518,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.018664962,
-            0.03798888400000001,
+            0.037988884,
             0.0056
           ],
           [
             0.020335038,
-            0.04201111600000001,
+            0.042011116,
             0.00709675
           ]
         ]
       },
       "C121": {
-        "first_vertex": 15836,
+        "first_vertex": 23604,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -1537,22 +1544,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.019164962,
-            0.03298888400000001,
+            0.032988884,
             0.0056
           ],
           [
             0.020835038,
-            0.037011116000000004,
+            0.037011116,
             0.00709675
           ]
         ]
       },
       "R116": {
-        "first_vertex": 15956,
+        "first_vertex": 23784,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -1563,22 +1570,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.025817398000000005,
-            0.060552006000000005,
+            0.025817398,
+            0.060552006,
             0.0056
           ],
           [
-            0.028182601999999998,
-            0.061447994000000006,
-            0.0063430000000000005
+            0.028182602,
+            0.061447994,
+            0.006343
           ]
         ]
       },
       "R117": {
-        "first_vertex": 16076,
+        "first_vertex": 23964,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "24.9k",
@@ -1589,22 +1596,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.030552006,
-            0.04681739800000001,
+            0.046817398,
             0.0056
           ],
           [
             0.031447994,
-            0.049182602000000006,
-            0.0063430000000000005
+            0.049182602,
+            0.006343
           ]
         ]
       },
       "R118": {
-        "first_vertex": 16196,
+        "first_vertex": 24144,
         "kind": "PCB component",
         "package": "RESC1005_0402",
         "value": "3.3k",
@@ -1615,7 +1622,7 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.023774,
@@ -1623,14 +1630,14 @@
             0.0056
           ],
           [
-            0.024325999999999997,
-            0.04380300000000001,
+            0.024326,
+            0.043803,
             0.0062425
           ]
         ]
       },
       "C122": {
-        "first_vertex": 16316,
+        "first_vertex": 24324,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "100nF",
@@ -1641,22 +1648,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.021023999999999998,
+            0.021024,
             0.040897,
             0.0056
           ],
           [
-            0.021575999999999994,
-            0.04240300000000001,
+            0.021576,
+            0.042403,
             0.0062425
           ]
         ]
       },
       "C123": {
-        "first_vertex": 16436,
+        "first_vertex": 24504,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "100pF",
@@ -1667,22 +1674,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022323999999999997,
+            0.022324,
             0.043547,
             0.0056
           ],
           [
-            0.022875999999999994,
-            0.04505300000000001,
+            0.022876,
+            0.045053,
             0.0062425
           ]
         ]
       },
       "U12": {
-        "first_vertex": 16556,
+        "first_vertex": 24684,
         "kind": "PCB component",
         "package": "TI_PWP0016J",
         "value": "DRV8874PWPR",
@@ -1693,22 +1700,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 532,
+        "vertex_count": 768,
         "bounds_m": [
           [
             0.0025,
-            0.03241000000000001,
+            0.03241,
             0.0056
           ],
           [
             0.0075,
-            0.03959000000000001,
+            0.03959,
             0.0069875
           ]
         ]
       },
       "J10": {
-        "first_vertex": 17088,
+        "first_vertex": 25452,
         "kind": "PCB component",
         "package": "JST-6-SMD-VERT-1.0MM",
         "value": "BM06B-SRSS-TB(LF)(SN)",
@@ -1719,22 +1726,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 840,
+        "vertex_count": 1116,
         "bounds_m": [
           [
             -0.013592,
-            0.024907000000000006,
+            0.024907,
             0.0056
           ],
           [
-            -0.004888000000000002,
-            0.029065000000000007,
-            0.009850000000000001
+            -0.004888,
+            0.029065,
+            0.00985
           ]
         ]
       },
       "R120": {
-        "first_vertex": 17928,
+        "first_vertex": 26568,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -1745,22 +1752,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.003552006,
-            0.04381739800000001,
+            0.043817398,
             0.0056
           ],
           [
             0.004447994,
-            0.04618260200000001,
-            0.0063430000000000005
+            0.046182602,
+            0.006343
           ]
         ]
       },
       "R121": {
-        "first_vertex": 18048,
+        "first_vertex": 26748,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -1771,22 +1778,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.001052006,
-            0.04381739800000001,
+            0.043817398,
             0.0056
           ],
           [
             0.001947994,
-            0.04618260200000001,
-            0.0063430000000000005
+            0.046182602,
+            0.006343
           ]
         ]
       },
       "R122": {
-        "first_vertex": 18168,
+        "first_vertex": 26928,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -1797,22 +1804,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0006826019999999972,
-            0.037552006000000006,
+            -0.000682602,
+            0.037552006,
             0.0056
           ],
           [
-            0.0016826019999999972,
-            0.038447994000000006,
-            0.0063430000000000005
+            0.001682602,
+            0.038447994,
+            0.006343
           ]
         ]
       },
       "R123": {
-        "first_vertex": 18288,
+        "first_vertex": 27108,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -1823,22 +1830,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.001447994,
-            0.04331739800000001,
+            0.043317398,
             0.0056
           ],
           [
-            -0.0005520060000000001,
-            0.04568260200000001,
-            0.0063430000000000005
+            -0.000552006,
+            0.045682602,
+            0.006343
           ]
         ]
       },
       "R124": {
-        "first_vertex": 18408,
+        "first_vertex": 27288,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -1849,22 +1856,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.0008173980000000028,
-            0.04755200600000001,
+            0.000817398,
+            0.047552006,
             0.0056
           ],
           [
-            0.0031826019999999975,
-            0.04844799400000001,
-            0.0063430000000000005
+            0.003182602,
+            0.048447994,
+            0.006343
           ]
         ]
       },
       "R125": {
-        "first_vertex": 18528,
+        "first_vertex": 27468,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -1875,22 +1882,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.003947994000000003,
-            0.042817398000000007,
+            -0.003947994,
+            0.042817398,
             0.0056
           ],
           [
-            -0.0030520060000000034,
-            0.04518260200000001,
-            0.0063430000000000005
+            -0.003052006,
+            0.045182602,
+            0.006343
           ]
         ]
       },
       "C130": {
-        "first_vertex": 18648,
+        "first_vertex": 27648,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -1901,22 +1908,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.001553708,
-            0.040301786000000006,
+            0.040301786,
             0.0056
           ],
           [
             0.002446292,
-            0.04269821400000001,
+            0.042698214,
             0.00659425
           ]
         ]
       },
       "R126": {
-        "first_vertex": 18768,
+        "first_vertex": 27828,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "2.4k",
@@ -1927,22 +1934,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0034479940000000037,
-            0.03931739800000001,
+            -0.003447994,
+            0.039317398,
             0.0056
           ],
           [
-            -0.0025520060000000034,
-            0.041682602000000006,
-            0.0063430000000000005
+            -0.002552006,
+            0.041682602,
+            0.006343
           ]
         ]
       },
       "R127": {
-        "first_vertex": 18888,
+        "first_vertex": 28008,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -1953,22 +1960,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0011826019999999972,
-            0.03505200600000001,
+            -0.001182602,
+            0.035052006,
             0.0056
           ],
           [
-            0.0011826019999999972,
-            0.03594799400000001,
-            0.0063430000000000005
+            0.001182602,
+            0.035947994,
+            0.006343
           ]
         ]
       },
       "C131": {
-        "first_vertex": 19008,
+        "first_vertex": 28188,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "10nF",
@@ -1979,22 +1986,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.000946292,
-            0.039801786000000006,
+            0.039801786,
             0.0056
           ],
           [
-            -5.370800000000002e-05,
-            0.04219821400000001,
+            -5.3708e-05,
+            0.042198214,
             0.00659425
           ]
         ]
       },
       "C132": {
-        "first_vertex": 19128,
+        "first_vertex": 28368,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -2005,22 +2012,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.001335038,
-            0.02898888400000001,
+            0.028988884,
             0.0056
           ],
           [
-            0.00033503799999999996,
-            0.03301111600000001,
+            0.000335038,
+            0.033011116,
             0.00709675
           ]
         ]
       },
       "C133": {
-        "first_vertex": 19248,
+        "first_vertex": 28548,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2031,22 +2038,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.0018017860000000005,
-            0.030053708000000005,
+            0.001801786,
+            0.030053708,
             0.0056
           ],
           [
             0.004198214,
-            0.030946292000000007,
+            0.030946292,
             0.00659425
           ]
         ]
       },
       "C134": {
-        "first_vertex": 19368,
+        "first_vertex": 28728,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2057,22 +2064,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.005553708,
-            0.02890178600000001,
+            0.028901786,
             0.0056
           ],
           [
             0.006446292,
-            0.03129821400000001,
+            0.031298214,
             0.00659425
           ]
         ]
       },
       "C135": {
-        "first_vertex": 19488,
+        "first_vertex": 28908,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "22nF",
@@ -2083,22 +2090,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.008053708000000001,
-            0.02930178600000001,
+            0.008053708,
+            0.029301786,
             0.0056
           ],
           [
             0.008946292,
-            0.03169821400000001,
+            0.031698214,
             0.00659425
           ]
         ]
       },
       "C136": {
-        "first_vertex": 19608,
+        "first_vertex": 29088,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2109,22 +2116,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0034462920000000036,
-            0.03480178600000001,
+            -0.003446292,
+            0.034801786,
             0.0056
           ],
           [
-            -0.0025537080000000035,
-            0.03719821400000001,
+            -0.002553708,
+            0.037198214,
             0.00659425
           ]
         ]
       },
       "R128": {
-        "first_vertex": 19728,
+        "first_vertex": 29268,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -2135,22 +2142,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0056826020000000045,
-            0.03255200600000001,
+            -0.005682602,
+            0.032552006,
             0.0056
           ],
           [
-            -0.0033173980000000027,
-            0.03344799400000001,
-            0.0063430000000000005
+            -0.003317398,
+            0.033447994,
+            0.006343
           ]
         ]
       },
       "R129": {
-        "first_vertex": 19848,
+        "first_vertex": 29448,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -2161,22 +2168,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.0018173980000000028,
-            0.027552006000000007,
+            0.001817398,
+            0.027552006,
             0.0056
           ],
           [
-            0.004182601999999997,
-            0.028447994000000008,
-            0.0063430000000000005
+            0.004182602,
+            0.028447994,
+            0.006343
           ]
         ]
       },
       "U13": {
-        "first_vertex": 19968,
+        "first_vertex": 29628,
         "kind": "PCB component",
         "package": "TI_PWP0016J",
         "value": "DRV8874PWPR",
@@ -2187,22 +2194,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 532,
+        "vertex_count": 768,
         "bounds_m": [
           [
             0.0025,
-            -0.03959000000000001,
+            -0.03959,
             0.0056
           ],
           [
             0.0075,
-            -0.032409999999999994,
+            -0.03241,
             0.0069875
           ]
         ]
       },
       "J11": {
-        "first_vertex": 20500,
+        "first_vertex": 30396,
         "kind": "PCB component",
         "package": "JST-6-SMD-VERT-1.0MM",
         "value": "BM06B-SRSS-TB(LF)(SN)",
@@ -2213,22 +2220,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 840,
+        "vertex_count": 1116,
         "bounds_m": [
           [
-            -0.013712000000000004,
-            -0.028524999999999995,
+            -0.013712,
+            -0.028525,
             0.0056
           ],
           [
-            -0.005008000000000002,
+            -0.005008,
             -0.024367,
-            0.009850000000000001
+            0.00985
           ]
         ]
       },
       "R140": {
-        "first_vertex": 21340,
+        "first_vertex": 31512,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -2239,22 +2246,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.001447994,
-            -0.031182602000000004,
+            -0.031182602,
             0.0056
           ],
           [
-            -0.0005520060000000001,
-            -0.028817397999999998,
-            0.0063430000000000005
+            -0.000552006,
+            -0.028817398,
+            0.006343
           ]
         ]
       },
       "R141": {
-        "first_vertex": 21460,
+        "first_vertex": 31692,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -2265,22 +2272,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.014552006,
-            -0.031182602000000004,
+            -0.031182602,
             0.0056
           ],
           [
             0.015447994,
-            -0.028817397999999998,
-            0.0063430000000000005
+            -0.028817398,
+            0.006343
           ]
         ]
       },
       "R142": {
-        "first_vertex": 21580,
+        "first_vertex": 31872,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -2291,22 +2298,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.004317398000000003,
+            0.004317398,
             -0.054447994,
             0.0056
           ],
           [
-            0.0066826019999999976,
+            0.006682602,
             -0.053552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R143": {
-        "first_vertex": 21700,
+        "first_vertex": 32052,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -2317,22 +2324,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.017052006,
-            -0.031182602000000004,
+            -0.031182602,
             0.0056
           ],
           [
-            0.017947994000000002,
-            -0.028817397999999998,
-            0.0063430000000000005
+            0.017947994,
+            -0.028817398,
+            0.006343
           ]
         ]
       },
       "R144": {
-        "first_vertex": 21820,
+        "first_vertex": 32232,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -2343,22 +2350,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.0038173980000000022,
+            0.003817398,
             -0.060447994,
             0.0056
           ],
           [
-            0.006182601999999998,
+            0.006182602,
             -0.059552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R145": {
-        "first_vertex": 21940,
+        "first_vertex": 32412,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -2369,22 +2376,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022817398000000003,
+            0.022817398,
             -0.058447994,
             0.0056
           ],
           [
             0.025182602,
             -0.057552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "C150": {
-        "first_vertex": 22060,
+        "first_vertex": 32592,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2395,22 +2402,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.008553708000000002,
-            -0.03969821400000001,
+            0.008553708,
+            -0.039698214,
             0.0056
           ],
           [
             0.009446292,
-            -0.03730178599999999,
+            -0.037301786,
             0.00659425
           ]
         ]
       },
       "R146": {
-        "first_vertex": 22180,
+        "first_vertex": 32772,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "2.4k",
@@ -2421,22 +2428,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.012317398000000004,
+            0.012317398,
             -0.027447994,
             0.0056
           ],
           [
-            0.014682601999999998,
+            0.014682602,
             -0.026552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R147": {
-        "first_vertex": 22300,
+        "first_vertex": 32952,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -2447,22 +2454,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.015817398000000003,
+            0.015817398,
             -0.027447994,
             0.0056
           ],
           [
-            0.018182601999999996,
+            0.018182602,
             -0.026552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "C151": {
-        "first_vertex": 22420,
+        "first_vertex": 33132,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "10nF",
@@ -2473,22 +2480,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.008553708000000002,
-            -0.03619821400000001,
+            0.008553708,
+            -0.036198214,
             0.0056
           ],
           [
             0.009446292,
-            -0.03380178599999999,
+            -0.033801786,
             0.00659425
           ]
         ]
       },
       "C152": {
-        "first_vertex": 22540,
+        "first_vertex": 33312,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -2499,22 +2506,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.008988883999999999,
+            0.008988884,
             -0.030835038,
             0.0056
           ],
           [
-            0.013011116000000001,
+            0.013011116,
             -0.029164962,
             0.00709675
           ]
         ]
       },
       "C153": {
-        "first_vertex": 22660,
+        "first_vertex": 33492,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2525,22 +2532,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.005801786000000001,
+            0.005801786,
             -0.030946292,
             0.0056
           ],
           [
-            0.008198213999999999,
+            0.008198214,
             -0.030053708,
             0.00659425
           ]
         ]
       },
       "C154": {
-        "first_vertex": 22780,
+        "first_vertex": 33672,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2551,22 +2558,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.003553708,
-            -0.031298214000000005,
+            -0.031298214,
             0.0056
           ],
           [
             0.004446292,
-            -0.02890178599999999,
+            -0.028901786,
             0.00659425
           ]
         ]
       },
       "C155": {
-        "first_vertex": 22900,
+        "first_vertex": 33852,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "22nF",
@@ -2577,22 +2584,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.001053708,
-            -0.03169821400000001,
+            -0.031698214,
             0.0056
           ],
           [
             0.001946292,
-            -0.029301785999999996,
+            -0.029301786,
             0.00659425
           ]
         ]
       },
       "C156": {
-        "first_vertex": 23020,
+        "first_vertex": 34032,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2603,22 +2610,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.016948214000000003,
+            -0.016948214,
             -0.026946292,
             0.0056
           ],
           [
-            -0.014551786000000006,
+            -0.014551786,
             -0.026053708,
             0.00659425
           ]
         ]
       },
       "R148": {
-        "first_vertex": 23140,
+        "first_vertex": 34212,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -2629,22 +2636,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.012582602000000002,
-            -0.02189799399999999,
+            -0.012582602,
+            -0.021897994,
             0.0056
           ],
           [
-            -0.010217398000000003,
-            -0.02100200599999999,
-            0.0063430000000000005
+            -0.010217398,
+            -0.021002006,
+            0.006343
           ]
         ]
       },
       "R149": {
-        "first_vertex": 23260,
+        "first_vertex": 34392,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -2655,22 +2662,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.009482602000000005,
-            -0.021997993999999996,
+            -0.009482602,
+            -0.021997994,
             0.0056
           ],
           [
-            -0.007117398000000003,
-            -0.021102005999999996,
-            0.0063430000000000005
+            -0.007117398,
+            -0.021102006,
+            0.006343
           ]
         ]
       },
       "U14": {
-        "first_vertex": 23380,
+        "first_vertex": 34572,
         "kind": "PCB component",
         "package": "SOT95P280X145-5N",
         "value": "UCC27517DBVR",
@@ -2681,7 +2688,7 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 244,
+        "vertex_count": 336,
         "bounds_m": [
           [
             -0.00345,
@@ -2689,14 +2696,14 @@
             0.0056
           ],
           [
-            -0.0005500000000000001,
-            -0.035189856000000005,
+            -0.00055,
+            -0.035189856,
             0.0069875
           ]
         ]
       },
       "Q10": {
-        "first_vertex": 23624,
+        "first_vertex": 34908,
         "kind": "PCB component",
         "package": "TO252",
         "value": "AOD4184A",
@@ -2707,22 +2714,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0035359999999999975,
+            -0.003536,
             -0.04725,
             0.0056
           ],
           [
-            0.007352000000000001,
-            -0.040749999999999995,
+            0.007352,
+            -0.04075,
             0.0081
           ]
         ]
       },
       "D10": {
-        "first_vertex": 23744,
+        "first_vertex": 35088,
         "kind": "PCB component",
         "package": "SMC_DO214AB",
         "value": "SS1045",
@@ -2733,22 +2740,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
             0.0071,
-            -0.06434999999999999,
+            -0.06435,
             0.0056
           ],
           [
             0.0169,
-            -0.05844999999999999,
+            -0.05845,
             0.0081825
           ]
         ]
       },
       "J12": {
-        "first_vertex": 23840,
+        "first_vertex": 35232,
         "kind": "PCB component",
         "package": "JST_XH_B2B_VERTICAL",
         "value": "B2B-XH-A(LF)(SN)",
@@ -2759,22 +2766,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 328,
+        "vertex_count": 444,
         "bounds_m": [
           [
-            4.99999999999997e-05,
-            -0.024650000000000005,
-            0.005600000000000001
+            5e-05,
+            -0.02465,
+            0.0056
           ],
           [
             0.00745,
-            -0.018900000000000007,
+            -0.0189,
             0.0126
           ]
         ]
       },
       "R160": {
-        "first_vertex": 24168,
+        "first_vertex": 35676,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -2785,22 +2792,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.012552006000000001,
-            -0.025182602000000005,
+            0.012552006,
+            -0.025182602,
             0.0056
           ],
           [
-            0.013447994000000001,
-            -0.022817397999999996,
-            0.0063430000000000005
+            0.013447994,
+            -0.022817398,
+            0.006343
           ]
         ]
       },
       "R161": {
-        "first_vertex": 24288,
+        "first_vertex": 35856,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "22R",
@@ -2811,22 +2818,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.005597994000000003,
-            -0.04268260200000001,
+            -0.005597994,
+            -0.042682602,
             0.0056
           ],
           [
-            -0.0047020060000000025,
-            -0.04031739799999999,
-            0.0063430000000000005
+            -0.004702006,
+            -0.040317398,
+            0.006343
           ]
         ]
       },
       "R162": {
-        "first_vertex": 24408,
+        "first_vertex": 36036,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -2837,22 +2844,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.005597994000000003,
-            -0.04593260200000001,
+            -0.005597994,
+            -0.045932602,
             0.0056
           ],
           [
-            -0.0047020060000000025,
-            -0.04356739799999999,
-            0.0063430000000000005
+            -0.004702006,
+            -0.043567398,
+            0.006343
           ]
         ]
       },
       "C170": {
-        "first_vertex": 24528,
+        "first_vertex": 36216,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2863,22 +2870,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.001446292,
-            -0.03444821400000001,
+            -0.034448214,
             0.0056
           ],
           [
             -0.000553708,
-            -0.03205178599999999,
+            -0.032051786,
             0.00659425
           ]
         ]
       },
       "C171": {
-        "first_vertex": 24648,
+        "first_vertex": 36396,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -2889,22 +2896,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0020111160000000007,
+            -0.002011116,
             -0.027585038,
             0.0056
           ],
           [
-            0.0020111160000000007,
+            0.002011116,
             -0.025914962,
             0.00709675
           ]
         ]
       },
       "C172": {
-        "first_vertex": 24768,
+        "first_vertex": 36576,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -2915,22 +2922,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.009164962,
-            -0.026011115999999994,
+            -0.026011116,
             0.0056
           ],
           [
             0.010835038,
-            -0.021988884000000007,
+            -0.021988884,
             0.00709675
           ]
         ]
       },
       "C173": {
-        "first_vertex": 24888,
+        "first_vertex": 36756,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -2941,7 +2948,7 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.007988884,
@@ -2956,7 +2963,7 @@
         ]
       },
       "C174": {
-        "first_vertex": 25008,
+        "first_vertex": 36936,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -2967,22 +2974,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.005198214000000003,
-            -0.021446292000000002,
+            -0.005198214,
+            -0.021446292,
             0.0056
           ],
           [
-            -0.002801786000000004,
+            -0.002801786,
             -0.020553708,
             0.00659425
           ]
         ]
       },
       "R210": {
-        "first_vertex": 25128,
+        "first_vertex": 37116,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -2993,22 +3000,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022817398000000003,
+            0.022817398,
             -0.060947994,
             0.0056
           ],
           [
             0.025182602,
             -0.060052006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "C210": {
-        "first_vertex": 25248,
+        "first_vertex": 37296,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3019,22 +3026,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.017688884,
-            -0.05933503800000001,
+            -0.059335038,
             0.0056
           ],
           [
-            0.021711115999999996,
+            0.021711116,
             -0.057664962,
             0.00709675
           ]
         ]
       },
       "C214": {
-        "first_vertex": 25368,
+        "first_vertex": 37476,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -3045,10 +3052,10 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.021301786000000003,
+            0.021301786,
             -0.047196292,
             0.0056
           ],
@@ -3060,7 +3067,7 @@
         ]
       },
       "R215": {
-        "first_vertex": 25488,
+        "first_vertex": 37656,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -3071,22 +3078,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.020967398,
-            -0.043447994000000004,
+            -0.043447994,
             0.0056
           ],
           [
-            0.023332601999999994,
+            0.023332602,
             -0.042552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R212": {
-        "first_vertex": 25608,
+        "first_vertex": 37836,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "49.9k",
@@ -3097,22 +3104,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022817398000000003,
+            0.022817398,
             -0.063447994,
             0.0056
           ],
           [
             0.025182602,
-            -0.06255200600000001,
-            0.0063430000000000005
+            -0.062552006,
+            0.006343
           ]
         ]
       },
       "R211": {
-        "first_vertex": 25728,
+        "first_vertex": 38016,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "23.2k",
@@ -3123,7 +3130,7 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.026552006,
@@ -3132,13 +3139,13 @@
           ],
           [
             0.027447994,
-            -0.060817397999999995,
-            0.0063430000000000005
+            -0.060817398,
+            0.006343
           ]
         ]
       },
       "U20": {
-        "first_vertex": 25848,
+        "first_vertex": 38196,
         "kind": "PCB component",
         "package": "TI_RYQ0021A",
         "value": "TPS55289RYQR",
@@ -3149,22 +3156,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 652,
+        "vertex_count": 948,
         "bounds_m": [
           [
-            0.018324000000000003,
-            -0.05367600000000001,
+            0.018324,
+            -0.053676,
             0.0056
           ],
           [
-            0.021675999999999997,
+            0.021676,
             -0.048324,
             0.0069875
           ]
         ]
       },
       "C212": {
-        "first_vertex": 26500,
+        "first_vertex": 39144,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -3175,7 +3182,7 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.018051786,
@@ -3190,7 +3197,7 @@
         ]
       },
       "R213": {
-        "first_vertex": 26620,
+        "first_vertex": 39324,
         "kind": "PCB component",
         "package": "RESC3216X70",
         "value": "18mR/1W",
@@ -3201,22 +3208,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.010164962,
-            -0.04601111599999999,
+            -0.046011116,
             0.0056
           ],
           [
-            0.011835037999999999,
-            -0.04198888400000001,
+            0.011835038,
+            -0.041988884,
             0.0064435
           ]
         ]
       },
       "R214": {
-        "first_vertex": 26740,
+        "first_vertex": 39504,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -3227,22 +3234,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.022667398,
-            -0.045347993999999996,
+            -0.045347994,
             0.0056
           ],
           [
-            0.02503260199999999,
-            -0.044452005999999995,
-            0.0063430000000000005
+            0.025032602,
+            -0.044452006,
+            0.006343
           ]
         ]
       },
       "C219": {
-        "first_vertex": 26860,
+        "first_vertex": 39684,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3253,22 +3260,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.018664962,
-            -0.04001111599999999,
+            -0.040011116,
             0.0056
           ],
           [
             0.020335038,
-            -0.035988884000000006,
+            -0.035988884,
             0.00709675
           ]
         ]
       },
       "R216": {
-        "first_vertex": 26980,
+        "first_vertex": 39864,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -3279,22 +3286,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.029317397999999998,
+            0.029317398,
             -0.028447994,
             0.0056
           ],
           [
-            0.03168260200000001,
+            0.031682602,
             -0.027552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R217": {
-        "first_vertex": 27100,
+        "first_vertex": 40044,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "24.9k",
@@ -3305,22 +3312,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.031317397999999996,
+            0.031317398,
             -0.048447994,
             0.0056
           ],
           [
-            0.033682602000000006,
+            0.033682602,
             -0.047552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R218": {
-        "first_vertex": 27220,
+        "first_vertex": 40224,
         "kind": "PCB component",
         "package": "RESC1005_0402",
         "value": "3.3k",
@@ -3331,22 +3338,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.023846999999999997,
-            -0.05692599999999999,
+            0.023847,
+            -0.056926,
             0.0056
           ],
           [
-            0.025352999999999994,
-            -0.056373999999999994,
+            0.025353,
+            -0.056374,
             0.0062425
           ]
         ]
       },
       "C222": {
-        "first_vertex": 27340,
+        "first_vertex": 40404,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "22nF",
@@ -3357,22 +3364,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.026923999999999997,
-            -0.05695299999999999,
+            0.026924,
+            -0.056953,
             0.0056
           ],
           [
-            0.027475999999999993,
-            -0.05544699999999999,
+            0.027476,
+            -0.055447,
             0.0062425
           ]
         ]
       },
       "C211": {
-        "first_vertex": 27460,
+        "first_vertex": 40584,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3383,7 +3390,7 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.017688884,
@@ -3391,14 +3398,14 @@
             0.0056
           ],
           [
-            0.021711115999999996,
-            -0.061164961999999996,
+            0.021711116,
+            -0.061164962,
             0.00709675
           ]
         ]
       },
       "C213": {
-        "first_vertex": 27580,
+        "first_vertex": 40764,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3409,22 +3416,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.023164962,
-            -0.05301111599999999,
+            -0.053011116,
             0.0056
           ],
           [
             0.024835038,
-            -0.04898888400000001,
+            -0.048988884,
             0.00709675
           ]
         ]
       },
       "C215": {
-        "first_vertex": 27700,
+        "first_vertex": 40944,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "100nF",
@@ -3435,22 +3442,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.020146999999999998,
-            -0.05557599999999999,
+            0.020147,
+            -0.055576,
             0.0056
           ],
           [
             0.021653,
-            -0.055023999999999997,
+            -0.055024,
             0.0062425
           ]
         ]
       },
       "L20": {
-        "first_vertex": 27820,
+        "first_vertex": 41124,
         "kind": "PCB component",
         "package": "IHLP4040DZ_01_4R7",
         "value": "4.7uH/9.5A",
@@ -3461,22 +3468,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 144,
+        "vertex_count": 216,
         "bounds_m": [
           [
-            0.007749999999999997,
+            0.00775,
             -0.05841,
             0.0056
           ],
           [
-            0.017849999999999998,
+            0.01785,
             -0.04629,
             0.0098125
           ]
         ]
       },
       "C221": {
-        "first_vertex": 27964,
+        "first_vertex": 41340,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3487,11 +3494,11 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.018488884,
-            -0.034835038000000006,
+            -0.034835038,
             0.0056
           ],
           [
@@ -3502,7 +3509,7 @@
         ]
       },
       "C223": {
-        "first_vertex": 28084,
+        "first_vertex": 41520,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "100pF",
@@ -3513,22 +3520,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022096999999999995,
-            -0.057125999999999996,
+            0.022097,
+            -0.057126,
             0.0056
           ],
           [
-            0.023602999999999996,
+            0.023603,
             -0.056574,
             0.0062425
           ]
         ]
       },
       "C220": {
-        "first_vertex": 28204,
+        "first_vertex": 41700,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3539,22 +3546,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.005664962000000001,
-            -0.052011115999999996,
+            0.005664962,
+            -0.052011116,
             0.0056
           ],
           [
             0.007335038,
-            -0.04798888400000001,
+            -0.047988884,
             0.00709675
           ]
         ]
       },
       "C216": {
-        "first_vertex": 28324,
+        "first_vertex": 41880,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "100nF",
@@ -3565,22 +3572,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.021773999999999998,
+            0.021774,
             -0.045603,
             0.0056
           ],
           [
-            0.022325999999999995,
-            -0.04409699999999999,
+            0.022326,
+            -0.044097,
             0.0062425
           ]
         ]
       },
       "C217": {
-        "first_vertex": 28444,
+        "first_vertex": 42060,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3591,11 +3598,11 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.022488884,
-            -0.055835038000000003,
+            -0.055835038,
             0.0056
           ],
           [
@@ -3606,7 +3613,7 @@
         ]
       },
       "C218": {
-        "first_vertex": 28564,
+        "first_vertex": 42240,
         "kind": "PCB component",
         "package": "CAPC3216X135",
         "value": "22uF/25V",
@@ -3617,22 +3624,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.001988884,
-            -0.057835038000000005,
+            -0.057835038,
             0.0056
           ],
           [
-            0.006011116000000001,
+            0.006011116,
             -0.056164962,
             0.00709675
           ]
         ]
       },
       "J20": {
-        "first_vertex": 28684,
+        "first_vertex": 42420,
         "kind": "PCB component",
         "package": "XT30UPB-M",
         "value": "XT30UPB-M",
@@ -3643,22 +3650,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 1272,
+        "vertex_count": 1764,
         "bounds_m": [
           [
             -0.0344,
-            0.033900000000000007,
+            0.0339,
             0.0056
           ],
           [
-            -0.028800000000000003,
-            0.04410000000000001,
+            -0.0288,
+            0.0441,
             0.01654
           ]
         ]
       },
       "R300": {
-        "first_vertex": 29956,
+        "first_vertex": 44184,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "4.7k",
@@ -3669,22 +3676,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.007817398000000003,
-            0.018966356000000007,
+            0.007817398,
+            0.018966356,
             0.0056
           ],
           [
-            0.010182601999999997,
-            0.019862344000000007,
-            0.0063430000000000005
+            0.010182602,
+            0.019862344,
+            0.006343
           ]
         ]
       },
       "R301": {
-        "first_vertex": 30076,
+        "first_vertex": 44364,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "22R",
@@ -3695,22 +3702,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.014447994000000004,
-            -0.009182602000000003,
+            -0.014447994,
+            -0.009182602,
             0.0056
           ],
           [
-            -0.013552006000000004,
-            -0.006817397999999995,
-            0.0063430000000000005
+            -0.013552006,
+            -0.006817398,
+            0.006343
           ]
         ]
       },
       "R302": {
-        "first_vertex": 30196,
+        "first_vertex": 44544,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "22R",
@@ -3721,22 +3728,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.009947994000000003,
-            -0.016182602000000004,
+            -0.009947994,
+            -0.016182602,
             0.0056
           ],
           [
-            -0.009052006000000003,
-            -0.013817397999999996,
-            0.0063430000000000005
+            -0.009052006,
+            -0.013817398,
+            0.006343
           ]
         ]
       },
       "R303": {
-        "first_vertex": 30316,
+        "first_vertex": 44724,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -3747,22 +3754,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0011826019999999972,
-            0.024052006000000008,
+            -0.001182602,
+            0.024052006,
             0.0056
           ],
           [
-            0.0011826019999999972,
-            0.024947994000000008,
-            0.0063430000000000005
+            0.001182602,
+            0.024947994,
+            0.006343
           ]
         ]
       },
       "R304": {
-        "first_vertex": 30436,
+        "first_vertex": 44904,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -3773,22 +3780,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.002552006,
-            0.02381739800000001,
+            0.023817398,
             0.0056
           ],
           [
-            0.0034479940000000002,
-            0.026182602000000003,
-            0.0063430000000000005
+            0.003447994,
+            0.026182602,
+            0.006343
           ]
         ]
       },
       "U31": {
-        "first_vertex": 30556,
+        "first_vertex": 45084,
         "kind": "PCB component",
         "package": "TSSOP16_PW",
         "value": "SN74HC595PWR",
@@ -3799,22 +3806,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 508,
+        "vertex_count": 732,
         "bounds_m": [
           [
-            0.022500000000000003,
-            0.030360000000000005,
+            0.0225,
+            0.03036,
             0.0056
           ],
           [
             0.0275,
-            0.03764000000000001,
+            0.03764,
             0.0069875
           ]
         ]
       },
       "J30": {
-        "first_vertex": 31064,
+        "first_vertex": 45816,
         "kind": "PCB component",
         "package": "JST_SH_10",
         "value": "BM10B-SRSS-TB(LF)(SN)",
@@ -3825,22 +3832,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 1256,
+        "vertex_count": 1644,
         "bounds_m": [
           [
             0.029625,
-            -0.0063519999999999965,
+            -0.006352,
             0.0056
           ],
           [
-            0.033782999999999994,
-            0.0063519999999999965,
-            0.009850000000000001
+            0.033783,
+            0.006352,
+            0.00985
           ]
         ]
       },
       "C310": {
-        "first_vertex": 32320,
+        "first_vertex": 47460,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -3851,22 +3858,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.024801786000000003,
-            0.028053708000000007,
+            0.024801786,
+            0.028053708,
             0.0056
           ],
           [
             0.027198214,
-            0.02894629200000001,
+            0.028946292,
             0.00659425
           ]
         ]
       },
       "C311": {
-        "first_vertex": 32440,
+        "first_vertex": 47640,
         "kind": "PCB component",
         "package": "CAPC2012X110",
         "value": "10uF",
@@ -3877,22 +3884,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.020325962000000003,
-            0.013088884000000007,
+            0.020325962,
+            0.013088884,
             0.0056
           ],
           [
             0.021674038,
-            0.015911116000000006,
-            0.006845500000000001
+            0.015911116,
+            0.0068455
           ]
         ]
       },
       "R310": {
-        "first_vertex": 32560,
+        "first_vertex": 47820,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -3903,22 +3910,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.019317398000000003,
-            0.030552006000000007,
+            0.019317398,
+            0.030552006,
             0.0056
           ],
           [
             0.021682602,
-            0.03144799400000001,
-            0.0063430000000000005
+            0.031447994,
+            0.006343
           ]
         ]
       },
       "R311": {
-        "first_vertex": 32680,
+        "first_vertex": 48000,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -3929,22 +3936,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022817398000000003,
-            0.011552006000000007,
+            0.022817398,
+            0.011552006,
             0.0056
           ],
           [
             0.025182602,
-            0.012447994000000007,
-            0.0063430000000000005
+            0.012447994,
+            0.006343
           ]
         ]
       },
       "R312": {
-        "first_vertex": 32800,
+        "first_vertex": 48180,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -3955,22 +3962,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.023817398000000004,
-            0.008552006000000008,
+            0.023817398,
+            0.008552006,
             0.0056
           ],
           [
-            0.026182601999999996,
-            0.009447994000000008,
-            0.0063430000000000005
+            0.026182602,
+            0.009447994,
+            0.006343
           ]
         ]
       },
       "R313": {
-        "first_vertex": 32920,
+        "first_vertex": 48360,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -3981,22 +3988,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.019317398000000003,
-            0.011052006000000007,
+            0.019317398,
+            0.011052006,
             0.0056
           ],
           [
             0.021682602,
-            0.011947994000000007,
-            0.0063430000000000005
+            0.011947994,
+            0.006343
           ]
         ]
       },
       "R314": {
-        "first_vertex": 33040,
+        "first_vertex": 48540,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -4007,22 +4014,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.022317398000000002,
+            0.022317398,
             -0.001947994,
             0.0056
           ],
           [
-            0.024682601999999998,
+            0.024682602,
             -0.001052006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "J31": {
-        "first_vertex": 33160,
+        "first_vertex": 48720,
         "kind": "PCB component",
         "package": "JST_SH_4",
         "value": "BM04B-SRSS-TB(LF)(SN)",
@@ -4033,22 +4040,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 632,
+        "vertex_count": 852,
         "bounds_m": [
           [
-            0.028825000000000003,
-            0.051148000000000006,
+            0.028825,
+            0.051148,
             0.0056
           ],
           [
             0.032983,
             0.057852,
-            0.009850000000000001
+            0.00985
           ]
         ]
       },
       "J32": {
-        "first_vertex": 33792,
+        "first_vertex": 49572,
         "kind": "PCB component",
         "package": "JST_SH_4",
         "value": "BM04B-SRSS-TB(LF)(SN)",
@@ -4059,22 +4066,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 632,
+        "vertex_count": 852,
         "bounds_m": [
           [
-            0.028825000000000003,
-            -0.057851999999999994,
+            0.028825,
+            -0.057852,
             0.0056
           ],
           [
             0.032983,
-            -0.051148000000000006,
-            0.009850000000000001
+            -0.051148,
+            0.00985
           ]
         ]
       },
       "C312": {
-        "first_vertex": 34424,
+        "first_vertex": 50424,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -4085,22 +4092,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.026553708,
-            0.05680178600000001,
+            0.056801786,
             0.0056
           ],
           [
             0.027446292,
-            0.05919821400000001,
+            0.059198214,
             0.00659425
           ]
         ]
       },
       "C313": {
-        "first_vertex": 34544,
+        "first_vertex": 50604,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -4111,22 +4118,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.026553708,
-            -0.05969821400000001,
+            -0.059698214,
             0.0056
           ],
           [
             0.027446292,
-            -0.05730178599999999,
+            -0.057301786,
             0.00659425
           ]
         ]
       },
       "U32": {
-        "first_vertex": 34664,
+        "first_vertex": 50784,
         "kind": "PCB component",
         "package": "SOP65P640X120-14",
         "value": "TLV9064IPWR",
@@ -4137,22 +4144,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 460,
+        "vertex_count": 660,
         "bounds_m": [
           [
-            0.021500000000000002,
-            -0.013617000000000002,
+            0.0215,
+            -0.013617,
             0.0056
           ],
           [
             0.0265,
-            -0.006382999999999997,
+            -0.006383,
             0.0069875
           ]
         ]
       },
       "R320": {
-        "first_vertex": 35124,
+        "first_vertex": 51444,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -4163,22 +4170,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.007552006,
-            0.025317398000000012,
+            0.025317398,
             0.0056
           ],
           [
             0.008447994,
-            0.027682602000000004,
-            0.0063430000000000005
+            0.027682602,
+            0.006343
           ]
         ]
       },
       "R323": {
-        "first_vertex": 35244,
+        "first_vertex": 51624,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -4189,22 +4196,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.005317398000000003,
-            0.02155200600000001,
+            0.005317398,
+            0.021552006,
             0.0056
           ],
           [
-            0.007682601999999998,
-            0.02244799400000001,
-            0.0063430000000000005
+            0.007682602,
+            0.022447994,
+            0.006343
           ]
         ]
       },
       "R326": {
-        "first_vertex": 35364,
+        "first_vertex": 51804,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -4215,22 +4222,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.012552006000000001,
-            0.01681739800000001,
+            0.012552006,
+            0.016817398,
             0.0056
           ],
           [
-            0.013447994000000001,
-            0.019182602000000003,
-            0.0063430000000000005
+            0.013447994,
+            0.019182602,
+            0.006343
           ]
         ]
       },
       "C320": {
-        "first_vertex": 35484,
+        "first_vertex": 51984,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100pF",
@@ -4241,22 +4248,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.015053708,
-            0.01780178600000001,
+            0.017801786,
             0.0056
           ],
           [
             0.015946292,
-            0.020198214000000006,
+            0.020198214,
             0.00659425
           ]
         ]
       },
       "R321": {
-        "first_vertex": 35604,
+        "first_vertex": 52164,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -4267,22 +4274,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.0050520059999999995,
-            0.02381739800000001,
+            0.005052006,
+            0.023817398,
             0.0056
           ],
           [
             0.005947994,
-            0.026182602000000003,
-            0.0063430000000000005
+            0.026182602,
+            0.006343
           ]
         ]
       },
       "R324": {
-        "first_vertex": 35724,
+        "first_vertex": 52344,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -4293,22 +4300,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.008182602000000004,
-            0.019552006000000007,
+            -0.008182602,
+            0.019552006,
             0.0056
           ],
           [
-            -0.005817398000000002,
-            0.020447994000000008,
-            0.0063430000000000005
+            -0.005817398,
+            0.020447994,
+            0.006343
           ]
         ]
       },
       "R327": {
-        "first_vertex": 35844,
+        "first_vertex": 52524,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -4319,22 +4326,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.019317398000000003,
-            0.01705200600000001,
+            0.019317398,
+            0.017052006,
             0.0056
           ],
           [
             0.021682602,
-            0.01794799400000001,
-            0.0063430000000000005
+            0.017947994,
+            0.006343
           ]
         ]
       },
       "C321": {
-        "first_vertex": 35964,
+        "first_vertex": 52704,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100pF",
@@ -4345,22 +4352,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.014801786,
-            0.021553708000000008,
+            0.021553708,
             0.0056
           ],
           [
             0.017198214,
-            0.02244629200000001,
+            0.022446292,
             0.00659425
           ]
         ]
       },
       "R322": {
-        "first_vertex": 36084,
+        "first_vertex": 52884,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -4371,22 +4378,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0016826019999999972,
-            0.026552006000000006,
+            -0.001682602,
+            0.026552006,
             0.0056
           ],
           [
-            0.0006826019999999972,
-            0.027447994000000007,
-            0.0063430000000000005
+            0.000682602,
+            0.027447994,
+            0.006343
           ]
         ]
       },
       "R325": {
-        "first_vertex": 36204,
+        "first_vertex": 53064,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "1k",
@@ -4397,22 +4404,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.004447994000000004,
-            0.01931739800000001,
+            -0.004447994,
+            0.019317398,
             0.0056
           ],
           [
-            -0.0035520060000000034,
-            0.021682602000000006,
-            0.0063430000000000005
+            -0.003552006,
+            0.021682602,
+            0.006343
           ]
         ]
       },
       "R328": {
-        "first_vertex": 36324,
+        "first_vertex": 53244,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -4423,22 +4430,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.016817398000000004,
-            0.027052006000000007,
+            0.016817398,
+            0.027052006,
             0.0056
           ],
           [
-            0.019182601999999997,
-            0.027947994000000007,
-            0.0063430000000000005
+            0.019182602,
+            0.027947994,
+            0.006343
           ]
         ]
       },
       "C322": {
-        "first_vertex": 36444,
+        "first_vertex": 53424,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100pF",
@@ -4449,22 +4456,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.015801786,
-            0.015553708000000008,
+            0.015553708,
             0.0056
           ],
           [
             0.018198214,
-            0.016446292000000008,
+            0.016446292,
             0.00659425
           ]
         ]
       },
       "C323": {
-        "first_vertex": 36564,
+        "first_vertex": 53604,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -4475,22 +4482,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.023553708,
-            -0.016948214000000007,
+            -0.016948214,
             0.0056
           ],
           [
             0.024446292,
-            -0.014551785999999994,
+            -0.014551786,
             0.00659425
           ]
         ]
       },
       "C324": {
-        "first_vertex": 36684,
+        "first_vertex": 53784,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "1uF",
@@ -4501,22 +4508,22 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.020051786000000002,
+            0.020051786,
             -0.015696292,
             0.0056
           ],
           [
-            0.022448213999999998,
+            0.022448214,
             -0.014803708,
             0.00659425
           ]
         ]
       },
       "S3": {
-        "first_vertex": 36804,
+        "first_vertex": 53964,
         "kind": "PCB component",
         "package": "B3U-1000P(M)",
         "value": "ACCION_1",
@@ -4527,7 +4534,7 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 144,
+        "vertex_count": 216,
         "bounds_m": [
           [
             0.02975,
@@ -4542,7 +4549,7 @@
         ]
       },
       "R330": {
-        "first_vertex": 36948,
+        "first_vertex": 54180,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -4553,22 +4560,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.021317398000000005,
+            0.021317398,
             -0.028947994,
             0.0056
           ],
           [
-            0.023682601999999997,
+            0.023682602,
             -0.028052006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "C330": {
-        "first_vertex": 37068,
+        "first_vertex": 54360,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -4579,10 +4586,10 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.024801786000000003,
+            0.024801786,
             -0.030946292,
             0.0056
           ],
@@ -4594,7 +4601,7 @@
         ]
       },
       "S4": {
-        "first_vertex": 37188,
+        "first_vertex": 54540,
         "kind": "PCB component",
         "package": "B3U-1000P(M)",
         "value": "ACCION_2",
@@ -4605,7 +4612,7 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 144,
+        "vertex_count": 216,
         "bounds_m": [
           [
             0.02975,
@@ -4620,7 +4627,7 @@
         ]
       },
       "R331": {
-        "first_vertex": 37332,
+        "first_vertex": 54756,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -4631,22 +4638,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.015817398000000003,
+            0.015817398,
             -0.024947994,
             0.0056
           ],
           [
-            0.018182601999999996,
+            0.018182602,
             -0.024052006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "C331": {
-        "first_vertex": 37452,
+        "first_vertex": 54936,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -4657,10 +4664,10 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.024801786000000003,
+            0.024801786,
             -0.037946292,
             0.0056
           ],
@@ -4672,7 +4679,7 @@
         ]
       },
       "U33": {
-        "first_vertex": 37572,
+        "first_vertex": 55116,
         "kind": "PCB component",
         "package": "SOT95P280X145-5N",
         "value": "TPS70950DBVR",
@@ -4683,22 +4690,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 244,
+        "vertex_count": 336,
         "bounds_m": [
           [
-            0.024550000000000002,
-            -0.035810143999999995,
+            0.02455,
+            -0.035810144,
             0.0056
           ],
           [
-            0.027450000000000002,
+            0.02745,
             -0.032189856,
             0.0069875
           ]
         ]
       },
       "C332": {
-        "first_vertex": 37816,
+        "first_vertex": 55452,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "1uF",
@@ -4709,10 +4716,10 @@
         "rotation_cad_deg": 270.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.021301786000000003,
+            0.021301786,
             -0.031446292,
             0.0056
           ],
@@ -4724,7 +4731,7 @@
         ]
       },
       "C333": {
-        "first_vertex": 37936,
+        "first_vertex": 55632,
         "kind": "PCB component",
         "package": "CAPC2012X110",
         "value": "10uF",
@@ -4735,22 +4742,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.021825961999999997,
-            -0.038911115999999996,
+            0.021825962,
+            -0.038911116,
             0.0056
           ],
           [
             0.023174038,
             -0.036088884,
-            0.006845500000000001
+            0.0068455
           ]
         ]
       },
       "U34": {
-        "first_vertex": 38056,
+        "first_vertex": 55812,
         "kind": "PCB component",
         "package": "SOT95P280X145-5N",
         "value": "SN74LV1T34DBVR",
@@ -4761,22 +4768,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 244,
+        "vertex_count": 336,
         "bounds_m": [
           [
-            0.024550000000000002,
-            -0.042810143999999994,
+            0.02455,
+            -0.042810144,
             0.0056
           ],
           [
-            0.027450000000000002,
+            0.02745,
             -0.039189856,
             0.0069875
           ]
         ]
       },
       "R332": {
-        "first_vertex": 38300,
+        "first_vertex": 56148,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -4787,22 +4794,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.015817398000000003,
+            0.015817398,
             -0.022447994,
             0.0056
           ],
           [
-            0.018182601999999996,
+            0.018182602,
             -0.021552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "C334": {
-        "first_vertex": 38420,
+        "first_vertex": 56328,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -4813,22 +4820,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.027801786000000002,
+            0.027801786,
             -0.048446292,
             0.0056
           ],
           [
-            0.030198214000000008,
+            0.030198214,
             -0.047553708,
             0.00659425
           ]
         ]
       },
       "D30": {
-        "first_vertex": 38540,
+        "first_vertex": 56508,
         "kind": "PCB component",
         "package": "SK6805_EC15",
         "value": "SK6805-EC15",
@@ -4839,11 +4846,11 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 144,
+        "vertex_count": 216,
         "bounds_m": [
           [
             0.03025,
-            -0.043750000000000004,
+            -0.04375,
             0.0056
           ],
           [
@@ -4854,7 +4861,7 @@
         ]
       },
       "C335": {
-        "first_vertex": 38684,
+        "first_vertex": 56724,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -4865,22 +4872,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.030301785999999994,
+            0.030301786,
             -0.045946292,
             0.0056
           ],
           [
-            0.03269821400000001,
+            0.032698214,
             -0.045053708,
             0.00659425
           ]
         ]
       },
       "BZ1": {
-        "first_vertex": 38804,
+        "first_vertex": 56904,
         "kind": "PCB component",
         "package": "MLT5030",
         "value": "MLT-5030",
@@ -4891,22 +4898,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 336,
+        "vertex_count": 432,
         "bounds_m": [
           [
             0.0281,
-            0.04090000000000001,
+            0.0409,
             0.0056
           ],
           [
             0.0339,
-            0.04610000000000001,
+            0.0461,
             0.0087375
           ]
         ]
       },
       "Q30": {
-        "first_vertex": 39140,
+        "first_vertex": 57336,
         "kind": "PCB component",
         "package": "SOT95P237X112-3N",
         "value": "AO3400A",
@@ -4917,22 +4924,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
             0.030762592,
-            0.03587319000000001,
+            0.03587319,
             0.0056
           ],
           [
             0.033237408,
-            0.039126810000000005,
-            0.006750000000000001
+            0.03912681,
+            0.00675
           ]
         ]
       },
       "D33": {
-        "first_vertex": 39236,
+        "first_vertex": 57480,
         "kind": "PCB component",
         "package": "SS14",
         "value": "SS14",
@@ -4943,22 +4950,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
-            0.03135000000000001,
+            0.03135,
             0.02808,
             0.0056
           ],
           [
-            0.034050000000000004,
+            0.03405,
             0.03432,
             0.0083825
           ]
         ]
       },
       "R333": {
-        "first_vertex": 39332,
+        "first_vertex": 57624,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100R",
@@ -4969,22 +4976,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.029052006000000002,
-            0.03181739800000001,
+            0.029052006,
+            0.031817398,
             0.0056
           ],
           [
-            0.029947994000000002,
-            0.034182602000000006,
-            0.0063430000000000005
+            0.029947994,
+            0.034182602,
+            0.006343
           ]
         ]
       },
       "R334": {
-        "first_vertex": 39452,
+        "first_vertex": 57804,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -4995,22 +5002,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.012447994000000004,
-            -0.016182602000000004,
+            -0.012447994,
+            -0.016182602,
             0.0056
           ],
           [
-            -0.011552006000000004,
-            -0.013817397999999996,
-            0.0063430000000000005
+            -0.011552006,
+            -0.013817398,
+            0.006343
           ]
         ]
       },
       "R335": {
-        "first_vertex": 39572,
+        "first_vertex": 57984,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "100k",
@@ -5021,22 +5028,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.029252006000000004,
-            0.02831739800000001,
+            0.029252006,
+            0.028317398,
             0.0056
           ],
           [
-            0.030147994000000004,
-            0.030682602000000003,
-            0.0063430000000000005
+            0.030147994,
+            0.030682602,
+            0.006343
           ]
         ]
       },
       "C336": {
-        "first_vertex": 39692,
+        "first_vertex": 58164,
         "kind": "PCB component",
         "package": "CAPC2012X110",
         "value": "10uF",
@@ -5047,22 +5054,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             0.024825962,
-            0.04208888400000001,
+            0.042088884,
             0.0056
           ],
           [
-            0.026174038000000004,
-            0.04491111600000001,
-            0.006845500000000001
+            0.026174038,
+            0.044911116,
+            0.0068455
           ]
         ]
       },
       "U35": {
-        "first_vertex": 39812,
+        "first_vertex": 58344,
         "kind": "PCB component",
         "package": "SOT95P280X145-6N",
         "value": "TPS2553DBVR",
@@ -5073,22 +5080,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 268,
+        "vertex_count": 372,
         "bounds_m": [
           [
-            -0.025450000000000004,
-            -0.04681111600000001,
+            -0.02545,
+            -0.046811116,
             0.0056
           ],
           [
-            -0.022550000000000004,
+            -0.02255,
             -0.043188884,
             0.0069875
           ]
         ]
       },
       "C340": {
-        "first_vertex": 40080,
+        "first_vertex": 58716,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "1uF",
@@ -5099,7 +5106,7 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
             -0.023198214,
@@ -5107,14 +5114,14 @@
             0.0056
           ],
           [
-            -0.020801786000000006,
+            -0.020801786,
             -0.040553708,
             0.00659425
           ]
         ]
       },
       "R340": {
-        "first_vertex": 40200,
+        "first_vertex": 58896,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "49.9k",
@@ -5125,22 +5132,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.029682602000000006,
+            -0.029682602,
             -0.052947994,
             0.0056
           ],
           [
-            -0.027317398000000003,
+            -0.027317398,
             -0.052052006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "R341": {
-        "first_vertex": 40320,
+        "first_vertex": 59076,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "10k",
@@ -5151,22 +5158,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.033182602000000005,
+            -0.033182602,
             -0.053447994,
             0.0056
           ],
           [
-            -0.030817398000000003,
+            -0.030817398,
             -0.052552006,
-            0.0063430000000000005
+            0.006343
           ]
         ]
       },
       "D31": {
-        "first_vertex": 40440,
+        "first_vertex": 59256,
         "kind": "PCB component",
         "package": "SS14",
         "value": "SS14",
@@ -5177,22 +5184,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
-            -0.024350000000000004,
+            -0.02435,
             -0.03512,
             0.0056
           ],
           [
-            -0.021650000000000003,
-            -0.028879999999999996,
+            -0.02165,
+            -0.02888,
             0.0083825
           ]
         ]
       },
       "D32": {
-        "first_vertex": 40536,
+        "first_vertex": 59400,
         "kind": "PCB component",
         "package": "SS14",
         "value": "SS14",
@@ -5203,22 +5210,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
-            -0.032350000000000004,
-            0.04988000000000001,
+            -0.03235,
+            0.04988,
             0.0056
           ],
           [
-            -0.029650000000000003,
+            -0.02965,
             0.05612,
             0.0083825
           ]
         ]
       },
       "D36": {
-        "first_vertex": 40632,
+        "first_vertex": 59544,
         "kind": "PCB component",
         "package": "SS14",
         "value": "SS14",
@@ -5229,7 +5236,7 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
             -0.03162,
@@ -5237,14 +5244,14 @@
             0.0056
           ],
           [
-            -0.025380000000000003,
+            -0.02538,
             -0.02715,
             0.0083825
           ]
         ]
       },
       "C341": {
-        "first_vertex": 40728,
+        "first_vertex": 59688,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "100nF",
@@ -5255,22 +5262,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.024198214000000003,
+            -0.024198214,
             -0.027446292,
             0.0056
           ],
           [
-            -0.021801786000000004,
+            -0.021801786,
             -0.026553708,
             0.00659425
           ]
         ]
       },
       "C350": {
-        "first_vertex": 40848,
+        "first_vertex": 59868,
         "kind": "PCB component",
         "package": "CAPAE660X540N",
         "value": "100uF/16V",
@@ -5281,22 +5288,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 920,
+        "vertex_count": 1140,
         "bounds_m": [
           [
             -0.0333,
-            -0.021917635999999997,
+            -0.021917636,
             0.0056
           ],
           [
-            -0.026700000000000005,
-            -0.014082364000000002,
-            0.011017500000000001
+            -0.0267,
+            -0.014082364,
+            0.0110175
           ]
         ]
       },
       "C351": {
-        "first_vertex": 41768,
+        "first_vertex": 61008,
         "kind": "PCB component",
         "package": "CAPAE660X540N",
         "value": "100uF/16V",
@@ -5307,22 +5314,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 920,
+        "vertex_count": 1140,
         "bounds_m": [
           [
-            0.010700000000000001,
-            0.034082364000000004,
+            0.0107,
+            0.034082364,
             0.0056
           ],
           [
             0.0173,
-            0.04191763600000001,
-            0.011017500000000001
+            0.041917636,
+            0.0110175
           ]
         ]
       },
       "D34": {
-        "first_vertex": 42688,
+        "first_vertex": 62148,
         "kind": "PCB component",
         "package": "SMBJ6.5A",
         "value": "SMBJ6.5A",
@@ -5333,22 +5340,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
-            0.010450000000000001,
-            0.029200000000000007,
+            0.01045,
+            0.0292,
             0.0056
           ],
           [
-            0.017549999999999996,
-            0.03280000000000001,
+            0.01755,
+            0.0328,
             0.0082325
           ]
         ]
       },
       "C353": {
-        "first_vertex": 42784,
+        "first_vertex": 62292,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "22nF/50V",
@@ -5359,22 +5366,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0056982140000000035,
-            0.02955370800000001,
+            -0.005698214,
+            0.029553708,
             0.0056
           ],
           [
-            -0.003301786000000004,
-            0.03044629200000001,
+            -0.003301786,
+            0.030446292,
             0.00659425
           ]
         ]
       },
       "C352": {
-        "first_vertex": 42904,
+        "first_vertex": 62472,
         "kind": "PCB component",
         "package": "CAPAE660X540N",
         "value": "100uF/16V",
@@ -5385,22 +5392,22 @@
         "rotation_cad_deg": 0.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 920,
+        "vertex_count": 1140,
         "bounds_m": [
           [
-            0.010700000000000001,
+            0.0107,
             -0.039917636,
             0.0056
           ],
           [
             0.0173,
             -0.032082364,
-            0.011017500000000001
+            0.0110175
           ]
         ]
       },
       "D35": {
-        "first_vertex": 43824,
+        "first_vertex": 63612,
         "kind": "PCB component",
         "package": "SMBJ6.5A",
         "value": "SMBJ6.5A",
@@ -5411,11 +5418,11 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 96,
+        "vertex_count": 144,
         "bounds_m": [
           [
-            0.013450000000000002,
-            -0.044800000000000006,
+            0.01345,
+            -0.0448,
             0.0056
           ],
           [
@@ -5426,7 +5433,7 @@
         ]
       },
       "C354": {
-        "first_vertex": 43920,
+        "first_vertex": 63756,
         "kind": "PCB component",
         "package": "CAPC1608X85",
         "value": "22nF/50V",
@@ -5437,22 +5444,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            -0.0056982140000000035,
+            -0.005698214,
             -0.030446292,
             0.0056
           ],
           [
-            -0.003301786000000004,
-            -0.029553707999999998,
+            -0.003301786,
+            -0.029553708,
             0.00659425
           ]
         ]
       },
       "C124": {
-        "first_vertex": 44040,
+        "first_vertex": 63936,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "100nF",
@@ -5463,22 +5470,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.017823999999999996,
-            0.046497000000000004,
+            0.017824,
+            0.046497,
             0.0056
           ],
           [
-            0.018375999999999993,
-            0.04800300000000001,
+            0.018376,
+            0.048003,
             0.0062425
           ]
         ]
       },
       "C224": {
-        "first_vertex": 44160,
+        "first_vertex": 64116,
         "kind": "PCB component",
         "package": "CAPC1005_0402",
         "value": "100nF",
@@ -5489,22 +5496,22 @@
         "rotation_cad_deg": 180.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.017823999999999996,
-            -0.055503000000000004,
+            0.017824,
+            -0.055503,
             0.0056
           ],
           [
-            0.018375999999999993,
-            -0.053996999999999996,
+            0.018376,
+            -0.053997,
             0.0062425
           ]
         ]
       },
       "R360": {
-        "first_vertex": 44280,
+        "first_vertex": 64296,
         "kind": "PCB component",
         "package": "RESC1608X60",
         "value": "4.7k",
@@ -5515,22 +5522,22 @@
         "rotation_cad_deg": 90.0,
         "origin": "final RevQ XML; dimensional visual reconstruction",
         "physical_model": false,
-        "vertex_count": 120,
+        "vertex_count": 180,
         "bounds_m": [
           [
-            0.0010173979999999986,
-            0.020052006000000008,
+            0.001017398,
+            0.020052006,
             0.0056
           ],
           [
-            0.0033826019999999932,
-            0.020947994000000008,
-            0.0063430000000000005
+            0.003382602,
+            0.020947994,
+            0.006343
           ]
         ]
       },
       "Pololu5178_left": {
-        "first_vertex": 44400,
+        "first_vertex": 64476,
         "kind": "dimensioned reconstruction",
         "source": "https://www.pololu.com/product/5178",
         "mass_kg_manufacturer": 0.011,
@@ -5540,26 +5547,26 @@
           0.065,
           0.0115
         ],
-        "vertex_count": 576,
+        "vertex_count": 720,
         "bounds_m": [
           [
             -0.0194,
             0.0327,
-            0.0062499999999999995
+            0.00625
           ],
           [
             -0.0069,
-            0.07500000000000001,
+            0.075,
             0.01675
           ]
         ]
       },
       "Pololu1089_left": {
-        "first_vertex": 44976,
+        "first_vertex": 65196,
         "kind": "dimensioned bracket reconstruction",
         "source": "Pololu1089 STEP and final RevQ mounting holes",
         "hole_pitch_m": 0.018,
-        "vertex_count": 440,
+        "vertex_count": 564,
         "bounds_m": [
           [
             -0.02515,
@@ -5574,26 +5581,26 @@
         ]
       },
       "Encoder_cable_left": {
-        "first_vertex": 45416,
+        "first_vertex": 65760,
         "kind": "JST SH 6-wire visual",
         "wire_diameter_m": 0.00054,
         "length": "illustrative; not measured",
-        "vertex_count": 504,
+        "vertex_count": 4536,
         "bounds_m": [
           [
-            -0.01498098243941651,
-            0.026750266123341773,
-            0.010803067514224919
+            -0.014981989,
+            0.026743756,
+            0.010796475
           ],
           [
-            -0.00019060777180003878,
-            0.0342197731465235,
-            0.020253655291693214
+            -0.000109521,
+            0.034380688,
+            0.020448865
           ]
         ]
       },
       "Pololu5178_right": {
-        "first_vertex": 45920,
+        "first_vertex": 70296,
         "kind": "dimensioned reconstruction",
         "source": "https://www.pololu.com/product/5178",
         "mass_kg_manufacturer": 0.011,
@@ -5603,12 +5610,12 @@
           -0.065,
           0.0115
         ],
-        "vertex_count": 576,
+        "vertex_count": 720,
         "bounds_m": [
           [
             -0.0194,
-            -0.07500000000000001,
-            0.0062499999999999995
+            -0.075,
+            0.00625
           ],
           [
             -0.0069,
@@ -5618,11 +5625,11 @@
         ]
       },
       "Pololu1089_right": {
-        "first_vertex": 46496,
+        "first_vertex": 71016,
         "kind": "dimensioned bracket reconstruction",
         "source": "Pololu1089 STEP and final RevQ mounting holes",
         "hole_pitch_m": 0.018,
-        "vertex_count": 440,
+        "vertex_count": 564,
         "bounds_m": [
           [
             -0.02515,
@@ -5637,45 +5644,45 @@
         ]
       },
       "Encoder_cable_right": {
-        "first_vertex": 46936,
+        "first_vertex": 71580,
         "kind": "JST SH 6-wire visual",
         "wire_diameter_m": 0.00054,
         "length": "illustrative; not measured",
-        "vertex_count": 504,
+        "vertex_count": 4536,
         "bounds_m": [
           [
-            -0.014963089584648892,
-            -0.03422465357947122,
-            0.010803067514224919
+            -0.01499258,
+            -0.034360546,
+            0.010796475
           ],
           [
-            -0.00018145410677798283,
-            -0.026745450156979322,
-            0.020253655291693214
+            -0.000121838,
+            -0.026745721,
+            0.020451952
           ]
         ]
       },
       "Turbine_32mm": {
-        "first_vertex": 47440,
+        "first_vertex": 76116,
         "kind": "unmeasured 1020/32mm turbine visual",
         "rotor_diameter_m": 0.027,
         "suction": "not inferred from geometry; physics configurable separately",
-        "vertex_count": 2120,
+        "vertex_count": 4248,
         "bounds_m": [
           [
             -0.012,
-            -0.02359889289109696,
+            -0.023602219,
             0.0075
           ],
           [
             0.02,
             0.016,
-            0.03422674196148584
+            0.035006002
           ]
         ]
       },
       "Battery_2S_400mAh_estimated": {
-        "first_vertex": 49560,
+        "first_vertex": 80364,
         "kind": "explicitly estimated visual",
         "dimensions_m": [
           0.036,
@@ -5686,12 +5693,12 @@
         "capacity_mah": 400,
         "mounting": "unconfirmed; elevated for component clearance",
         "not_mass_measurement": true,
-        "vertex_count": 264,
+        "vertex_count": 1656,
         "bounds_m": [
           [
-            -0.03319960784663433,
-            0.028499999999999998,
-            0.01586994988719949
+            -0.033956546,
+            0.0285,
+            0.015783294
           ],
           [
             0.023,
@@ -5701,7 +5708,7 @@
         ]
       },
       "QTRX_HD_01A_left": {
-        "first_vertex": 49824,
+        "first_vertex": 82020,
         "kind": "Pololu4401 dimensional reconstruction",
         "source": "https://www.pololu.com/product/4401",
         "dimensions_m": [
@@ -5710,22 +5717,22 @@
           0.0044
         ],
         "mounting": "provisional forward/down-facing; not a rangefinder",
-        "vertex_count": 568,
+        "vertex_count": 2436,
         "bounds_m": [
           [
-            0.030841443028289485,
-            0.049499999999999995,
-            0.007599999999999999
+            0.030826661,
+            0.0495,
+            0.0076
           ],
           [
             0.057,
             0.0545,
-            0.014158556971710517
+            0.014222862
           ]
         ]
       },
       "QTRX_HD_01A_right": {
-        "first_vertex": 50392,
+        "first_vertex": 84456,
         "kind": "Pololu4401 dimensional reconstruction",
         "source": "https://www.pololu.com/product/4401",
         "dimensions_m": [
@@ -5734,43 +5741,43 @@
           0.0044
         ],
         "mounting": "provisional forward/down-facing; not a rangefinder",
-        "vertex_count": 568,
+        "vertex_count": 2436,
         "bounds_m": [
           [
-            0.030841443028289485,
+            0.030826661,
             -0.0545,
-            0.007599999999999999
+            0.0076
           ],
           [
             0.057,
-            -0.049499999999999995,
-            0.014158556971710517
+            -0.0495,
+            0.014222862
           ]
         ]
       },
       "Sensor_bar_reference": {
-        "first_vertex": 50960,
+        "first_vertex": 86892,
         "kind": "provisional custom sensor bar visual",
         "channels": 16,
         "source": "Pololu4415 is a dimensional/electrical reference only",
         "not_actual_manufacturer_part": true,
         "multiplexer": "external on bar; model not identified",
-        "vertex_count": 3784,
+        "vertex_count": 8916,
         "bounds_m": [
           [
-            0.03290893018284377,
+            0.032889585,
             -0.032,
             0.0067
           ],
           [
-            0.06999999999999999,
+            0.07,
             0.032,
-            0.014204907088601518
+            0.014224233
           ]
         ]
       },
       "Rear_skid_estimated": {
-        "first_vertex": 54744,
+        "first_vertex": 95808,
         "kind": "estimated low-friction support visual",
         "not_measured": true,
         "contact_centre_m": [
@@ -5778,12 +5785,12 @@
           0,
           0.0003
         ],
-        "vertex_count": 304,
+        "vertex_count": 372,
         "bounds_m": [
           [
             -0.0535,
             -0.0065,
-            0.00030000000000000014
+            0.0003
           ],
           [
             -0.025,
@@ -5801,8 +5808,15 @@
       "robot/wheel.wrl",
       "robot/wheel.inc.wbt"
     ],
-    "vertices": 9920,
-    "faces": 2540,
+    "vertices": 14520,
+    "faces": 4840,
+    "geometry_stats": {
+      "input_polygons": 2540,
+      "triangulated_polygons": 2300,
+      "degenerate_triangles_dropped": 0,
+      "crossed_quad_projections": 0,
+      "crossed_quad_details": []
+    },
     "bounds_m": [
       [
         -0.0115,
@@ -5822,7 +5836,7 @@
         "diameter_m": 0.023,
         "width_m": 0.04,
         "hardness": "10A per vendor, not a calibrated friction coefficient",
-        "vertex_count": 4624,
+        "vertex_count": 6936,
         "bounds_m": [
           [
             -0.0115,
@@ -5837,12 +5851,12 @@
         ]
       },
       "Aluminium_hub": {
-        "first_vertex": 4624,
+        "first_vertex": 6936,
         "kind": "dimensioned hub reconstruction",
         "rim_diameter_m": 0.015,
         "shaft_diameter_m": 0.003,
         "source": "https://ja-bots.com/producto/llantas-seguidor-de-linea-largas-23x40-negro/",
-        "vertex_count": 5296,
+        "vertex_count": 7584,
         "bounds_m": [
           [
             -0.0075,

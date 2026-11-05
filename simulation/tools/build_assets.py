@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import re
 import shutil
 import xml.etree.ElementTree as ET
 
@@ -55,7 +56,7 @@ MATERIALS = {
 
 
 def fmt(v):
-    return f'{v:.8g}'
+    return f'{v:.9g}'
 
 
 def cad_xyz(x, y, z=PCB_TOP):
@@ -69,21 +70,53 @@ class Mesh:
         self.uvs = []
         self.part = 'visual'
         self.parts = {}
+        self.geometry_stats = {'input_polygons':0, 'triangulated_polygons':0,
+                               'degenerate_triangles_dropped':0,
+                               'crossed_quad_projections':0, 'crossed_quad_details':[]}
 
     def face(self, points, material, uv=None):
+        self.geometry_stats['input_polygons'] += 1
         original_uv = uv or [(0,0)]*len(points)
         clean, clean_uv = [], []
         for point, texcoord in zip(points, original_uv):
-            if not clean or sum((point[i]-clean[-1][i])**2 for i in range(3)) > 1e-22:
-                clean.append(tuple(point)); clean_uv.append(texcoord)
-        if len(clean)>1 and sum((clean[0][i]-clean[-1][i])**2 for i in range(3)) < 1e-22:
+            # Nanometre quantisation precedes triangulation so the validity test
+            # uses the same coordinates that Webots will parse from the file.
+            point=tuple(round(float(v),9)for v in point)
+            if not clean or point != clean[-1]:
+                clean.append(point); clean_uv.append(texcoord)
+        if len(clean)>1 and clean[0] == clean[-1]:
             clean.pop(); clean_uv.pop()
         if len(clean)<3: return
-        start = len(self.vertices)
-        self.vertices.extend(clean)
-        indices = tuple(range(start, start+len(clean)))
-        self.faces.append((indices, material, self.part))
-        self.uvs.extend(clean_uv)
+        def cross(a,b,c):
+            u=tuple(b[i]-a[i]for i in range(3));v=tuple(c[i]-a[i]for i in range(3))
+            return (u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0])
+        def area2(ids):
+            n=cross(*(clean[i]for i in ids));return math.sqrt(sum(x*x for x in n))
+        if len(clean)>3:
+            self.geometry_stats['triangulated_polygons'] += 1
+        if len(clean)==4:
+            normal=max([cross(clean[0],clean[i],clean[i+1])for i in [1,2]],key=lambda n:sum(v*v for v in n))
+            drop=max(range(3),key=lambda i:abs(normal[i]));xy=[tuple(p[i]for i in range(3)if i!=drop)for p in clean]
+            def orient(a,b,c):return (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0])
+            def crosses(a,b,c,d):
+                return orient(a,b,c)*orient(a,b,d)<-1e-28 and orient(c,d,a)*orient(c,d,b)<-1e-28
+            if crosses(xy[0],xy[1],xy[2],xy[3])or crosses(xy[1],xy[2],xy[3],xy[0]):
+                self.geometry_stats['crossed_quad_projections'] += 1
+                self.geometry_stats['crossed_quad_details'].append({'part':self.part,'points':clean})
+            choices=[[(0,1,2),(0,2,3)],[(0,1,3),(1,2,3)]]
+            triangles=max(choices,key=lambda candidate:min(area2(t)for t in candidate))
+        else:
+            triangles=[(0,i,i+1)for i in range(1,len(clean)-1)]
+        for triangle in triangles:
+            # Slabs narrower than meaningful visual precision can collapse at
+            # the tangent of a PCB drill. They must not become invalid faces.
+            if area2(triangle)<1e-14:
+                self.geometry_stats['degenerate_triangles_dropped'] += 1
+                continue
+            start=len(self.vertices)
+            self.vertices.extend(clean[i]for i in triangle)
+            self.uvs.extend(clean_uv[i]for i in triangle)
+            self.faces.append(((start,start+1,start+2),material,self.part))
 
     def box(self, centre, size, material, angle=0):
         x, y, z = centre
@@ -114,17 +147,35 @@ class Mesh:
                 self.face([p(0,0,-length/2),p(b,radius,-length/2),p(a,radius,-length/2)],material)
 
     def tube(self, path, radius, material, segments=7):
-        # Parallel-transport is unnecessary for these round cable cross-sections.
+        # Coherent central tangents and parallel-transported frames prevent the
+        # initial ring from reversing relative to subsequent rings (bow ties).
+        # Smooth the unmeasured cable route before sweeping it. Joining just
+        # four sharply bent rings can fold a side quad even with coherent
+        # tangents; a sampled C1 centreline keeps adjacent rings near-parallel.
+        sampled=[]
+        for i in range(len(path)-1):
+            p0,p1=path[max(0,i-1)],path[i]
+            p2,p3=path[i+1],path[min(len(path)-1,i+2)]
+            for j in range(6):
+                t=j/6;tt=t*t;ttt=tt*t
+                sampled.append(tuple(.5*((2*p1[k])+(-p0[k]+p2[k])*t+(2*p0[k]-5*p1[k]+4*p2[k]-p3[k])*tt+(-p0[k]+3*p1[k]-3*p2[k]+p3[k])*ttt)for k in range(3)))
+        path=sampled+[tuple(path[-1])]
         rings = []
+        previous_u=None
         for i, c in enumerate(path):
-            q = path[min(i+1,len(path)-1)] if i == 0 else path[i-1]
-            t = tuple(q[k]-c[k] for k in range(3))
+            before,after=path[max(0,i-1)],path[min(i+1,len(path)-1)]
+            t = tuple(after[k]-before[k] for k in range(3))
             n = math.sqrt(sum(v*v for v in t)) or 1
             t = tuple(v/n for v in t)
-            ref = (0,0,1) if abs(t[2]) < .8 else (1,0,0)
-            u = (t[1]*ref[2]-t[2]*ref[1],t[2]*ref[0]-t[0]*ref[2],t[0]*ref[1]-t[1]*ref[0])
+            if previous_u is None:
+                ref=(0,0,1)if abs(t[2])<.8 else(1,0,0)
+                u=(t[1]*ref[2]-t[2]*ref[1],t[2]*ref[0]-t[0]*ref[2],t[0]*ref[1]-t[1]*ref[0])
+            else:
+                dot=sum(previous_u[k]*t[k]for k in range(3))
+                u=tuple(previous_u[k]-t[k]*dot for k in range(3))
             n = math.sqrt(sum(v*v for v in u)) or 1
             u = tuple(v/n for v in u)
+            previous_u=u
             v = (t[1]*u[2]-t[2]*u[1],t[2]*u[0]-t[0]*u[2],t[0]*u[1]-t[1]*u[0])
             rings.append([tuple(c[k]+radius*(u[k]*math.cos(a*2*math.pi/segments)+v[k]*math.sin(a*2*math.pi/segments)) for k in range(3)) for a in range(segments)])
         for a,b in zip(rings,rings[1:]):
@@ -184,13 +235,14 @@ class Mesh:
                        'coord Coordinate { point [ '+', '.join(' '.join(map(fmt,v)) for v in vertices)+' ] }',
                        'coordIndex [ '+', '.join(' '.join(map(str,f))+' -1' for f in faces)+' ]',
                        'texCoord TextureCoordinate { point [ '+', '.join(' '.join(map(fmt,v)) for v in uvs)+' ] }',
-                       'solid FALSE creaseAngle .35 } }']
+                       'ccw TRUE creaseAngle .35 } }']
         chunks += ['] }']
         include='\n'.join(chunks)+'\n'
         (OUTPUT/f'{name}.inc.wbt').write_text(include)
         (OUTPUT/f'{name}.wrl').write_text('#VRML_SIM R2025a utf8\n'+include)
         return {'files':[f'robot/{name}.{x}'for x in ['obj','mtl','wrl','inc.wbt']],
                 'vertices':len(self.vertices),'faces':len(self.faces),
+                'geometry_stats':self.geometry_stats,
                 'bounds_m':[[min(v[i]for v in self.vertices)for i in range(3)],[max(v[i]for v in self.vertices)for i in range(3)]],
                 'parts':self.parts}
 
@@ -352,7 +404,7 @@ def additions(mesh):
     for i in range(12):
         a=i*math.pi/6;r1=.004;r2=.0134
         p=[(.004+r1*math.cos(a),r1*math.sin(a),.0085),(.004+r2*math.cos(a+.34),r2*math.sin(a+.34),.0085),(.004+r2*math.cos(a+.34),r2*math.sin(a+.34),.013),(.004+r1*math.cos(a),r1*math.sin(a),.013)]
-        mesh.face(p,'inductor')
+        mesh.face(p,'inductor');mesh.face(list(reversed(p)),'inductor')
     mesh.cylinder((.004,0,.022),.005,.020,'silver',segments=32)
     mesh.cylinder((.004,0,.0323),.005,.001,'chip',segments=32)
     for mat,y in [('red',-.0012),('black',.0012)]:mesh.tube([(.004,-.022+y,.012),(.006,-.019+y,.022),(.007,-.012+y,.034),(.005,y,.033)],.00045,mat)
@@ -393,7 +445,7 @@ def wheel():
     for a in [0,math.pi/2,math.pi,3*math.pi/2]:
         r=.0115001
         points=[(r*math.cos(t),y,r*math.sin(t))for t,y in [(a-.009,-.018),(a+.009,-.018),(a+.009,.018),(a-.009,.018)]]
-        m.face(points,'black')
+        m.face(list(reversed(points)),'black')
     m.end_part(kind='nominal Ja-Bots silicone geometry',diameter_m=.023,width_m=.040,hardness='10A per vendor, not a calibrated friction coefficient')
     m.start_part('Aluminium_hub')
     m.cylinder((0,0,0),.0075,.0396,'chip','y',64,inner=.0015)
@@ -436,10 +488,60 @@ def prepare_sources(source_root):
             for x in range(im.width):
                 r,g,b=pix[x,y]
                 if b>r*1.5 and b>g*1.25 and r<60:pix[x,y]=(8,62,38)
+        # Webots/Wren expects power-of-two texture dimensions. UVs cover the
+        # full CAD board, so resampling the raster does not change its scale.
+        im=im.resize((2048,1024),Image.Resampling.LANCZOS)
         im.save(OUTPUT/'pcb_top.png',optimize=True)
     except ImportError:
         if not (OUTPUT/'pcb_top.png').exists():raise RuntimeError('Install Pillow to rebuild the PCB texture; runtime does not need Pillow.')
     return [{'path':'sources/'+str(p.relative_to(SOURCES)),'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size}for p in sorted(SOURCES.rglob('*'))if p.is_file()]
+
+
+def verify_assets(manifest):
+    """Validate serialized meshes against Webots R2025a geometry restrictions."""
+    checks={
+        'mounted_count_210':manifest['mounted_components']==210,
+        'removed_parts_absent':not(set(manifest['body']['parts'])&{'C5','C6','U30','S5','S6','J40','J41'}),
+        'units_m':manifest['units']=='m',
+        'PCB_dimensions_correct':manifest['body']['parts']['PCB_RevQ']['board_dimensions_m']==[.13,.07,.0016],
+        'turbine_hole_32mm':manifest['body']['parts']['PCB_RevQ']['central_cutout_diameter_m']==.032,
+        'wheel_radius_11_5mm':manifest['wheel_radius_m']==.0115,
+        'wheel_width_40mm':manifest['wheel_width_m']==.040,
+        'wheel_axis_y':manifest['wheel_axis']==[0,1,0],
+        'battery_over_component_height':manifest['clearances']['battery_bottom_m']>manifest['clearances']['maximum_PCB_component_top_m'],
+        'texture_path_resolves':(ROOT/'simulation/webots/protos/../../assets/robot/pcb_top.png').resolve().is_file(),
+    }
+    exported={}
+    for name in ['body','wheel']:
+        vertices=[];faces=[]
+        for line in (OUTPUT/f'{name}.obj').read_text().splitlines():
+            if line.startswith('v '):vertices.append(tuple(map(float,line.split()[1:])))
+            elif line.startswith('f '):faces.append(tuple(int(x.split('/')[0])-1 for x in line.split()[1:]))
+        checks[name+'_finite_vertices']=all(math.isfinite(x)for p in vertices for x in p)
+        checks[name+'_triangles_only']=all(len(f)==3 for f in faces)
+        checks[name+'_indices_valid']=all(len(set(f))==3 and min(f)>=0 and max(f)<len(vertices)for f in faces)
+        checks[name+'_face_count']=len(faces)==manifest[name]['faces']
+        min_area2=math.inf
+        for f in faces:
+            a,b,c=(vertices[i]for i in f)
+            u=[b[i]-a[i]for i in range(3)];v=[c[i]-a[i]for i in range(3)]
+            cross=[u[1]*v[2]-u[2]*v[1],u[2]*v[0]-u[0]*v[2],u[0]*v[1]-u[1]*v[0]]
+            min_area2=min(min_area2,math.sqrt(sum(x*x for x in cross)))
+        checks[name+'_no_degenerate_triangles']=min_area2>=1e-14
+        checks[name+'_no_crossed_quad_projections']=manifest[name]['geometry_stats']['crossed_quad_projections']==0
+        include=(OUTPUT/f'{name}.inc.wbt').read_text()
+        checks[name+'_Webots_R2025a_fields']=not re.search(r'\bsolid\b',include) and 'ccw TRUE' in include
+        vrml_faces=[f.strip().replace(',',' ').split()for block in re.findall(r'coordIndex\s*\[([^\]]+)\]',include)for f in block.split('-1')if f.strip().strip(',')]
+        checks[name+'_VRML_triangles_only']=len(vrml_faces)==len(faces) and all(len(f)==3 for f in vrml_faces)
+        exported[name]={'triangle_count':len(faces),'minimum_twice_triangle_area_m2':min_area2,'sha256':hashlib.sha256((OUTPUT/f'{name}.inc.wbt').read_bytes()).hexdigest()}
+        if name=='wheel':checks['wheel_radius_geometry']=max(math.hypot(x,z)for x,y,z in vertices)<=.0115002
+    checks['files_under_GitHub_limit']=max(p.stat().st_size for p in ASSETS.rglob('*')if p.is_file())<100*1024*1024
+    report={'checks':checks,'passed':sum(checks.values()),'failed':sum(not x for x in checks.values()),'exported_geometry':exported,
+            'schema_reference':'Webots R2025a Contents/Resources/nodes/IndexedFaceSet.wrl: ccw supported; solid is not a field',
+            'scope':'Serialized visual geometry and source registration, not a physical calibration or PCBA verification'}
+    (ASSETS/'validation.json').write_text(json.dumps(report,indent=2)+'\n')
+    if not all(checks.values()):raise ValueError('Asset validation failed: '+', '.join(k for k,v in checks.items()if not v))
+    return report
 
 
 def main():
@@ -484,7 +586,8 @@ def main():
         'integration':'Insert body.inc.wbt Group literally under Transform translation0.01315 0 0 in Robot PROTO. Insert wheel.inc.wbt at each joint; wheel local axis Y. Texture URL is relative to simulation/webots/protos.'
     }
     (ASSETS/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
-    print(json.dumps({'mounted_components':210,'body_vertices':body_data['vertices'],'body_faces':body_data['faces'],'wheel_faces':wheel_data['faces'],'body_bounds_m':body_data['bounds_m'],'output':str(OUTPUT)},indent=2))
+    verification=verify_assets(manifest)
+    print(json.dumps({'mounted_components':210,'body_vertices':body_data['vertices'],'body_faces':body_data['faces'],'wheel_faces':wheel_data['faces'],'body_bounds_m':body_data['bounds_m'],'validation_passed':verification['passed'],'validation_failed':verification['failed'],'output':str(OUTPUT)},indent=2))
 
 
 if __name__=='__main__':main()

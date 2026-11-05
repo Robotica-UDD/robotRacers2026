@@ -9,14 +9,40 @@
     "wheel_width_40mm": true,
     "wheel_axis_y": true,
     "battery_over_component_height": true,
+    "texture_path_resolves": true,
     "body_finite_vertices": true,
+    "body_triangles_only": true,
+    "body_indices_valid": true,
     "body_face_count": true,
+    "body_no_degenerate_triangles": true,
+    "body_no_crossed_quad_projections": true,
+    "body_Webots_R2025a_fields": true,
+    "body_VRML_triangles_only": true,
     "wheel_finite_vertices": true,
+    "wheel_triangles_only": true,
+    "wheel_indices_valid": true,
     "wheel_face_count": true,
+    "wheel_no_degenerate_triangles": true,
+    "wheel_no_crossed_quad_projections": true,
+    "wheel_Webots_R2025a_fields": true,
+    "wheel_VRML_triangles_only": true,
     "wheel_radius_geometry": true,
     "files_under_GitHub_limit": true
   },
-  "passed": 15,
+  "passed": 28,
   "failed": 0,
-  "scope": "visual geometry and source registration, not a physical calibration or PCBA verification"
+  "exported_geometry": {
+    "body": {
+      "triangle_count": 32060,
+      "minimum_twice_triangle_area_m2": 8.750000000001542e-10,
+      "sha256": "963fd5499be41ddc366ddafff79da1424178b52620e1a56e46d6682d94bb600f"
+    },
+    "wheel": {
+      "triangle_count": 4840,
+      "minimum_twice_triangle_area_m2": 4.141100153340871e-08,
+      "sha256": "5977fe4d05670a66a48ee60c6a9ac95241b50a17d9310032d4d8c9f63269e2f3"
+    }
+  },
+  "schema_reference": "Webots R2025a Contents/Resources/nodes/IndexedFaceSet.wrl: ccw supported; solid is not a field",
+  "scope": "Serialized visual geometry and source registration, not a physical calibration or PCBA verification"
 }
