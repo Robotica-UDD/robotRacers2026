@@ -1,4 +1,4 @@
-// Última modificación: 2026-11-05 15:19 | America/Santiago (UTC-03).
+// Última modificación: 2026-11-05 15:48 | America/Santiago (UTC-03).
 // ESP32-S3, Arduino-ESP32 2.0.14. Pulso HTTP y navegación UDP con vencimiento local.
 // La duración se cumple en un temporizador local; el encendido nunca mueve motores.
 #include <Arduino.h>
@@ -37,6 +37,7 @@ bool moving = false, driversAwake = false, driverFault = false;
 bool powerInitOK = false, hardwareOK = false, storageOK = false;
 bool serverStarted = false;
 bool udpStarted = false, navigationActive = false, haveControlSeq = false;
+bool resumeBlocked = false;
 uint32_t controlSeq = 0;
 int8_t lastDirection[2] = {1, 1};
 int64_t controlDeadline = 0;
@@ -85,6 +86,11 @@ void invalidateNavigationLocked() {
 
 void stopLocked(const char *reason, bool sleepDrivers) {
   const bool wasNavigation = navigationActive;
+  // Una parada explícita permanece bloqueada aunque después cambie el motivo
+  // visible por pérdida de WiFi o alimentación. Solo un nuevo inicio la libera.
+  if (strcmp(reason, "button_stop") == 0 || strcmp(reason, "driver_fault") == 0 ||
+      strcmp(reason, "remote") == 0 || strcmp(reason, "remote_stop") == 0 ||
+      strcmp(reason, "manual_stop") == 0) resumeBlocked = true;
   invalidateNavigationLocked();
   outputsOffLocked(sleepDrivers);
   if (strcmp(stopReason, reason) != 0) {
@@ -200,6 +206,7 @@ void buildStatus(JsonDocument &doc, bool includeToken) {
   doc["connected"] = WiFi.status() == WL_CONNECTED;
   xSemaphoreTake(motorMutex, portMAX_DELAY);
   doc["ready"] = readyLocked(); doc["moving"] = moving;
+  doc["resume_blocked"] = resumeBlocked;
   doc["navigation_active"] = navigationActive; doc["control_seq"] = controlSeq;
   doc["control_mode"] = navigationActive ? "navigation" : moving ? "pulse" : "idle";
   doc["control_session"] = String(controlSession);
@@ -255,7 +262,8 @@ void navigationStartRequest() {
   const String body = server.arg("plain");
   JsonDocument request;
   if (body.length() > MAX_LINE || deserializeJson(request, body) || !request.is<JsonObject>() ||
-      request.size() != 1 || !request["session"].is<const char *>()) {
+      (request.size() != 1 && request.size() != 2) || !request["session"].is<const char *>() ||
+      (request.size() == 2 && (!request["resume"].is<bool>() || !request["resume"].as<bool>()))) {
     sendError(400, "invalid_session"); return;
   }
   const char *session = request["session"].as<const char *>();
@@ -263,12 +271,16 @@ void navigationStartRequest() {
   if (strlen(session) != length || !validSession(session, length)) {
     sendError(400, "invalid_session"); return;
   }
+  const bool resuming = request.size() == 2;
   int result = 200;
   xSemaphoreTake(motorMutex, portMAX_DELAY);
   if (navigationActive && esp_timer_get_time() >= controlDeadline) stopLocked("control_timeout", false);
   bool retired = false;
   for (const auto &entry : retiredSessions) if (entry[0] && strcmp(entry, session) == 0) retired = true;
-  if (navigationActive) {
+  // Comprobar el motivo bajo el mismo mutex que arma los motores cierra la
+  // carrera entre el último GET del ordenador y una parada física o remota.
+  if (resuming && resumeBlocked) result = 423;
+  else if (navigationActive) {
     if (strcmp(controlSession, session) != 0) result = 409;
     // Repetir HTTP no renueva la concesión ni reinicia los motores.
   } else if (moving || !readyLocked() || retired) result = 409;
@@ -278,10 +290,16 @@ void navigationStartRequest() {
     strlcpy(controlSession, session, sizeof(controlSession));
     navigationActive = true; haveControlSeq = false; controlSeq = 0;
     if (!armDeadlineLocked(esp_timer_get_time() + int64_t(NAV_INITIAL_MS) * 1000)) result = 503;
-    else { strlcpy(stopReason, "navigation", sizeof(stopReason)); markStatus(); }
+    else {
+      if (!resuming) resumeBlocked = false;
+      strlcpy(stopReason, "navigation", sizeof(stopReason)); markStatus();
+    }
   }
   xSemaphoreGive(motorMutex);
-  if (result != 200) { sendError(result, result == 409 ? "not_ready_or_busy" : "navigation_unavailable"); return; }
+  if (result != 200) {
+    sendError(result, result == 423 ? "explicit_start_required" :
+              result == 409 ? "not_ready_or_busy" : "navigation_unavailable"); return;
+  }
   JsonDocument ack; ack["accepted"] = true; ack["session"] = session; sendJson(200, ack);
 }
 

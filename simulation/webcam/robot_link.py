@@ -125,6 +125,8 @@ class HttpRobotClient:
             exc.close()
             if exc.code == 409:
                 raise RobotLinkError("El robot está ocupado; espera a que termine.", 409) from None
+            if exc.code == 423:
+                raise RobotLinkError("El robot recibió una parada. Inicia un recorrido nuevo para continuar.", 423) from None
             if exc.code in (401, 403):
                 raise RobotLinkError("El robot rechazó la identificación; vuelve a enlazarlo por USB.") from None
             raise RobotLinkError("El robot rechazó la solicitud.") from None
@@ -166,7 +168,7 @@ class RobotLink:
                        "connected": False, "ready": False, "moving": False, "ip": None,
                        "port": None, "round_trip_ms": None, "last_id": None, "stop_reason": None,
                        "navigation_active": False, "control_session": None, "control_seq": 0,
-                       "boot_id": None}
+                       "boot_id": None, "resume_blocked": False}
         self._load_pair()
 
     def _load_pair(self):
@@ -270,7 +272,8 @@ class RobotLink:
                                round_trip_ms=round(elapsed, 1), last_id=last_id, stop_reason=reason,
                                navigation_active=status.get("navigation_active") is True,
                                control_session=status.get("control_session"),
-                               control_seq=status.get("control_seq", 0), boot_id=status.get("boot_id"))
+                               control_seq=status.get("control_seq", 0), boot_id=status.get("boot_id"),
+                               resume_blocked=status.get("resume_blocked") is True)
             self._last_refresh = time.monotonic()
 
     def _error(self, message):
@@ -442,7 +445,7 @@ class RobotLink:
     def set_navigation_cancel_callback(self, callback):
         self._navigation_cancel_callback = callback
 
-    def start_navigation(self):
+    def start_navigation(self, *, resume=False):
         """Arma una sesión nueva sin aplicar velocidad ni reintentar órdenes."""
         if not self._io_lock.acquire(timeout=self.http_timeout_s + .2):
             raise RobotLinkError("El enlace está ocupado; vuelve a intentarlo.", 409)
@@ -455,10 +458,14 @@ class RobotLink:
                 pair = dict(self._pair)
             remote, elapsed = self._read_status(pair)
             self._apply_status(remote, elapsed)
+            if resume and (remote.get("resume_blocked") is True or remote.get("stop_reason") in
+                           {"button_stop", "driver_fault", "remote", "remote_stop", "manual_stop"}):
+                raise RobotLinkError("El robot recibió una parada. El recorrido requiere un nuevo inicio explícito.", 423)
             if not remote["ready"] or remote["moving"] or remote.get("navigation_active"):
                 raise RobotLinkError("El robot no está disponible para iniciar el recorrido.", 409)
             session = str(uuid.uuid4())
-            ack, _ = self._request("POST", pair, "/navigation/start", {"session": session}, authenticated=True)
+            payload = {"session": session, **({"resume": True} if resume else {})}
+            ack, _ = self._request("POST", pair, "/navigation/start", payload, authenticated=True)
             if ack.get("accepted") is not True or ack.get("session") != session:
                 raise RobotLinkError("No se pudo confirmar el inicio; no se reenviará automáticamente.")
             with self._lock:
@@ -467,7 +474,8 @@ class RobotLink:
                 self._navigation_session = session
                 self._navigation_sequence = 0
                 self._state.update(navigation_active=True, control_session=session, control_seq=0,
-                                   moving=False, stop_reason="navigating", message="Recorrido iniciado.")
+                                   moving=False, stop_reason="navigating", resume_blocked=False,
+                                   message="Recorrido iniciado.")
                 self._last_refresh = time.monotonic()
             return {"session": session}
         finally:

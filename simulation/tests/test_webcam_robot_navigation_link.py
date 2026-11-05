@@ -24,7 +24,7 @@ def firmware_status(**changes):
     return {"device": "RobotRacers", "version": 1, "mac": MAC,
             "boot_id": "aabbccddeeff0011", "ip": IP, "connected": True,
             "ready": True, "moving": False, "last_id": "", "stop_reason": "boot",
-            "navigation_active": False, "control_seq": 0, "control_mode": "idle",
+            "navigation_active": False, "control_seq": 0, "control_mode": "idle", "resume_blocked": False,
             "control_session": "", **changes}
 
 
@@ -48,7 +48,11 @@ class FakeFirmwareHttp:
         assert method == "POST"
         assert headers == {"X-Robot-Token": TOKEN}
         if path == "/navigation/start":
-            assert set(payload) == {"session"}
+            assert set(payload) in ({"session"}, {"session", "resume"})
+            if "resume" in payload:
+                assert payload["resume"] is True
+                if self.status["resume_blocked"] or self.status["stop_reason"] in {"button_stop", "driver_fault", "remote", "remote_stop", "manual_stop"}:
+                    raise RobotLinkError("Parada manual simulada durante el rearme.", 423)
             session = payload["session"]
             assert str(uuid.UUID(session)) == session
             if self.status["navigation_active"] or self.status["moving"]:
@@ -56,7 +60,7 @@ class FakeFirmwareHttp:
             # La orden puede llegar aunque el ACK se pierda: nunca reintentarlo.
             self.status.update(navigation_active=True, moving=False,
                                control_session=session, control_mode="navigation",
-                               control_seq=0)
+                               control_seq=0, resume_blocked=False)
             if self.fail_navigation_start:
                 raise RobotLinkError("No se recibió el ACK simulado.")
             return {"accepted": True,
@@ -176,6 +180,44 @@ def test_abandon_stops_udp_without_waiting_for_http_and_allows_fresh_session(har
     assert len(harness.udp.commands("stop")) == 1
     assert_conflict(lambda: harness.link.drive_navigation(100, 100))
     assert harness.link.start_navigation()["session"] != old_session
+
+
+@pytest.mark.parametrize("reason", ["button_stop", "driver_fault", "remote", "remote_stop", "manual_stop"])
+def test_resume_checks_fresh_stop_reason_before_posting_arm(harness, reason):
+    harness.http.status["stop_reason"] = reason
+    with pytest.raises(RobotLinkError) as error:
+        harness.link.start_navigation(resume=True)
+    assert error.value.status_code == 423
+    assert harness.http.actions("/navigation/start") == []
+    assert harness.udp.packets == []
+    assert harness.link.start_navigation()["session"]
+
+
+def test_resume_sends_atomic_guard_if_stop_happens_between_get_and_post(harness):
+    original = harness.http.request
+    def button_after_get(method, url, **kwargs):
+        reply = original(method, url, **kwargs)
+        if method == "GET":
+            harness.http.status["stop_reason"] = "button_stop"
+        return reply
+    harness.http.request = button_after_get
+    with pytest.raises(RobotLinkError) as error:
+        harness.link.start_navigation(resume=True)
+    assert error.value.status_code == 423
+    assert harness.http.actions("/navigation/start")[0]["payload"]["resume"] is True
+    assert harness.udp.packets == []
+    assert_conflict(lambda: harness.link.drive_navigation(100, 100))
+
+
+def test_manual_stop_latch_survives_overwritten_reason(harness):
+    harness.http.status.update(stop_reason="wifi_disconnected", resume_blocked=True)
+    with pytest.raises(RobotLinkError) as error:
+        harness.link.start_navigation(resume=True)
+    assert error.value.status_code == 423
+    assert harness.link._snapshot()["resume_blocked"] is True
+    assert harness.http.actions("/navigation/start") == []
+    harness.link.start_navigation()
+    assert harness.link._snapshot()["resume_blocked"] is False
 
 
 def test_constructing_saved_link_and_closing_never_sends_commands(harness):
