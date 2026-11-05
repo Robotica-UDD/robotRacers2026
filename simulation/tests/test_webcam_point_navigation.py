@@ -192,7 +192,7 @@ def test_start_moves_then_settles_and_stops_at_selected_point(rig):
     assert nav.start()["active"] is True
     wait_for(lambda: bool(robot.drives))
     wait_for(lambda: any(left > 0 and right > 0 for left, right in robot.drives))
-    assert all(0 <= left <= 70 and 0 <= right <= 70 for left, right in robot.drives)
+    assert all(0 <= left <= 85 and 0 <= right <= 85 for left, right in robot.drives)
     camera.pose(x=900.)
     wait_for(lambda: not nav.state()["active"])
     assert nav.state()["phase"] == "arrived"
@@ -211,7 +211,7 @@ def test_turn_sign_and_small_forward_correction_are_positive_left(rig):
     wait_for(lambda: bool(robot.drives))
     wait_for(lambda: any(left < 0 and right > 0 for left, right in robot.drives))
     left, right = next(command for command in robot.drives if command != (0, 0))
-    assert -33 <= left < 0 and 0 < right <= 33
+    assert -40 <= left < 0 and 0 < right <= 40
     # Una vez orientado, una pequeña desviación mantiene avance con corrección.
     camera.pose(heading=math.radians(40))  # Destino a 45°, quedan 5° a izquierda.
     wait_for(lambda: any(l >= 0 and r > l for l, r in robot.drives))
@@ -229,8 +229,8 @@ def test_commands_are_bounded_physical_wheel_velocities(bearing):
     for mode in ("turning", "advancing"):
         left, right = Navigation._wheel_commands(mode, bearing, .1, .3)
         assert -100 <= left <= 100 and -100 <= right <= 100
-    assert Navigation._wheel_commands("turning", .5, .1, 0) == (-24, 24)
-    assert Navigation._wheel_commands("turning", -.5, .1, 0) == (24, -24)
+    assert Navigation._wheel_commands("turning", .5, .1, 0) == (-28, 28)
+    assert Navigation._wheel_commands("turning", -.5, .1, 0) == (28, -28)
     if bearing > 0:
         left, right = Navigation._wheel_commands("advancing", bearing, .1, .3)
         assert left < right
@@ -240,10 +240,10 @@ def test_commands_are_bounded_physical_wheel_velocities(bearing):
 
 
 def test_speed_reduces_with_distance_and_angle_continuously():
-    assert Navigation._wheel_commands("advancing", 0, .3, .3) == (70, 70)
+    assert Navigation._wheel_commands("advancing", 0, .3, .3) == (85, 85)
     near = Navigation._wheel_commands("advancing", 0, .03, .3)
-    assert near == (38, 38)
-    assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-33, 33)
+    assert near == (41, 41)
+    assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-40, 40)
     assert Navigation._wheel_commands("turning", math.radians(10), .3, .3) == (-15, 15)
 
 
@@ -348,7 +348,7 @@ def test_no_progress_retries_without_cancelling_or_increasing_cap(rig):
     wait_for(lambda: nav.state()["phase"] == "retrying")
     assert nav.state()["active"] is True and robot.stops == 0
     wait_for(lambda: nav.state()["phase"] == "advancing")
-    assert all(abs(left) <= 70 and abs(right) <= 70 for left, right in robot.drives)
+    assert all(abs(left) <= 85 and abs(right) <= 85 for left, right in robot.drives)
 
 
 def test_elapsed_duration_is_diagnostic_and_does_not_cancel(rig):
@@ -520,8 +520,8 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal):
     nav.SETTLE_SECONDS = .01
     # La planta virtual avanza 20 ms por ciclo de control de 1 ms: acelerar
     # también las rampas conserva sus pendientes en el tiempo de esa planta.
-    nav.SPEED_RISE_MM_S2 = 2000.
-    nav.SPEED_FALL_MM_S2 = 3000.
+    nav.SPEED_RISE_MM_S2 = 2400.
+    nav.SPEED_FALL_MM_S2 = 3600.
     try:
         calibrate(nav)
         selected = target(nav, 640 + goal[0] * 2000, 480 - goal[1] * 2000)
@@ -535,11 +535,11 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal):
         assert result["remaining_mm"] <= 26
         first_left, first_right = next(command for command in robot.drives if command != (0, 0))
         if abs(initial_bearing) <= 8:
-            assert 0 < first_left <= 70 and 0 < first_right <= 70
+            assert 0 < first_left <= 85 and 0 < first_right <= 85
         elif initial_bearing > 0:
-            assert -33 <= first_left < 0 and 0 < first_right <= 33
+            assert -40 <= first_left < 0 and 0 < first_right <= 40
         else:
-            assert 0 < first_left <= 33 and -33 <= first_right < 0
+            assert 0 < first_left <= 40 and -40 <= first_right < 0
         assert any(left > 0 and right > 0 for left, right in robot.drives)
         assert robot.drives[-1] == (0, 0) and robot.stops == 1 and robot.starts == 1
         assert result["last_left"] == 0 and result["last_right"] == 0
@@ -557,7 +557,7 @@ def test_diagnostic_state_tracks_live_bearing_commands_and_elapsed_time(rig):
     nav.start()
     wait_for(lambda: bool(robot.drives))
     state = nav.state()
-    assert -33 <= state["last_left"] <= 0 and 0 <= state["last_right"] <= 33
+    assert -40 <= state["last_left"] <= 0 and 0 <= state["last_right"] <= 40
     assert state["sequence"] == camera.state()["sequence"]
     time.sleep(.02)
     assert nav.state()["elapsed_ms"] > state["elapsed_ms"]
@@ -792,15 +792,15 @@ def test_metric_acceleration_ramp_and_reverse_require_an_intermediate_zero():
         previous = value
         value = Navigation._ramp_value(value, 65., .05)
         values.append(value)
-        assert 0 <= value - previous <= 5. + 1e-8
-    assert values[-1] == pytest.approx(60.)
+        assert 0 <= value - previous <= 6. + 1e-8
+    assert values[-1] == pytest.approx(65.)
     reverse = []
     for _ in range(20):
         previous = value
         value = Navigation._ramp_value(value, -55., .05)
         reverse.append(value)
         if previous > 0:
-            assert value >= 0 and previous - value <= 7.5 + 1e-8
+            assert value >= 0 and previous - value <= 9. + 1e-8
     assert 0. in reverse and min(reverse) < 0
     zero_index = reverse.index(0.)
     assert all(item >= 0 for item in reverse[:zero_index])
@@ -809,16 +809,16 @@ def test_metric_acceleration_ramp_and_reverse_require_an_intermediate_zero():
 
 def test_physical_targets_use_geometry_and_do_not_limit_motor_pwm_from_visual_speed(rig):
     _, _, nav = rig
-    assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (70, 70)
-    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-33, 33)
+    assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (85, 85)
+    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-40, 40)
     for visual_speed in (-1., 0., .05, .1, 1.):
         nav._measured_speed = visual_speed  # Diagnóstico; no modifica la consigna física.
-        assert nav._wheel_commands("advancing", 0., .3, 0.) == (70, 70)
+        assert nav._wheel_commands("advancing", 0., .3, 0.) == (85, 85)
         left, right = nav._wheel_commands("advancing", .1, .3, 0.)
-        assert 0 <= left < right <= 70
-    # 33 mm/s por rueda opuesta equivale a ~20°/s con ejes a190 mm.
+        assert 0 <= left < right <= 85
+    # 40 mm/s por rueda opuesta equivale a ~24°/s con ejes a190 mm.
     left, right = nav._wheel_commands("turning", math.pi / 2, .3, 0.)
-    assert math.degrees((right - left) / 190.) == pytest.approx(20., abs=.2)
+    assert math.degrees((right - left) / 190.) == pytest.approx(24., abs=.2)
 
 
 def test_visual_velocity_estimate_uses_distinct_frames_and_metric_tag_scale(rig):
@@ -902,3 +902,107 @@ def test_encoder_control_becoming_unavailable_cancels_instead_of_open_loop_pwm(r
     robot.update(encoder_ready=True)
     stable_vision(camera, nav)
     assert robot.starts == 1
+
+
+def begin_observed_motion(camera, robot, nav):
+    camera.update(running=True, opening=False)
+    calibrate(nav)
+    target(nav)
+    nav.start()
+    wait_for(lambda: any(left > 0 and right > 0 for left, right in robot.drives))
+    camera.pose()
+    sequence = camera.state()["sequence"]
+    wait_for(lambda: nav._velocity_sample is not None and nav._velocity_sample[0] == sequence)
+
+
+def test_single_missing_detection_keeps_exact_command_without_zero_or_ramp_reset(rig):
+    camera, robot, nav = rig
+    begin_observed_motion(camera, robot, nav)
+    camera.update(visible=False, marker_corners=None)
+    wait_for(lambda: nav.state()["vision_grace_active"])
+    held = robot.drives[-1]
+    count = len(robot.drives)
+    time.sleep(.025)
+    assert held != (0, 0) and robot.drives[count:]
+    assert all(command == held for command in robot.drives[count:])
+    assert nav.state()["center_px"] is None  # No publica una pose vieja como detección actual.
+    camera.pose()
+    camera.update(visible=True)
+    wait_for(lambda: not nav.state()["vision_grace_active"])
+    assert nav.state()["phase"] == "advancing"
+    assert nav.state()["brief_vision_gaps"] == 1 and nav.state()["vision_pauses"] == 0
+    assert (0, 0) not in robot.drives[count:]
+
+
+def test_invalid_fresh_frames_do_not_extend_100ms_hold_then_stable_recovery_is_required(rig):
+    camera, robot, nav = rig
+    begin_observed_motion(camera, robot, nav)
+    camera.update(visible=False, marker_corners=None)
+    wait_for(lambda: nav.state()["vision_grace_active"])
+    deadline = time.monotonic() + .15
+    while time.monotonic() < deadline:
+        camera.update(visible=False, frame_age_ms=0.)  # Cámaras activas pueden producir muchos rechazos.
+        state = nav.state()
+        if state["vision_grace_active"]:
+            assert state["vision_gap_ms"] <= 100.
+        time.sleep(.012)
+    wait_for(lambda: nav.state()["phase"] == "paused_vision")
+    assert robot.drives[-1] == (0, 0)
+    assert nav.state()["brief_vision_gaps"] == 1 and nav.state()["vision_pauses"] == 1
+    camera.pose()
+    camera.update(visible=True)
+    time.sleep(.02)
+    assert nav.state()["phase"] == "paused_vision"  # Un único buen fotograma no reactiva una pausa larga.
+    stable_vision(camera, nav)
+    wait_for(lambda: nav.state()["phase"] == "advancing")
+    assert nav.state()["target_px"] == [900., 480.]
+
+
+@pytest.mark.parametrize("failure", [{"running": False}, {"opening": True},
+                                     {"frame_age_ms": 190.}, {"camera_id": None},
+                                     {"frame_width": 0, "frame_height": 0}])
+def test_camera_disconnect_or_stale_source_bypasses_brief_hold(rig, failure):
+    camera, robot, nav = rig
+    begin_observed_motion(camera, robot, nav)
+    camera.update(visible=False, **failure)
+    wait_for(lambda: nav.state()["phase"] == "paused_vision", timeout=.08)
+    assert robot.drives[-1] == (0, 0)
+    assert nav.state()["brief_vision_gaps"] == 0
+
+
+def test_missing_detection_after_arm_does_not_start_from_previous_pose(rig):
+    camera, robot, nav = rig
+    camera.update(running=True, opening=False)
+    calibrate(nav)
+    target(nav)
+    original = robot.start_navigation
+
+    def arm(**kwargs):
+        ack = original(**kwargs)
+        camera.update(visible=False)
+        return ack
+
+    robot.start_navigation = arm
+    nav.start()
+    wait_for(lambda: nav.state()["phase"] == "paused_vision")
+    assert all(command == (0, 0) for command in robot.drives)
+    assert nav.state()["brief_vision_gaps"] == 0
+
+
+def test_brief_hold_never_confirms_arrival_and_manual_stop_overrides_it(rig):
+    camera, robot, nav = rig
+    begin_observed_motion(camera, robot, nav)
+    camera.pose(x=900.)
+    camera.update(visible=False)
+    wait_for(lambda: nav.state()["vision_grace_active"])
+    assert nav.state()["phase"] == "advancing" and nav.state()["active"] is True
+    robot.update(stop_reason="button_stop")
+    wait_for(lambda: not nav.state()["active"])
+    assert nav.state()["phase"] != "arrived" and robot.stops == 1
+
+
+def test_moderate_speed_increase_keeps_precision_floor():
+    assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (85, 85)
+    assert Navigation._wheel_commands("advancing", 0., 0., 0.) == (30, 30)
+    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-40, 40)
+    assert math.degrees(80. / 190.) == pytest.approx(24., abs=.2)

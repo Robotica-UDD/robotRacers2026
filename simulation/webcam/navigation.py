@@ -46,11 +46,12 @@ class Navigation:
     CONTROL_INTERVAL = .05
     FRESH_SECONDS = .20
     VISION_GRACE_SECONDS = .15
+    BRIEF_VISION_GAP_SECONDS = .10
     RESUME_STABLE_SECONDS = .15
     RESUME_FRAMES = 3
     RESUME_RETRY_SECONDS = 1.
-    SPEED_RISE_MM_S2 = 100.
-    SPEED_FALL_MM_S2 = 150.
+    SPEED_RISE_MM_S2 = 120.
+    SPEED_FALL_MM_S2 = 180.
     RETRY_PAUSE_SECONDS = .5
     SETTLE_SECONDS = .40
     MAX_DURATION_SECONDS = 30.
@@ -86,6 +87,9 @@ class Navigation:
         self._measured_speed = self._measured_turn = None
         self._started_at: float | None = None
         self._elapsed_ms = 0
+        self._vision_hold = False
+        self._vision_gap_ms = 0.
+        self._vision_pauses = self._brief_vision_gaps = self._mode_switches = 0
         self._load_calibration()
 
     def _load_calibration(self):
@@ -284,6 +288,9 @@ class Navigation:
                     "calibrated": calibration is not None and self._same_source(frame, calibration),
                     "message": self._message, "target_px": target,
                     "pending_mission": self._pending_mission,
+                    "vision_grace_active": self._vision_hold, "vision_gap_ms": self._vision_gap_ms,
+                    "vision_pauses": self._vision_pauses, "brief_vision_gaps": self._brief_vision_gaps,
+                    "mode_switches": self._mode_switches,
                     "center_px": observation["center_px"] if observation else None,
                     "front_px": observation["front_px"] if observation else None,
                     "bearing_deg": (round(math.degrees(observation["bearing_rad"]), 2)
@@ -343,6 +350,9 @@ class Navigation:
             self._cancel_reason = "Parada solicitada."
             self._started_at = time.monotonic()
             self._elapsed_ms = 0
+            self._vision_hold = False
+            self._vision_gap_ms = 0.
+            self._vision_pauses = self._brief_vision_gaps = self._mode_switches = 0
             self._last_left = self._last_right = 0
             self._ramp_values = [0., 0.]
             self._ramp_stamp = time.monotonic()
@@ -404,6 +414,8 @@ class Navigation:
             with self._lock:
                 self._last_left = self._last_right = 0
                 self._ramp_values, self._ramp_stamp = [0., 0.], None
+                self._vision_hold = False
+                self._vision_gap_ms = 0.
 
     def _drive(self, left, right):
         self.robot.drive_velocity_navigation(left, right)
@@ -417,7 +429,7 @@ class Navigation:
         self._drive(0, 0)
 
     @staticmethod
-    def _ramp_value(current, target, seconds, rise=100., fall=150.):
+    def _ramp_value(current, target, seconds, rise=120., fall=180.):
         # Una inversión llega primero a cero; el signo nuevo empieza en otro ciclo.
         effective = 0. if current * target < 0 else float(target)
         rate = fall if abs(effective) < abs(current) else rise
@@ -476,6 +488,8 @@ class Navigation:
             self._session = None
             self._last_left = self._last_right = 0
             self._ramp_values, self._ramp_stamp = [0., 0.], None
+            self._vision_hold = False
+            self._vision_gap_ms = 0.
 
     def _launch_rearm(self):
         cancel = self._cancel
@@ -525,6 +539,10 @@ class Navigation:
     def _set_phase(self, phase, message):
         with self._lock:
             if not self._cancel.is_set():
+                if self._phase != phase:
+                    self._mode_switches += 1
+                    if phase == "paused_vision":
+                        self._vision_pauses += 1
                 self._phase, self._message = phase, message
 
     @staticmethod
@@ -532,15 +550,15 @@ class Navigation:
         """Consignas físicas por rueda en mm/s; el firmware regula con encoders."""
         if mode == "turning":
             angle = abs(math.degrees(bearing))
-            target_rate = min(20., max(9., angle * .5))
-            magnitude = max(15., min(33., 95. * math.radians(target_rate)))
+            target_rate = min(24., max(9., angle * .6))
+            magnitude = max(15., min(40., 95. * math.radians(target_rate)))
             sign = 1 if bearing > 0 else -1
             return _velocity_mm_s(-sign * magnitude), _velocity_mm_s(sign * magnitude)
-        speed = 30. + 40. * min(1., max(0., distance) / .15)
+        speed = 30. + 55. * min(1., max(0., distance) / .15)
         angular_rate = max(-math.radians(12), min(math.radians(12), bearing * 1.5))
         correction = 95. * angular_rate
         left, right = speed - correction, speed + correction
-        scale = min(1., 70. / max(abs(left), abs(right)))
+        scale = min(1., 85. / max(abs(left), abs(right)))
         return _velocity_mm_s(left * scale), _velocity_mm_s(right * scale)
 
     def _run(self, calibration, target, session, boot_id):
@@ -558,6 +576,8 @@ class Navigation:
         next_arm = 0.
         retry_until = None
         settle_started = None
+        last_valid_capture = None
+        last_valid_sequence = None
         final_phase, final_message = "error", "Recorrido detenido."
         try:
             while not self._cancel.is_set():
@@ -578,9 +598,14 @@ class Navigation:
                 self._update_motion_estimate(frame, observation, tick)
                 if observation is None:
                     stable_since, stable_frames, last_sequence = None, 0, None
-                    waiting_vision = True
                 else:
                     sequence = frame.get("sequence")
+                    if last_valid_capture is None or sequence != last_valid_sequence:
+                        last_valid_capture = tick - frame["frame_age_ms"] / 1000
+                        last_valid_sequence = sequence
+                    with self._lock:
+                        self._vision_hold = False
+                        self._vision_gap_ms = 0.
                     if sequence != last_sequence:
                         if stable_since is None:
                             stable_since = tick
@@ -659,6 +684,41 @@ class Navigation:
                         next_arm = tick + self.RESUME_RETRY_SECONDS
                     self._cancel.wait(self.CONTROL_INTERVAL)
                     continue
+
+                age_ms = frame.get("frame_age_ms")
+                can_hold = (observation is None and not waiting_vision
+                            and last_valid_capture is not None
+                            and 0 <= tick - last_valid_capture <= self.BRIEF_VISION_GAP_SECONDS
+                            and self._same_source(frame, calibration)
+                            and frame.get("running") is True and frame.get("opening") is False
+                            and isinstance(age_ms, Real) and not isinstance(age_ms, bool)
+                            and math.isfinite(age_ms) and 0 <= age_ms <= self.VISION_GRACE_SECONDS * 1000
+                            and connected and active_session and remote_session == session)
+                if can_hold:
+                    with self._lock:
+                        if not self._vision_hold:
+                            self._brief_vision_gaps += 1
+                        self._vision_hold = True
+                        self._vision_gap_ms = round((tick - last_valid_capture) * 1000, 1)
+                        held = (self._last_left, self._last_right)
+                        self._ramp_stamp = tick
+                    # Solo conserva el mando: no acelera, recalcula ni confirma llegada.
+                    try:
+                        self._drive(*held)
+                        was_controlling = True
+                    except Exception:
+                        self._abandon()
+                        session, session_seen = None, False
+                        waiting_vision = True
+                    remaining_gap = last_valid_capture + self.BRIEF_VISION_GAP_SECONDS - time.monotonic()
+                    self._cancel.wait(min(self.CONTROL_INTERVAL, max(0., remaining_gap)))
+                    continue
+
+                if observation is None:
+                    waiting_vision = True
+                    with self._lock:
+                        self._vision_hold = False
+                        self._vision_gap_ms = 0.
 
                 if observation is None or (waiting_vision and not stable):
                     self._set_phase("paused_vision", "Esperando una imagen estable. El destino se conserva.")
