@@ -226,8 +226,9 @@ la captura de imagen hasta la aplicación de una consigna.
 ## Comprobaciones realizadas
 
 - El firmware con encoders se compiló con Arduino-ESP32 **2.0.14**:
-  **764925 bytes de programa y 50432 bytes de RAM**. La carga está pendiente:
-  el USB se desconectó antes del intento y el usuario pospuso la prueba física.
+  **764925 bytes de programa y 50432 bytes de RAM**. Se cargó por USB y se
+  verificaron `velocity_control: true`, `encoder_ready: true`, ambos PWM a cero
+  y ninguna sesión de movimiento activa. La prueba de movimiento sigue pendiente.
 - Con la versión anterior del robot físico se enviaron consignas UDP **0/0** para verificar
   la caducidad local de 300 ms y el rechazo de paquetes posteriores. Esta
   comprobación no hizo avanzar ni girar el robot.
