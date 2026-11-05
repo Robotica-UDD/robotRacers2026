@@ -102,7 +102,7 @@ uv sync --frozen --extra assets
 
 Las pruebas utilizan imágenes generadas y una cámara simulada; no abren hardware.
 El detector y la captura son independientes del servicio de navegación.
-La entrega pasa 79 pruebas específicas de webcam y las 150 pruebas del proyecto.
+La entrega pasa 108 pruebas específicas de webcam y las 179 pruebas del proyecto.
 Se comprobó la detección del PDF renderizado, la inclusión de recursos en el
 paquete instalable y el panel con imágenes generadas, incluidas pérdida de
 detección y parada. La webcam Trust 1080p Full HD conectada por USB se comprobó
@@ -117,6 +117,28 @@ otra cámara si cambian los índices al conectar o desconectar un equipo. Si no
 está disponible, solicita actualizar la lista. Durante el arranque tolera hasta
 cinco segundos de lecturas inicialmente vacías; una pérdida posterior de la
 captura sigue retirando la posición y orientación.
+
+### Reinicio y reconexión USB en macOS
+
+Al cambiar de puerto, la Trust recibió un identificador nuevo. Se comprobó que
+el servicio antiguo seguía enumerando el identificador anterior, mientras un
+proceso nuevo veía el actual. Por eso la enumeración ahora se consulta en un
+proceso breve y cada sesión de captura abre AVFoundation en su propio proceso
+nuevo. Los píxeles se trasladan por memoria compartida, conservando el último
+fotograma y su marca de tiempo. Detener también puede cancelar una apertura o
+lectura bloqueada y liberar la cámara.
+
+Antes de iniciar, el panel refresca los dispositivos. Si el identificador cambió,
+solo recupera automáticamente la selección cuando hay una única cámara con el
+mismo nombre exacto. Si falta o el nombre es ambiguo, pide seleccionar la cámara;
+no abre otra por su posición en la lista.
+
+Con el cambio instalado se completaron tres aperturas reales seguidas de la
+Trust a 1280 × 720 píxeles, con unos 2,9 segundos hasta recibir al menos cuatro
+fotogramas por sesión. Las pruebas automatizadas cubren identificadores que
+cambian, cámara ausente, cancelación de controladores bloqueados y liberación
+de los procesos y de la memoria. El cambio físico de puerto con el servicio
+nuevo ya abierto todavía no se ha repetido como prueba manual.
 
 ### Contornos del marcador impreso
 

@@ -15,7 +15,9 @@ import copy
 import ctypes
 from ctypes.util import find_library
 from functools import cmp_to_key
+import json
 import logging
+import subprocess
 import sys
 import threading
 import time
@@ -24,6 +26,7 @@ import time
 LOGGER = logging.getLogger(__name__)
 PLATFORM = sys.platform
 CACHE_SECONDS = 3.0
+NATIVE_OUTPUT_LIMIT = 64 * 1024
 _cache_lock = threading.Lock()
 _cache_at: float | None = None
 _cache_value: dict | None = None
@@ -117,10 +120,50 @@ def _manual_options() -> dict:
     }
 
 
+def _parse_native_devices(output: str) -> list[dict]:
+    """Valida la respuesta del proceso auxiliar antes de usar sus índices."""
+    if not isinstance(output, str) or len(output.encode("utf-8")) > NATIVE_OUTPUT_LIMIT:
+        raise ValueError("La respuesta de cámaras supera el tamaño permitido.")
+    entries = json.loads(output)
+    if not isinstance(entries, list) or len(entries) > 64:
+        raise ValueError("La respuesta de cámaras no es una lista válida.")
+    result = []
+    for expected_index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise ValueError("La cámara no tiene una descripción válida.")
+        index = entry.get("index")
+        if type(index) is not int or index != expected_index:
+            raise ValueError("Los índices de cámara no son consecutivos.")
+        for key, maximum in (("id", 512), ("label", 256), ("transport", 32)):
+            value = entry.get(key)
+            if not isinstance(value, str) or len(value) > maximum or "\x00" in value:
+                raise ValueError("La cámara no tiene una descripción válida.")
+            if key != "transport" and not value:
+                raise ValueError("Falta el nombre o identificador de cámara.")
+        result.append({key: entry[key] for key in ("index", "label", "id", "transport")})
+    return result
+
+
+def _fresh_macos_devices() -> list[dict]:
+    """Consulta AVFoundation en un proceso nuevo para evitar dispositivos antiguos.
+
+    El servicio permanece abierto durante conexiones y cambios de puerto USB.
+    Limpiar su caché Python no actualiza necesariamente la lista nativa de
+    AVFoundation que ya cargó ese proceso. El auxiliar termina tras enumerar;
+    no solicita permisos ni abre una sesión de captura.
+    """
+    completed = subprocess.run(
+        [sys.executable, "-m", "simulation.webcam.devices", "--list-native"],
+        capture_output=True, text=True, encoding="utf-8", timeout=8,
+        check=True, shell=False,
+    )
+    return _parse_native_devices(completed.stdout)
+
+
 def discover_cameras(force: bool = False) -> dict:
     """Devuelve nombres e índices actuales, con caché breve y sin abrir cámaras.
 
-    force=True vuelve a consultar para actualizar conexiones USB. En plataformas
+    force=True consulta en un proceso nuevo para actualizar conexiones USB. En plataformas
     sin este backend se mantienen índices manuales claramente identificados.
     Se devuelve una copia para que un consumidor no cambie la caché compartida.
     """
@@ -131,7 +174,7 @@ def discover_cameras(force: bool = False) -> dict:
             return copy.deepcopy(_cache_value)
         if PLATFORM == "darwin":
             try:
-                options = _macos_devices()
+                options = _fresh_macos_devices()
                 default = next((item["index"] for item in options if item.get("transport") == "usb"),
                                options[0]["index"] if options else 0)
                 value = {"enumerated": True, "options": options, "default_index": default,
@@ -145,3 +188,21 @@ def discover_cameras(force: bool = False) -> dict:
         _cache_at = now
         _cache_value = value
         return copy.deepcopy(value)
+
+
+def main() -> None:
+    """Auxiliar interno: una consulta nativa, JSON por stdout y salida inmediata."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Consulta nativa de cámaras, sin captura.")
+    parser.add_argument("--list-native", action="store_true")
+    args = parser.parse_args()
+    if not args.list_native:
+        parser.error("Utiliza --list-native para consultar las cámaras.")
+    if PLATFORM != "darwin":
+        parser.error("La consulta nativa requiere macOS.")
+    print(json.dumps(_macos_devices(), ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

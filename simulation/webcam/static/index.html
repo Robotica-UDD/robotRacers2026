@@ -177,11 +177,12 @@
       if (busy) return;
       busy = true; setError(''); updateButtons();
       try {
+        const selected = action === 'start' ? await refreshForStart() : null;
         await api(`/api/${action}`, {
           method: 'POST', headers: {'Content-Type': 'application/json'},
           ...(action === 'start' ? {body: JSON.stringify({
-            camera_index: Number($('camera-select').value),
-            ...($('camera-select').selectedOptions[0]?.dataset.cameraId ? {camera_id: $('camera-select').selectedOptions[0].dataset.cameraId} : {})
+            camera_index: selected.index,
+            ...(selected.id ? {camera_id: selected.id} : {})
           })} : {})
         });
         const next = await api('/api/state');
@@ -206,6 +207,57 @@
       option.disabled = false;
       select.value = option.value;
     }
+    function selectedCamera() {
+      const select = $('camera-select');
+      const option = select.selectedOptions[0];
+      return {id: option?.dataset.cameraId || null, index: select.value, label: option?.textContent || ''};
+    }
+    function populateCameras(result) {
+      const select = $('camera-select');
+      const available = result.enumerated ? (result.options || []) : Array.from({length: 10}, (_, index) => ({index, label: `Cámara ${index}`}));
+      select.replaceChildren();
+      for (const camera of available) {
+        const option = document.createElement('option');
+        option.value = String(camera.index);
+        option.textContent = camera.label || `Cámara ${camera.index}`;
+        if (camera.id) option.dataset.cameraId = camera.id;
+        select.appendChild(option);
+      }
+      camerasLoaded = true;
+      if (!available.length) requireCameraSelection('No hay cámaras conectadas');
+      $('camera-hint').textContent = result.message || (result.enumerated ? available.length ? 'Selecciona la webcam conectada por USB.' : 'Conecta la webcam por USB y actualiza la lista.' : 'Si no aparece imagen, prueba otro índice.');
+      return available;
+    }
+    function requireCameraSelection(label = 'Selecciona una cámara') {
+      const option = document.createElement('option');
+      option.value = ''; option.textContent = label; option.disabled = true;
+      $('camera-select').prepend(option);
+      $('camera-select').value = '';
+    }
+    async function refreshForStart() {
+      const previous = selectedCamera();
+      if (previous.index === '') throw new Error('Selecciona una cámara antes de iniciar.');
+      const result = await api('/api/cameras?refresh=true');
+      const available = populateCameras(result);
+      if (state?.running || state?.opening) {
+        selectActiveCamera(state);
+        throw new Error('Ya hay una captura activa. Detén la cámara antes de cambiarla.');
+      }
+      let selected = previous.id && result.enumerated ? available.find(camera => camera.id === previous.id) : null;
+      if (!selected && result.enumerated && previous.id) {
+        const sameName = available.filter(camera => camera.label === previous.label);
+        if (sameName.length === 1) selected = sameName[0];
+      } else if (!selected && !result.enumerated && !previous.id) {
+        selected = available.find(camera => String(camera.index) === previous.index);
+      }
+      if (!selected) {
+        if (available.length) requireCameraSelection();
+        cameraSelectionTouched = true;
+        throw new Error('La cámara seleccionada cambió o no se puede identificar de forma única. Selecciónala de nuevo en la lista; no se abrió ninguna cámara.');
+      }
+      $('camera-select').value = String(selected.index);
+      return selected;
+    }
     async function cameraOptions(refreshList = false) {
       if (camerasLoading || state?.running || state?.opening || busy) return;
       camerasLoading = true;
@@ -213,32 +265,17 @@
       try {
         const result = await api(`/api/cameras${refreshList ? '?refresh=true' : ''}`);
         const select = $('camera-select');
-        const previousId = select.selectedOptions[0]?.dataset.cameraId;
-        const previousIndex = select.value;
+        const previousCamera = selectedCamera();
         const firstLoad = !camerasLoaded;
-        const available = result.enumerated ? (result.options || []) : Array.from({length: 10}, (_, index) => ({index, label: `Cámara ${index}`}));
-        select.replaceChildren();
-        for (const camera of available) {
-          const option = document.createElement('option');
-          option.value = String(camera.index);
-          option.textContent = camera.label || `Cámara ${camera.index}`;
-          if (camera.id) option.dataset.cameraId = camera.id;
-          select.appendChild(option);
-        }
-        camerasLoaded = true;
-        if (!available.length) {
-          const empty = document.createElement('option');
-          empty.value = ''; empty.textContent = 'No hay cámaras conectadas'; empty.disabled = true;
-          select.appendChild(empty); select.value = '';
-        } else if (state?.running || state?.opening) {
+        const available = populateCameras(result);
+        if (state?.running || state?.opening) {
           selectActiveCamera(state);
-        } else {
+        } else if (available.length) {
           const options = Array.from(select.options);
-          const previous = previousId ? options.find(item => item.dataset.cameraId === previousId) : options.find(item => item.value === previousIndex);
+          const previous = previousCamera.id ? options.find(item => item.dataset.cameraId === previousCamera.id) : options.find(item => item.value === previousCamera.index);
           const recommended = options.find(item => item.value === String(result.default_index)) || options[0];
           select.value = firstLoad && !cameraSelectionTouched ? recommended.value : (previous || recommended).value;
         }
-        $('camera-hint').textContent = result.message || (result.enumerated ? available.length ? 'Selecciona la webcam conectada por USB.' : 'Conecta la webcam por USB y actualiza la lista.' : 'Si no aparece imagen, prueba otro índice.');
       } catch (error) {
         setError(error.message || 'No se pudo obtener la lista de cámaras.');
         $('camera-hint').textContent = 'Pulsa Actualizar cámaras para volver a consultar.';

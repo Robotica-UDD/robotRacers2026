@@ -26,10 +26,11 @@ STATIC = Path(__file__).parent / "static"
 ASSETS = Path(__file__).parent / "assets"
 
 
-def open_camera(index: int):
-    """Solo se invoca tras pulsar Iniciar; AVFoundation es el backend de macOS."""
+def open_camera(index: int, camera_id: str | None = None):
+    """Una sesión nativa nueva evita conservar dispositivos USB desconectados."""
     if sys.platform == "darwin":
-        return cv2.VideoCapture(index, cv2.CAP_AVFOUNDATION)
+        from .process_capture import ProcessCapture
+        return ProcessCapture(index, camera_id=camera_id)
     return cv2.VideoCapture(index)
 
 
@@ -45,12 +46,14 @@ class CaptureSession:
                  clock: Callable = time.monotonic, stale_after_s: float = 0.75,
                  startup_timeout_s: float = 5.0):
         self.capture_factory = capture_factory or open_camera
+        self._uses_default_capture = capture_factory is None
         self.detector = detector or AprilTagDetector()
         self.clock = clock
         self.stale_after_s = stale_after_s
         self.startup_timeout_s = startup_timeout_s
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
+        self._active_capture = None
         self._stop_event = threading.Event()
         self._running = False
         self._camera_index: int | None = None
@@ -105,6 +108,11 @@ class CaptureSession:
             self._message = "Cámara detenida."
             self._version += 1
             worker = self._thread
+            active_capture = self._active_capture
+        # Un controlador aislado se puede interrumpir incluso si abrir o leer
+        # queda bloqueado. Las capturas nativas inyectadas siguen en su hilo.
+        if active_capture is not None and getattr(active_capture, "interruptible", False):
+            active_capture.release()
         if worker is not None and worker is not threading.current_thread():
             worker.join(timeout=2.0)
             if worker.is_alive():
@@ -116,9 +124,15 @@ class CaptureSession:
         capture = None
         timestamps: deque[float] = deque(maxlen=60)
         try:
-            capture = self.capture_factory(index)
+            capture = (open_camera(index, camera_id=self._camera_id) if self._uses_default_capture
+                       else self.capture_factory(index))
+            with self._lock:
+                self._active_capture = capture
+            if stop.is_set():
+                return
             if not capture.isOpened():
-                raise RuntimeError("No se pudo abrir la cámara. Revisa el índice y el permiso de Cámara en macOS.")
+                raise RuntimeError(getattr(capture, "error_message", None) or
+                                   "No se pudo abrir la cámara. Revisa el índice y el permiso de Cámara en macOS.")
             if hasattr(capture, "set"):
                 for prop, value in ((cv2.CAP_PROP_FRAME_WIDTH, 1280), (cv2.CAP_PROP_FRAME_HEIGHT, 720),
                                     (cv2.CAP_PROP_FPS, 30), (cv2.CAP_PROP_BUFFERSIZE, 1)):
@@ -133,6 +147,8 @@ class CaptureSession:
                 if stop.is_set():
                     break
                 if not okay or pixels is None or pixels.size == 0:
+                    if getattr(capture, "error_message", None):
+                        raise RuntimeError(capture.error_message)
                     if not received_first_frame and time.monotonic() < startup_deadline:
                         with self._lock:
                             if not stop.is_set():
@@ -141,6 +157,11 @@ class CaptureSession:
                         continue
                     raise RuntimeError("Cámara desconectada o sin imágenes. Detén e inicia la captura para reintentar.")
                 received_first_frame = True
+                # El proceso de captura marca la recepción antes del traslado;
+                # no se presenta un fotograma antiguo como recién capturado.
+                capture_stamp = getattr(capture, "frame_capture_stamp", None)
+                if isinstance(capture_stamp, (int, float)):
+                    received = float(capture_stamp)
                 if pixels.ndim == 2:
                     pixels = cv2.cvtColor(pixels, cv2.COLOR_GRAY2BGR)
                 elif pixels.shape[2] == 4:
@@ -184,6 +205,9 @@ class CaptureSession:
                     capture.release()
                 except Exception:
                     LOGGER.exception("No se pudo liberar la cámara")
+            with self._lock:
+                if self._active_capture is capture:
+                    self._active_capture = None
 
     def _state_locked(self) -> dict:
         age = None if self._last_frame_at is None else max(0.0, self.clock() - self._last_frame_at)
