@@ -46,6 +46,15 @@ La tarjeta **Robot** permite enlazar la ESP32 por Wi-Fi y ejecutar un único
 avance con PWM 100/100 durante 1000 ms. La configuración inicial se envía por
 USB desde el mismo panel. [Cómo configurar y probar el control Wi-Fi](docs/prueba-control-wifi.md).
 
+La tarjeta **Navegación** permite calibrar el centro y el frente con dos clics,
+seleccionar un destino en la imagen y pulsar **Ir al punto**. La selección nunca
+inicia movimiento. Esta prueba usa corrección visual y Wi-Fi; todavía no utiliza
+encoders ni evita obstáculos. La precisión del perfil de movimiento actual
+está pendiente de validación física. Ante pérdida de imagen o Wi-Fi, espera con los motores a cero y
+continúa hacia el mismo destino cuando recupera el seguimiento y la conexión.
+D48 y las paradas manuales cancelan el recorrido. Consulta
+[navegación con webcam y sus límites](docs/navegacion-webcam.md).
+
 ## Referencia física
 
 | Parámetro | Valor | Procedencia |
@@ -72,6 +81,7 @@ La dinámica es provisional hasta medir masa, centro de gravedad, fricción y re
 - [Calibración física](docs/calibracion-fisica.md)
 - [ROS 2 y hardware](docs/ros2-y-hardware.md)
 - [Validación y rendimiento](docs/validacion-simulacion.md)
+- [Navegación física con webcam](docs/navegacion-webcam.md)
 - [PCB final](hardware/RevQ)
 - [Firmware físico de referencia](firmware/reference)
 - [README histórico](docs/historial/README-original.md)

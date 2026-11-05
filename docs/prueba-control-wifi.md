@@ -3,13 +3,15 @@
 El botón **Avanzar 1 segundo** envía por Wi-Fi una orden fija: motor izquierdo
 100, motor derecho 100 y duración de 1000 ms. Los valores son PWM de 8 bits
 (escala 0 a 255), no coordenadas ni velocidades medidas. La cámara muestra la
-escena; esta prueba todavía no utiliza su posición para dirigir el robot.
+escena. Esta orden fija sigue disponible como prueba del enlace, además de la
+[navegación a un punto con la webcam](navegacion-webcam.md), que sí utiliza la
+posición visual y requiere una calibración previa del centro y el frente.
 
 ## Enlace elegido
 
 | Enlace | Uso en esta prueba |
 |---|---|
-| Wi-Fi con HTTP | Elegido: el servicio Python del panel envía una orden y recibe confirmación. |
+| Wi-Fi con HTTP y UDP | Elegido: HTTP configura y confirma; UDP transporta las consignas de navegación. La prueba fija de un segundo usa HTTP. |
 | Bluetooth LE | Posible, pero requiere un servicio y cliente Bluetooth adicionales. |
 | USB serie | Se utiliza para cargar el firmware y configurar el Wi-Fi inicialmente. |
 
@@ -29,13 +31,14 @@ y [WebServer en Arduino-ESP32 2.0.14](https://github.com/espressif/arduino-esp32
    vacíos. El monitor serie de Arduino debe estar cerrado mientras se enlaza.
 3. Enciende el interruptor general y espera **Robot listo para la prueba**.
    La batería alimenta la etapa de motores; USB permite configurar la ESP32.
-4. Pulsa una vez **Avanzar 1 segundo**. El botón queda bloqueado mientras la
+4. Abre **Prueba manual de motores** y pulsa una vez **Avanzar 1 segundo**. El botón queda bloqueado mientras la
    orden está pendiente o ejecutándose. **Detener** envía una parada; D48
    también desactiva los drivers desde el propio robot.
 
-Una vez configurado, las órdenes viajan por Wi-Fi aunque el cable USB siga
-conectado. El USB del robot se puede retirar si la alimentación de batería
-mantiene encendida la ESP32. La webcam conserva su propia conexión USB al Mac.
+Una vez configurado, las órdenes viajan por Wi-Fi. Antes de mover el robot,
+retira su cable USB para que no lo arrastre ni altere su trayectoria; la
+alimentación de batería debe mantener encendida la ESP32. La webcam conserva
+su propia conexión USB al Mac.
 
 La clave Wi-Fi se introduce localmente y se guarda en la memoria del ESP32 para
 su conexión posterior. El servicio Python no la guarda ni la incluye en errores.
@@ -55,9 +58,19 @@ una medición de precisión temporal con instrumental.
 
 Cada pulsación tiene un identificador único. El firmware reconoce los ocho
 últimos identificadores para evitar repetir una orden recibida de nuevo. El
-servicio no reintenta automáticamente movimientos cuando falta confirmación.
-El firmware arranca con ambos motores y la turbina apagados, y solo acepta en
-esta prueba la combinación 100/100/1000. No incluye PID, navegación ni encoders.
+servicio no reintenta esa prueba fija cuando falta confirmación.
+El firmware arranca con ambos motores y la turbina apagados. La prueba fija
+solo acepta la combinación 100/100/1000. El mismo firmware admite ahora una
+sesión independiente de navegación: Python la arma por HTTP y envía consignas
+por UDP a 20 Hz, con caducidad local de 300 ms después de cada mando válido.
+No utiliza todavía los encoders ni evita obstáculos. La
+[guía de navegación](navegacion-webcam.md) describe la calibración obligatoria,
+la selección explícita del destino y los límites de esta prueba. Durante una
+misión de navegación ya confirmada, una pérdida de imagen o Wi-Fi pone los
+motores a cero y conserva el destino para continuar automáticamente al recuperar
+seguimiento y conexión. D48, una parada manual o un fallo de driver cancelan
+esa misión. Reiniciar el programa Python recupera el destino como pendiente y
+requiere pulsar de nuevo **Ir al punto**.
 
 La cifra de latencia del panel corresponde al recorrido de una consulta de
 estado por HTTP; no mide la latencia completa desde una imagen hasta un motor.
@@ -95,16 +108,23 @@ Se conserva la inicialización de U11 a 6 V, con SDA41/SCL40 y dirección I2C
 
 ## Comprobación realizada
 
-- Compilación real: 745009 bytes de programa y 47880 bytes de RAM.
+- Firmware actual con navegación: compilación y carga reales con Arduino-ESP32
+  2.0.14, 753473 bytes de programa y 48856 bytes de RAM.
 - Carga por USB y respuesta JSON de la ESP32 confirmadas.
 - Configuración de la red introducida por el usuario directamente en el panel;
   enlace Wi-Fi y disponibilidad de los drivers comprobados.
 - El usuario pulsó el botón y confirmó que **ambos motores se movieron y se
   detuvieron**. El estado recibido registró el identificador de esa orden y
-  `stop_reason: completed`.
+  `stop_reason: completed`. Esa comprobación corresponde a la orden fija de
+  un segundo, no a un recorrido autónomo guiado por cámara.
+- En el firmware actual se comprobó físicamente la caducidad de 300 ms y el
+  rechazo de paquetes UDP atrasados usando exclusivamente consignas 0/0.
+  La precisión del perfil actual de navegación hasta un punto sigue pendiente
+  de validación física.
 - Las pruebas automatizadas del enlace usan dispositivos y red simulados:
   comprueban identidad, configuración, ausencia de reintentos, bloqueo de
-  órdenes simultáneas, parada y protección de credenciales. No accionan motores.
+  órdenes simultáneas, parada, sesiones UDP y protección de credenciales.
+  No accionan motores.
 
 Para repetir las pruebas del enlace:
 
