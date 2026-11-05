@@ -1,0 +1,44 @@
+newmtl aluminium
+Kd 0.72 0.74 0.77
+Ks .35 .35 .35
+Ns 154
+Pm 0.85
+Pr 0.23
+d 1
+illum 2
+
+newmtl black
+Kd 0.017 0.019 0.022
+Ks .35 .35 .35
+Ns 70
+Pm 0.0
+Pr 0.65
+d 1
+illum 2
+
+newmtl chip
+Kd 0.026 0.03 0.035
+Ks .35 .35 .35
+Ns 104
+Pm 0.05
+Pr 0.48
+d 1
+illum 2
+
+newmtl rubber
+Kd 0.019 0.021 0.024
+Ks .35 .35 .35
+Ns 18
+Pm 0.0
+Pr 0.91
+d 1
+illum 2
+
+newmtl silver
+Kd 0.62 0.65 0.68
+Ks .35 .35 .35
+Ns 150
+Pm 0.85
+Pr 0.25
+d 1
+illum 2

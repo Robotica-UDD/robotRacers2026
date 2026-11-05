@@ -1,0 +1,189 @@
+newmtl aluminium
+Kd 0.72 0.74 0.77
+Ks .35 .35 .35
+Ns 154
+Pm 0.85
+Pr 0.23
+d 1
+illum 2
+
+newmtl battery
+Kd 0.1 0.11 0.13
+Ks .35 .35 .35
+Ns 100
+Pm 0.12
+Pr 0.5
+d 1
+illum 2
+
+newmtl battery_label
+Kd 0.72 0.73 0.69
+Ks .35 .35 .35
+Ns 90
+Pm 0.15
+Pr 0.55
+d 1
+illum 2
+
+newmtl black
+Kd 0.017 0.019 0.022
+Ks .35 .35 .35
+Ns 70
+Pm 0.0
+Pr 0.65
+d 1
+illum 2
+
+newmtl blue
+Kd 0.03 0.13 0.4
+Ks .35 .35 .35
+Ns 90
+Pm 0.0
+Pr 0.55
+d 1
+illum 2
+
+newmtl ceramic
+Kd 0.57 0.39 0.2
+Ks .35 .35 .35
+Ns 100
+Pm 0.0
+Pr 0.5
+d 1
+illum 2
+
+newmtl chip
+Kd 0.026 0.03 0.035
+Ks .35 .35 .35
+Ns 104
+Pm 0.05
+Pr 0.48
+d 1
+illum 2
+
+newmtl fr4_edge
+Kd 0.39 0.4 0.22
+Ks .35 .35 .35
+Ns 70
+Pm 0.0
+Pr 0.65
+d 1
+illum 2
+
+newmtl gold
+Kd 0.72 0.55 0.2
+Ks .35 .35 .35
+Ns 152
+Pm 0.78
+Pr 0.24
+d 1
+illum 2
+
+newmtl green
+Kd 0.04 0.3 0.09
+Ks .35 .35 .35
+Ns 90
+Pm 0.0
+Pr 0.55
+d 1
+illum 2
+
+newmtl inductor
+Kd 0.25 0.27 0.28
+Ks .35 .35 .35
+Ns 90
+Pm 0.4
+Pr 0.55
+d 1
+illum 2
+
+newmtl led
+Kd 0.04 0.7 0.31
+Ks .35 .35 .35
+Ns 144
+Pm 0.0
+Pr 0.28
+d 1
+illum 2
+
+newmtl lens
+Kd 0.2 0.12 0.14
+Ks .35 .35 .35
+Ns 168
+Pm 0.18
+Pr 0.16
+d 1
+illum 2
+
+newmtl mask
+Kd 0.018 0.18 0.11
+Ks .35 .35 .35
+Ns 124
+Pm 0.05
+Pr 0.38
+d 1
+illum 2
+
+newmtl mask_top
+Kd 1 1 1
+Ks .35 .35 .35
+Ns 124
+Pm 0.05
+Pr 0.38
+d 1
+illum 2
+map_Kd pcb_top.png
+
+newmtl orange
+Kd 0.79 0.3 0.035
+Ks .35 .35 .35
+Ns 90
+Pm 0.0
+Pr 0.55
+d 1
+illum 2
+
+newmtl red
+Kd 0.5 0.025 0.025
+Ks .35 .35 .35
+Ns 90
+Pm 0.0
+Pr 0.55
+d 1
+illum 2
+
+newmtl resistor
+Kd 0.037 0.04 0.042
+Ks .35 .35 .35
+Ns 96
+Pm 0.02
+Pr 0.52
+d 1
+illum 2
+
+newmtl silver
+Kd 0.62 0.65 0.68
+Ks .35 .35 .35
+Ns 150
+Pm 0.85
+Pr 0.25
+d 1
+illum 2
+
+newmtl white
+Kd 0.88 0.88 0.82
+Ks .35 .35 .35
+Ns 108
+Pm 0.0
+Pr 0.46
+d 1
+illum 2
+
+newmtl yellow
+Kd 0.83 0.66 0.08
+Ks .35 .35 .35
+Ns 110
+Pm 0.0
+Pr 0.45
+d 1
+illum 2

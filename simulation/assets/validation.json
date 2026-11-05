@@ -1,0 +1,22 @@
+{
+  "checks": {
+    "mounted_count_210": true,
+    "removed_parts_absent": true,
+    "units_m": true,
+    "PCB_dimensions_correct": true,
+    "turbine_hole_32mm": true,
+    "wheel_radius_11_5mm": true,
+    "wheel_width_40mm": true,
+    "wheel_axis_y": true,
+    "battery_over_component_height": true,
+    "body_finite_vertices": true,
+    "body_face_count": true,
+    "wheel_finite_vertices": true,
+    "wheel_face_count": true,
+    "wheel_radius_geometry": true,
+    "files_under_GitHub_limit": true
+  },
+  "passed": 15,
+  "failed": 0,
+  "scope": "visual geometry and source registration, not a physical calibration or PCBA verification"
+}

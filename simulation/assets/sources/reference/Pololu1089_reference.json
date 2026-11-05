@@ -1,0 +1,13 @@
+{
+  "source": "https://www.pololu.com/file/0J1712/micro-metal-gearmotor-extended-with-1089-extended-bracket.step",
+  "dimensions_used_mm": {
+    "mount_hole_pitch": 18,
+    "PCB_hole_edge_distance": 4.25,
+    "motor_cross_section": [
+      10,
+      12
+    ]
+  },
+  "licence": "Manufacturer CAD redistribution licence not established; STEP is not redistributed. Only dimensions inform the original generated mesh.",
+  "note": "Reference STEP depicts extended-shaft motor; it is not the exact encoder-back5178 model."
+}
