@@ -1,0 +1,41 @@
+#VRML_SIM R2025a utf8
+EXTERNPROTO "../protos/RobotRacers.proto"
+WorldInfo { title "RobotRacers" basicTimeStep 2 FPS 60 coordinateSystem "ENU" gravity 9.81
+  contactProperties [
+    DEF RUBBER_CONTACT ContactProperties { material1 "rubber" material2 "floor" coulombFriction [.8 .8] bounce 0 rollingFriction .000005 .000005 0 softERP .6 softCFM .00001 maxContactJoints 8 }
+    DEF SKID_CONTACT ContactProperties { material1 "skid" material2 "floor" coulombFriction .12 bounce 0 softERP .6 softCFM .00001 }
+    ContactProperties { material1 "wall" material2 "rubber" coulombFriction .5 bounce 0 }
+    ContactProperties { material1 "wall" material2 "skid" coulombFriction .4 bounce 0 }
+  ] }
+Viewpoint { position 1.9 -2.6 2.8 orientation -.3448517026 .1751115083 .9221785417 2.2657049875 near .001 far 30 }
+Background { skyColor [.94 .96 .95] }
+DirectionalLight { direction -.3 -.4 -1 intensity 1.2 ambientIntensity .75 castShadows TRUE }
+PointLight { location -1 0 2 intensity .8 ambientIntensity 0 attenuation 0 0 1 radius 5 }
+DEF FLOOR Solid { translation 0 0 -.025 children [Shape { appearance PBRAppearance { baseColor .985 .985 .975 roughness .75 metalness 0 } geometry DEF FLOOR_BOX Box { size 2.4 1.8 .05 } }] name "floor" contactMaterial "floor" boundingObject USE FLOOR_BOX }
+DEF WALL_0 Solid { translation -0.6 -0.8 .05 children [Shape { appearance DEF WALL_MATERIAL PBRAppearance { baseColor .018 .023 .025 roughness .5 metalness .02 } geometry DEF WALL_GEOM_0 Box { size 0.51 0.02 .1 } }] name "wall_0" contactMaterial "wall" boundingObject USE WALL_GEOM_0 }DEF WALL_1 Solid { translation -0.35 -0.525 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_1 Box { size 0.02 0.56 .1 } }] name "wall_1" contactMaterial "wall" boundingObject USE WALL_GEOM_1 }DEF WALL_2 Solid { translation 0.0 -0.25 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_2 Box { size 0.71 0.02 .1 } }] name "wall_2" contactMaterial "wall" boundingObject USE WALL_GEOM_2 }DEF WALL_3 Solid { translation 0.35 -0.525 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_3 Box { size 0.02 0.56 .1 } }] name "wall_3" contactMaterial "wall" boundingObject USE WALL_GEOM_3 }DEF WALL_4 Solid { translation 0.6 -0.8 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_4 Box { size 0.51 0.02 .1 } }] name "wall_4" contactMaterial "wall" boundingObject USE WALL_GEOM_4 }DEF WALL_5 Solid { translation 0.85 0.0 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_5 Box { size 0.02 1.61 .1 } }] name "wall_5" contactMaterial "wall" boundingObject USE WALL_GEOM_5 }DEF WALL_6 Solid { translation 0.6 0.8 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_6 Box { size 0.51 0.02 .1 } }] name "wall_6" contactMaterial "wall" boundingObject USE WALL_GEOM_6 }DEF WALL_7 Solid { translation 0.35 0.525 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_7 Box { size 0.02 0.56 .1 } }] name "wall_7" contactMaterial "wall" boundingObject USE WALL_GEOM_7 }DEF WALL_8 Solid { translation 0.0 0.25 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_8 Box { size 0.71 0.02 .1 } }] name "wall_8" contactMaterial "wall" boundingObject USE WALL_GEOM_8 }DEF WALL_9 Solid { translation -0.35 0.525 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_9 Box { size 0.02 0.56 .1 } }] name "wall_9" contactMaterial "wall" boundingObject USE WALL_GEOM_9 }DEF WALL_10 Solid { translation -0.6 0.8 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_10 Box { size 0.51 0.02 .1 } }] name "wall_10" contactMaterial "wall" boundingObject USE WALL_GEOM_10 }DEF WALL_11 Solid { translation -0.85 0.0 .05 children [Shape { appearance USE WALL_MATERIAL geometry DEF WALL_GEOM_11 Box { size 0.02 1.61 .1 } }] name "wall_11" contactMaterial "wall" boundingObject USE WALL_GEOM_11 }
+DEF REFERENCE_TAG_1 Group { children [Pose { translation -1.05 0.75 9.999999999999994e-05 children [
+      Shape { appearance PBRAppearance { baseColor 1 1 1 roughness 1 metalness 0 } geometry Box { size 0.062400000000000004 0.062400000000000004 .0006 } }
+    ] }
+    Shape { appearance PBRAppearance { baseColorMap ImageTexture { url ["../../assets/markers/tag_1.png"] filtering 0 } roughness 1 metalness 0 }
+      geometry IndexedFaceSet { coord Coordinate { point [-1.074 0.774 0.0006, -1.026 0.774 0.0006, -1.026 0.726 0.0006, -1.074 0.726 0.0006] } coordIndex [0,3,2,1,-1]
+      texCoord TextureCoordinate { point [0 1,1 1,1 0,0 0] } texCoordIndex [0,3,2,1,-1] ccw TRUE } }] }DEF REFERENCE_TAG_2 Group { children [Pose { translation 1.05 0.75 9.999999999999994e-05 children [
+      Shape { appearance PBRAppearance { baseColor 1 1 1 roughness 1 metalness 0 } geometry Box { size 0.062400000000000004 0.062400000000000004 .0006 } }
+    ] }
+    Shape { appearance PBRAppearance { baseColorMap ImageTexture { url ["../../assets/markers/tag_2.png"] filtering 0 } roughness 1 metalness 0 }
+      geometry IndexedFaceSet { coord Coordinate { point [1.026 0.774 0.0006, 1.074 0.774 0.0006, 1.074 0.726 0.0006, 1.026 0.726 0.0006] } coordIndex [0,3,2,1,-1]
+      texCoord TextureCoordinate { point [0 1,1 1,1 0,0 0] } texCoordIndex [0,3,2,1,-1] ccw TRUE } }] }DEF REFERENCE_TAG_3 Group { children [Pose { translation 1.05 -0.75 9.999999999999994e-05 children [
+      Shape { appearance PBRAppearance { baseColor 1 1 1 roughness 1 metalness 0 } geometry Box { size 0.062400000000000004 0.062400000000000004 .0006 } }
+    ] }
+    Shape { appearance PBRAppearance { baseColorMap ImageTexture { url ["../../assets/markers/tag_3.png"] filtering 0 } roughness 1 metalness 0 }
+      geometry IndexedFaceSet { coord Coordinate { point [1.026 -0.726 0.0006, 1.074 -0.726 0.0006, 1.074 -0.774 0.0006, 1.026 -0.774 0.0006] } coordIndex [0,3,2,1,-1]
+      texCoord TextureCoordinate { point [0 1,1 1,1 0,0 0] } texCoordIndex [0,3,2,1,-1] ccw TRUE } }] }DEF REFERENCE_TAG_4 Group { children [Pose { translation -1.05 -0.75 9.999999999999994e-05 children [
+      Shape { appearance PBRAppearance { baseColor 1 1 1 roughness 1 metalness 0 } geometry Box { size 0.062400000000000004 0.062400000000000004 .0006 } }
+    ] }
+    Shape { appearance PBRAppearance { baseColorMap ImageTexture { url ["../../assets/markers/tag_4.png"] filtering 0 } roughness 1 metalness 0 }
+      geometry IndexedFaceSet { coord Coordinate { point [-1.074 -0.726 0.0006, -1.026 -0.726 0.0006, -1.026 -0.774 0.0006, -1.074 -0.774 0.0006] } coordIndex [0,3,2,1,-1]
+      texCoord TextureCoordinate { point [0 1,1 1,1 0,0 0] } texCoordIndex [0,3,2,1,-1] ccw TRUE } }] }
+DEF ROBOT RobotRacers { }
+DEF ARENA_SUPERVISOR Robot { name "arena_camera" controller "arena_camera" supervisor TRUE synchronization TRUE children [
+  DEF OVERHEAD_CAMERA Camera { translation 0 0 2.6 rotation -.577350269 .577350269 .577350269 2.09439510239
+    name "overhead_camera" width 1280 height 960 fieldOfView .98 near .02 far 20 antiAliasing TRUE }
+] }

@@ -31,12 +31,27 @@
     "encoder": "12 x 4.995; already quadrature",
     "friction": "estimated",
     "skid_friction": "estimated",
-    "fan_force_n": "unmeasured; disabled"
+    "fan_force_n": "unmeasured; disabled",
+    "body_center_of_mass_m": "estimated; body only, wheels separate",
+    "body_inertia_kg_m2": "estimated diagonal at 156g body mass; scales with body mass",
+    "wheel_mass_kg": "estimated per assembled wheel"
   },
   "marker_height_m": 0.023,
   "cad_body_offset_m": [
     0.01315,
     0,
     0
-  ]
+  ],
+  "wheel_mass_kg": 0.012,
+  "body_center_of_mass_m": [
+    0.01315,
+    0,
+    0.013
+  ],
+  "body_inertia_kg_m2": [
+    0.00015,
+    0.00012,
+    0.00028
+  ],
+  "wheel_tire_radius_m": 0.0115
 }
