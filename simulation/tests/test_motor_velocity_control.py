@@ -24,6 +24,7 @@ SCENARIOS = (
     "quantized_friction_plant",
     "velocity_300_control_stop_and_reverse",
     "large_velocity_and_integer_limits",
+    "acceleration_and_pwm_slew",
 )
 
 

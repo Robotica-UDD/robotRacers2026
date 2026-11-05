@@ -12,6 +12,11 @@ struct WheelVelocityControl {
   static constexpr int PWM_MAX = 160;
   // Límite del formato de consigna, sin techo adicional de la aplicación.
   static constexpr int MAX_VELOCITY_MM_S = std::numeric_limits<int32_t>::max();
+  static constexpr double ACCELERATION_MM_S2 = 600.0;
+  static constexpr double DECELERATION_MM_S2 = 900.0;
+  static constexpr double PWM_RISE_PER_S = 600.0;
+  static constexpr double PWM_FALL_PER_S = 900.0;
+  static constexpr double STARTUP_PWM_RISE_PER_S = 300.0;
 
   void reset(int64_t count, double now_s) {
     target_ = 0; reference_ = speed_ = eventSpeed_ = integral_ = 0;
@@ -77,7 +82,9 @@ struct WheelVelocityControl {
       waitingForRest_ = false; reversing_ = false;
     }
     const double wanted = reversing_ ? 0.0 : double(target_);
-    reference_ = approach(reference_, wanted, 150.0 * dt);
+    const double referenceRate = std::fabs(wanted) < std::fabs(reference_)
+      ? DECELERATION_MM_S2 : ACCELERATION_MM_S2;
+    reference_ = approach(reference_, wanted, referenceRate * dt);
     if (reference_ == 0) {
       pwm_ = 0; integral_ = 0; active_ = starting_ = false;
       if (reversing_) waitingForRest_ = true;
@@ -101,7 +108,7 @@ struct WheelVelocityControl {
     const double feedforward = 35.0 + .125 * referenceMagnitude;
     if (starting_) {
       if ((count - startupCount_) * direction_ < 2) {
-        startupPwm_ = std::fmin(double(PWM_MAX), 35.0 + 300.0 * (now_s - startupTime_));
+        startupPwm_ = std::fmin(double(PWM_MAX), 35.0 + STARTUP_PWM_RISE_PER_S * (now_s - startupTime_));
         pwm_ = direction_ * int(std::lround(startupPwm_));
         return pwm_;
       }
@@ -115,7 +122,8 @@ struct WheelVelocityControl {
       integral_ = limit(integral_ + error * dt, -120.0, 125.0);
     double output = limit(feedforward + .10 * error + integral_, 0.0, double(PWM_MAX));
     if (reversing_) output = std::fmin(output, std::fabs(double(pwm_)));
-    output = approach(std::fabs(double(pwm_)), output, 300.0 * dt);
+    const double pwmRate = output < std::fabs(double(pwm_)) ? PWM_FALL_PER_S : PWM_RISE_PER_S;
+    output = approach(std::fabs(double(pwm_)), output, pwmRate * dt);
     pwm_ = direction_ * int(std::lround(output));
     return pwm_;
   }

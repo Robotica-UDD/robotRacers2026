@@ -76,7 +76,7 @@ void two_counts_and_smooth_transfer() {
   const int transfer = rig.step(2);
   CHECK(!rig.control.startup());
   CHECK(transfer > 0);
-  CHECK(std::abs(transfer - previous) <= 4);
+  CHECK(std::abs(transfer - previous) <= int(std::ceil(WheelVelocityControl::PWM_FALL_PER_S * .01)));
   CHECK(!rig.control.stalled());
   // Una lectura posterior en el sentido contrario no invierte la salida.
   CHECK(rig.step(1) >= 0);
@@ -337,7 +337,7 @@ void large_velocity_and_integer_limits() {
     for (int i = 1; i <= 1000; ++i) {
       const int pwm = rig.step(direction * (i / 5));
       CHECK(pwm * direction >= 0 && !rig.control.stalled());
-      CHECK(std::abs(rig.control.reference()) <= 150. * rig.time + .01);
+      CHECK(std::abs(rig.control.reference()) <= WheelVelocityControl::ACCELERATION_MM_S2 * rig.time + .01);
     }
     CHECK(std::abs(rig.control.pwm()) == 160);
     rig.control.setTarget(0);
@@ -365,6 +365,50 @@ void large_velocity_and_integer_limits() {
     for (int i = 0; i < 100; ++i) CHECK(rig.step(rig.count) == 0);
   }
 }
+
+void acceleration_and_pwm_slew() {
+  CHECK(WheelVelocityControl::ACCELERATION_MM_S2 == 600.);
+  CHECK(WheelVelocityControl::DECELERATION_MM_S2 == 900.);
+  CHECK(WheelVelocityControl::PWM_RISE_PER_S == 600.);
+  CHECK(WheelVelocityControl::PWM_FALL_PER_S == 900.);
+  CHECK(WheelVelocityControl::STARTUP_PWM_RISE_PER_S == 300.);
+  Rig rig;
+  rig.control.setTarget(300);
+  double previous_reference = 0.;
+  for (int i = 1; i <= 50; ++i) {
+    rig.step(i / 5);
+    CHECK(rig.control.reference() - previous_reference <= 6.000001);
+    previous_reference = rig.control.reference();
+  }
+  CHECK(std::abs(rig.control.reference() - 300.) < 1e-6);
+  rig.control.setTarget(30);
+  for (int i = 1; i <= 30; ++i) {
+    rig.step(rig.count + (i % 5 == 0));
+    CHECK(previous_reference - rig.control.reference() <= 9.000001);
+    previous_reference = rig.control.reference();
+  }
+  CHECK(std::abs(rig.control.reference() - 30.) < 1e-6);
+  rig.control.setTarget(1000);
+  int previous_pwm = rig.control.pwm();
+  for (int i = 1; i <= 300; ++i) {
+    const int pwm = rig.step(rig.count + (i % 5 == 0));
+    CHECK(!rig.control.startup() && !rig.control.stalled());
+    CHECK(pwm - previous_pwm <= 6 && previous_pwm - pwm <= 9);
+    previous_pwm = pwm;
+  }
+  CHECK(rig.control.pwm() == 160);
+  rig.control.setTarget(30);
+  bool fell = false;
+  for (int i = 0; i < 250; ++i) {
+    const int pwm = rig.step(rig.count + 3);
+    CHECK(pwm - previous_pwm <= 6 && previous_pwm - pwm <= 9);
+    fell |= pwm < previous_pwm;
+    previous_pwm = pwm;
+  }
+  CHECK(fell && rig.control.pwm() < 160 && !rig.control.stalled());
+  rig.control.setTarget(0);
+  CHECK(rig.control.pwm() == 0 && rig.step(rig.count) == 0);
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -383,5 +427,6 @@ int main(int argc, char** argv) {
   else if (scenario == "quantized_friction_plant") quantized_friction_plant();
   else if (scenario == "velocity_300_control_stop_and_reverse") velocity_300_control_stop_and_reverse();
   else if (scenario == "large_velocity_and_integer_limits") large_velocity_and_integer_limits();
+  else if (scenario == "acceleration_and_pwm_slew") acceleration_and_pwm_slew();
   else CHECK(false);
 }

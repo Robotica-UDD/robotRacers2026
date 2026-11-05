@@ -1,4 +1,4 @@
-// Última modificación: 2026-11-05 20:15 | America/Santiago (UTC-03).
+// Última modificación: 2026-11-05 20:27 | America/Santiago (UTC-03).
 // ESP32-S3, Arduino-ESP32 2.0.14. HTTP/UDP y control local de encoders a 100 Hz.
 // La duración se cumple en un temporizador local; el encendido nunca mueve motores.
 #include <Arduino.h>
