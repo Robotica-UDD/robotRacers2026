@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { disconnectedState, isSimulationState } from './types';
-import type { AppConfig, Goal, Settings, SimulationState } from './types';
+import type { AppConfig, CameraTracking, Goal, Settings, SimulationState } from './types';
+import { parseCameraTracking } from './cameraTrackingMetadata';
 
 async function requestJson(path: string, method = 'GET', data?: unknown) {
   const response = await fetch(path, {
@@ -92,9 +93,10 @@ export function useSimulation() {
 /** One human-preview request at a time, maximum 10 Hz, never used for control. */
 export function useCameraPreview(enabled: boolean) {
   const [image, setImage] = useState<string | null>(null);
+  const [tracking, setTracking] = useState<CameraTracking | null>(null);
   const [available, setAvailable] = useState(false);
   useEffect(() => {
-    if (!enabled) { setAvailable(false); return; }
+    if (!enabled) { setAvailable(false); setTracking(null); return; }
     let closed = false, url: string | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let active: AbortController | undefined;
@@ -105,20 +107,26 @@ export function useCameraPreview(enabled: boolean) {
       try {
         const response = await fetch(`/api/camera.jpg?t=${Date.now()}`, { cache: 'no-store', signal: active.signal });
         if (!response.ok) throw new Error('Camera not ready');
+        const metadata = parseCameraTracking(response.headers.get('X-RobotRacers-Tracking'));
         const blob = await response.blob();
         if (!blob.type.startsWith('image/')) throw new Error('Invalid camera image');
         if (!closed) {
           const next = URL.createObjectURL(blob);
-          setImage(next); setAvailable(true);
+          // Decode before publishing the image/metadata pair so a slow JPEG
+          // decoder cannot leave the new box over the previous photograph.
+          const decoded = new Image(); decoded.src = next;
+          try { await decoded.decode(); } catch { URL.revokeObjectURL(next); throw new Error('Camera decode failed'); }
+          if (closed) { URL.revokeObjectURL(next); return; }
+          setImage(next); setTracking(metadata); setAvailable(true);
           if (url) URL.revokeObjectURL(url);
           url = next;
         }
-      } catch { if (!closed) setAvailable(false); }
+      } catch { if (!closed) { setAvailable(false); setTracking(null); } }
       finally { clearTimeout(abort); }
       if (!closed) timer = setTimeout(load, Math.max(0, 100 - (performance.now() - started)));
     };
     void load();
     return () => { closed = true; clearTimeout(timer); active?.abort(); if (url) URL.revokeObjectURL(url); };
   }, [enabled]);
-  return { image, available };
+  return { image, tracking, available };
 }

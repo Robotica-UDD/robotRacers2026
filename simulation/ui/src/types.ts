@@ -1,6 +1,17 @@
 export type MissionStatus = 'idle' | 'running' | 'paused' | 'stopped' | 'completed' | 'disconnected';
 export type Point = { x: number; y: number };
 export type Goal = Point & { id: string };
+export type CameraTracking = {
+  seq: number; sim_time: number; width: number; height: number;
+  capture_stamp?: number; age_ms?: number;
+  received_ms?: number;
+  tracking: 'visible' | 'predicted' | 'lost';
+  robot_center: [number,number] | null;
+  robot_box: {x:number;y:number;width:number;height:number} | null;
+  marker_corners?: [number,number][] | null;
+  target?: {id:string;pixel:[number,number]} | null;
+  goals: {id:string;pixel:[number,number]}[];
+};
 export type Settings = {
   speed: number;
   scale: number;

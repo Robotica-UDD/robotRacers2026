@@ -1,0 +1,35 @@
+.rr-tracking-overlay {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  z-index: 6;
+  color: #26a45d;
+}
+.rr-tracking-predicted { color: #b68c2e; opacity: .8; }
+.rr-tracking-overlay path, .rr-tracking-overlay line, .rr-tracking-overlay circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.rr-tracking-overlay .rr-tracking-halo { stroke: #fff; stroke-width: 3.5; opacity: .75; }
+.rr-tracking-tether { opacity: .8; }
+.rr-tracking-tether line:not(.rr-tracking-halo) { stroke-width: 1.25; }
+.rr-tracking-predicted .rr-tracking-tether line { stroke-dasharray: 5 4; }
+.rr-tracking-box path:not(.rr-tracking-halo) { stroke-width: 2; }
+.rr-tracking-overlay .rr-tracking-centre circle, .rr-tracking-overlay .rr-tracking-goal-dot { fill: currentColor; stroke: none; }
+.rr-tracking-overlay text {
+  font: 500 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  fill: currentColor;
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
+}
+.rr-tracking-goal-id { font-weight: 650; }
+.rr-tracking-detail { font-size: 10px; font-weight: 450; }

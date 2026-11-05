@@ -99,7 +99,8 @@ export default function App() {
         </div>
 
         <div className="rr-stage-viewport">
-          <WebotsScene config={config} mode={viewMode} scale={state.settings.scale} cameraImage={camera.image} cameraAvailable={camera.available && connected} />
+          <WebotsScene config={config} mode={viewMode} scale={state.settings.scale} cameraImage={camera.image} cameraAvailable={camera.available && connected}
+            cameraMetadata={camera.tracking} state={{...state,connected}} selectedGoal={selectedGoal} />
           <div className="rr-stage-corner rr-glass"><span className={`rr-dot ${connected && state.vision.visible ? 'rr-dot-live' : ''}`} /><span>{connected && state.vision.visible ? 'Localización activa' : 'Esperando localización'}</span></div>
           {viewMode === 'top' && <div className="rr-stage-compass" aria-hidden="true"><span>N</span><i /><span>S</span></div>}
           <div className="rr-mission-controls rr-glass">

@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { AppConfig, ViewMode } from './types';
+import type { AppConfig, CameraTracking, SimulationState, ViewMode } from './types';
 import { Icon } from './icons';
 import { readRenderMetrics } from './renderMetrics';
+import { TrackingOverlay } from './TrackingOverlay';
+import { boundsForConfig, cameraTracking, selectTrackingTarget, topViewAltitude, worldTracking } from './trackingProjection';
+import type { OverlayGeometry, ViewCamera } from './trackingProjection';
 
 type WebotsElement = HTMLElement & {
   connect: (url: string, mode: string, broadcast: boolean, mobile: boolean) => void;
@@ -9,7 +12,7 @@ type WebotsElement = HTMLElement & {
   sendMessage: (message: string) => void;
   onready?: () => void; ondisconnect?: () => void;
   setWebotsErrorMessageCallback?: (callback: (message: string) => void) => void;
-  _view?: { w3dScene?: { render: () => void; renderer?: { render: () => void } }; onclose?: () => void; onerror?: (message: string) => void };
+  _view?: { time?: number; w3dScene?: { render: () => void; renderer?: { render: () => void } }; onclose?: () => void; onerror?: (message: string) => void };
   [key: string]: unknown;
 };
 
@@ -20,14 +23,49 @@ declare global {
   }
 }
 
-export function WebotsScene({ config, mode, scale, cameraImage, cameraAvailable }: {
+export function WebotsScene({ config, mode, scale, cameraImage, cameraAvailable, cameraMetadata, state, selectedGoal }: {
   config: AppConfig | null; mode: ViewMode; scale: number; cameraImage: string | null; cameraAvailable: boolean;
+  cameraMetadata: CameraTracking | null; state: SimulationState; selectedGoal: string;
 }) {
+  const stage = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<WebotsElement | null>(null);
   const [connection, setConnection] = useState<'loading' | 'ready' | 'error'>('loading');
   const [retry, setRetry] = useState(0);
   const currentMode = useRef(mode); currentMode.current = mode;
+  const latest = useRef({state,selectedGoal,cameraMetadata,cameraAvailable});
+  latest.current={state,selectedGoal,cameraMetadata,cameraAvailable};
+  const [tracking,setTracking]=useState<OverlayGeometry|null>(null);
+
+  useEffect(() => {
+    let disposed=false,frame=0,lastDraw=0,lastSimTime=Number.NaN,lastStateStamp=performance.now();
+    let world: {instance?:{viewpoint?:ViewCamera}} | undefined;
+    if(mode!=='camera'&&connection==='ready'&&config){
+      const base=config.webots.module.replace(/WebotsView\.js(?:\?.*)?$/,'');
+      void import(/* @vite-ignore */ `${base}nodes/WbWorld.js`).then(module=>{if(!disposed)world=module.default;}).catch(()=>{});
+    }
+    const draw=(stamp:number)=>{
+      if(disposed)return;
+      frame=requestAnimationFrame(draw);
+      if(stamp-lastDraw<30||document.visibilityState!=='visible'||!stage.current)return;
+      lastDraw=stamp;
+      const viewport=stage.current.getBoundingClientRect(),input=latest.current;
+      if(input.state.sim_time!==lastSimTime){lastSimTime=input.state.sim_time;lastStateStamp=stamp;}
+      const target=selectTrackingTarget(input.state,input.selectedGoal);
+      if(mode==='camera'){
+        setTracking(cameraTracking(input.cameraAvailable?input.cameraMetadata:null,target,viewport.width,viewport.height,input.state.connected));
+      }else{
+        const canvas=host.current?.querySelector<HTMLCanvasElement>('#canvas');
+        if(connection!=='ready'||!world?.instance?.viewpoint||!canvas){setTracking(null);return;}
+        const track=Number(config?.robot.track_width_m??.19);
+        const freshState=stamp-lastStateStamp<=500?input.state:{...input.state,connected:false};
+        setTracking(worldTracking(freshState,target,world.instance.viewpoint,canvas.getBoundingClientRect(),viewport,
+          boundsForConfig(config?.robot),typeof view.current?._view?.time==='number'?view.current._view.time/1000:undefined,track));
+      }
+    };
+    frame=requestAnimationFrame(draw);
+    return()=>{disposed=true;cancelAnimationFrame(frame);};
+  },[mode,connection,config?.webots.module,config?.robot]);
 
   useEffect(() => {
     if (!config || !host.current) return;
@@ -125,7 +163,7 @@ export function WebotsScene({ config, mode, scale, cameraImage, cameraAvailable 
           const height = (config?.arena.height_m ?? 1.8) * scale;
           const aspect = (host.current?.clientWidth ?? 900) / Math.max(1, host.current?.clientHeight ?? 600);
           const fieldOfView = Math.PI / 4;
-          const altitude = Math.max(width, height * aspect) / (2 * Math.tan(fieldOfView / 2)) * 1.14;
+          const altitude = topViewAltitude(width,height,aspect,fieldOfView);
           viewpoint.position = new vector3Module.default(0, 0, altitude);
           // Webots uses FLU camera axes: forward=-Z, up=+Y in this top view.
           viewpoint.orientation = new vector4Module.default(-1 / Math.sqrt(3), 1 / Math.sqrt(3), 1 / Math.sqrt(3), 2 * Math.PI / 3);
@@ -136,16 +174,19 @@ export function WebotsScene({ config, mode, scale, cameraImage, cameraAvailable 
       } catch { /* The live scene remains available if a camera shortcut is unsupported. */ }
     };
     void applyView();
-    return () => { disposed = true; };
+    const observer=new ResizeObserver(()=>{if(mode==='top')void applyView();});
+    if(host.current)observer.observe(host.current);
+    return () => { disposed = true; observer.disconnect(); };
   }, [mode, scale, connection, config]);
 
-  return <div className={`rr-scene rr-view-${mode}`}>
+  return <div ref={stage} className={`rr-scene rr-view-${mode}`}>
     <div className="rr-webots-host" ref={host} aria-label="Escena física tridimensional del robot" style={{ visibility: mode === 'camera' ? 'hidden' : 'visible' }} />
     {mode === 'camera' && <div className="rr-camera-stage">
       {cameraImage && <img src={cameraImage} alt="Imagen de la cámara cenital utilizada por el sistema de visión" className={!cameraAvailable ? 'rr-stale' : ''} />}
       {!cameraAvailable && <div className="rr-scene-cover"><Icon name="camera" size={30} /><h2>Esperando imagen</h2><p>La cámara cenital aparecerá al conectar el entorno.</p></div>}
       <span className="rr-camera-live"><span className={`rr-dot ${cameraAvailable ? 'rr-dot-live' : ''}`} />Cámara cenital</span>
     </div>}
+    {tracking && (mode==='camera'||connection==='ready') && <TrackingOverlay {...tracking} />}
     {connection !== 'ready' && mode !== 'camera' && <div className="rr-scene-cover">
       <div className={`rr-scene-symbol ${config && connection === 'loading' ? 'rr-loading-symbol' : ''}`}><Icon name="orbit" size={30} /></div>
       <h2>{!config ? 'Esperando el entorno' : connection === 'loading' ? 'Preparando el entorno' : 'Escena sin conexión'}</h2>
