@@ -11,7 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from simulation.webcam.navigation import Navigation, NavigationError, make_navigation_router
+from simulation.webcam.navigation import (Navigation, NavigationError, make_navigation_router,
+                                         INT32_MAX, MAX_TURN_DEG_S, _velocity_mm_s)
 from simulation.webcam.detector import Detection
 from simulation.webcam.navigation_geometry import observe_robot
 
@@ -1040,7 +1041,8 @@ def test_speed_floor_never_applies_to_arrival_or_manual_stop(rig):
     assert nav.state()["left_target_mm_s"] == nav.state()["right_target_mm_s"] == 0
 
 
-@pytest.mark.parametrize("forward,turn", [(49, 32), (301, 32), (100, 11), (100, 101),
+@pytest.mark.parametrize("forward,turn", [(49, 32), (INT32_MAX + 1, 32),
+                                          (100, 11), (100, MAX_TURN_DEG_S + 1),
                                           (True, 32), (100, False), (100., 32),
                                           (100, float("nan"))])
 def test_speed_settings_reject_invalid_values_without_changing_state(rig, forward, turn):
@@ -1176,11 +1178,12 @@ def test_speed_routes_exact_json_header_revision_and_no_go(rig):
     with TestClient(app) as client:
         initial = client.get("/api/navigation/state").json()
         assert initial["speeds"] == {"forward_mm_s": 100, "turn_deg_s": 32}
-        assert initial["speed_limits"] == {"forward_min_mm_s": 50, "forward_max_mm_s": 300,
-                                            "turn_min_deg_s": 12, "turn_max_deg_s": 100}
+        assert initial["speed_limits"] == {"forward_min_mm_s": 50, "forward_max_mm_s": INT32_MAX,
+                                            "turn_min_deg_s": 12, "turn_max_deg_s": MAX_TURN_DEG_S}
+        assert initial["speed_scale_defaults"] == {"forward_mm_s": 300, "turn_deg_s": 100}
         assert client.post("/api/navigation/speeds", json=initial["speeds"]).status_code == 403
         for payload in ({"forward_mm_s": True, "turn_deg_s": 32}, {"forward_mm_s": 300},
-                        {"forward_mm_s": 301, "turn_deg_s": 32},
+                        {"forward_mm_s": INT32_MAX + 1, "turn_deg_s": 32},
                         {"forward_mm_s": 100, "turn_deg_s": 32, "extra": 0}):
             assert client.post("/api/navigation/speeds", json=payload, headers=headers).status_code == 422
         assert client.post("/api/navigation/speeds", content='{"forward_mm_s":NaN,"turn_deg_s":32}',
@@ -1220,3 +1223,64 @@ def test_old_firmware_capacity_fallback_and_turn_conversion_are_explicit(rig):
         nav.set_speeds(50, 61)
     assert nav.get_speeds() == {"forward_mm_s": 50, "turn_deg_s": 60}
     assert robot.starts == robot.stops == 0 and robot.drives == []
+
+
+def test_speed_configuration_above_previous_ceiling_persists_without_motor_orders(tmp_path):
+    camera, robot = FakeCamera(), FakeRobot()
+    robot.update(max_velocity_mm_s=INT32_MAX)
+    path = tmp_path / "navigation-state.json"
+    nav = Navigation(camera, robot, path)
+    result = nav.set_speeds(1000, 360)
+    assert result["speeds"] == {"forward_mm_s": 1000, "turn_deg_s": 360}
+    assert result["speed_revision"] == 1 and nav._required_velocity(result["speeds"]) == 1000
+    nav.set_speeds(100_000, 10_000)  # No incorpora un segundo techo arbitrario tras retirar300/100.
+    restored = Navigation(camera, robot, path)
+    try:
+        assert restored.get_speeds() == {"forward_mm_s": 100_000, "turn_deg_s": 10_000}
+        assert restored.state()["speed_revision"] == 2
+        assert robot.starts == robot.stops == 0 and robot.drives == []
+    finally:
+        nav.close()
+        restored.close()
+
+
+@pytest.mark.parametrize("old_limit", [100, 300])
+def test_advertised_previous_firmware_capacity_is_still_enforced(rig, old_limit):
+    _, robot, nav = rig
+    robot.update(max_velocity_mm_s=old_limit)
+    with pytest.raises(NavigationError, match="firmware") as rejected:
+        nav.set_speeds(1000, 360)
+    assert rejected.value.status_code == 409
+    assert nav.get_speeds() == {"forward_mm_s": 100, "turn_deg_s": 32}
+    assert robot.starts == robot.stops == 0 and robot.drives == []
+
+
+def test_int32_velocity_representation_and_turn_conversion_do_not_overflow(rig):
+    _, robot, nav = rig
+    robot.update(max_velocity_mm_s=INT32_MAX)
+    assert nav.set_speeds(INT32_MAX, MAX_TURN_DEG_S)["speed_revision"] == 1
+    assert nav._required_velocity(nav.get_speeds()) <= INT32_MAX
+    assert _velocity_mm_s(INT32_MAX) == INT32_MAX
+    assert _velocity_mm_s(-INT32_MAX) == -INT32_MAX
+    assert _velocity_mm_s(INT32_MAX + 1) == INT32_MAX
+    assert _velocity_mm_s(-INT32_MAX - 1) == -INT32_MAX
+    with pytest.raises(NavigationError):
+        nav.set_speeds(INT32_MAX + 1, 32)
+    with pytest.raises(NavigationError):
+        nav.set_speeds(100, MAX_TURN_DEG_S + 1)
+    with pytest.raises(NavigationError):
+        nav._required_velocity({"forward_mm_s": INT32_MAX, "turn_deg_s": MAX_TURN_DEG_S + 1})
+
+
+def test_unbounded_settings_keep_geometry_braking_finite_and_packets_representable():
+    for distance in (.025, .03, .1, .3, .6, 1e20):
+        for angle in (-math.pi, -.3, 0., .3, math.pi):
+            for mode in ("advancing", "turning"):
+                values = Navigation._wheel_commands(mode, angle, distance, 0.,
+                    forward_mm_s=INT32_MAX, turn_deg_s=MAX_TURN_DEG_S)
+                assert all(type(value) is int and abs(value) <= INT32_MAX for value in values)
+    short = Navigation._wheel_commands("advancing", 0., .1, 0., forward_mm_s=1000, turn_deg_s=360)
+    longer = Navigation._wheel_commands("advancing", 0., .6, 0., forward_mm_s=1000, turn_deg_s=360)
+    assert 50 < short[0] < longer[0] < 1000  # El límite geométrico sigue activo para recorridos reales.
+    assert Navigation._wheel_commands("advancing", 0., 1e20, 0.,
+                                      forward_mm_s=INT32_MAX) == (INT32_MAX, INT32_MAX)

@@ -19,6 +19,9 @@ from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot
 
+INT32_MAX = 2_147_483_647
+MAX_TURN_DEG_S = math.floor(INT32_MAX * 180. / (95. * math.pi))
+
 
 class NavigationError(RuntimeError):
     def __init__(self, message: str, status_code: int = 409):
@@ -39,7 +42,7 @@ def _finite(value, label: str) -> float:
 
 
 def _velocity_mm_s(value: float) -> int:
-    return round(max(-300., min(300., value)))
+    return round(max(-INT32_MAX, min(INT32_MAX, value)))
 
 
 class Navigation:
@@ -60,8 +63,9 @@ class Navigation:
     MAX_DISTANCE_M = .60
     ARRIVAL_M = .025
     SETTLED_M = .04
-    SPEED_LIMITS = {"forward_min_mm_s": 50, "forward_max_mm_s": 300,
-                    "turn_min_deg_s": 12, "turn_max_deg_s": 100}
+    SPEED_LIMITS = {"forward_min_mm_s": 50, "forward_max_mm_s": INT32_MAX,
+                    "turn_min_deg_s": 12, "turn_max_deg_s": MAX_TURN_DEG_S}
+    SPEED_SCALE_DEFAULTS = {"forward_mm_s": 300, "turn_deg_s": 100}
 
     def __init__(self, camera, robot, runtime_path: Path | None = None):
         self.camera = camera
@@ -100,20 +104,24 @@ class Navigation:
 
     @staticmethod
     def _validated_speeds(forward_mm_s, turn_deg_s):
-        if type(forward_mm_s) is not int or not 50 <= forward_mm_s <= 300:
-            raise NavigationError("La velocidad de avance debe ser un entero entre 50 y 300 mm/s.", 422)
-        if type(turn_deg_s) is not int or not 12 <= turn_deg_s <= 100:
-            raise NavigationError("La velocidad de giro debe ser un entero entre 12 y 100 grados/s.", 422)
+        if type(forward_mm_s) is not int or not 50 <= forward_mm_s <= INT32_MAX:
+            raise NavigationError(f"La velocidad de avance debe ser un entero entre 50 y {INT32_MAX} mm/s.", 422)
+        if type(turn_deg_s) is not int or not 12 <= turn_deg_s <= MAX_TURN_DEG_S:
+            raise NavigationError(f"La velocidad de giro debe ser un entero entre 12 y {MAX_TURN_DEG_S} grados/s.", 422)
         return {"forward_mm_s": forward_mm_s, "turn_deg_s": turn_deg_s}
 
     @staticmethod
     def _required_velocity(speeds):
-        return max(speeds["forward_mm_s"], math.ceil(95. * math.radians(speeds["turn_deg_s"])))
+        values = Navigation._validated_speeds(speeds["forward_mm_s"], speeds["turn_deg_s"])
+        required = max(values["forward_mm_s"], math.ceil(95. * math.radians(values["turn_deg_s"])))
+        if required > INT32_MAX:
+            raise NavigationError("La velocidad por rueda excede la representación de 32 bits.", 422)
+        return required
 
     @staticmethod
     def _remote_velocity_limit(remote):
         value = remote.get("max_velocity_mm_s", 100)
-        return min(300, value) if type(value) is int and value > 0 else 100
+        return min(INT32_MAX, value) if type(value) is int and value > 0 else 100
 
     def get_speeds(self):
         with self._lock:
@@ -362,6 +370,7 @@ class Navigation:
                     "vision_pauses": self._vision_pauses, "brief_vision_gaps": self._brief_vision_gaps,
                     "mode_switches": self._mode_switches,
                     "speeds": dict(self._speeds), "speed_limits": dict(self.SPEED_LIMITS),
+                    "speed_scale_defaults": dict(self.SPEED_SCALE_DEFAULTS),
                     "speed_revision": self._speed_revision,
                     "center_px": observation["center_px"] if observation else None,
                     "front_px": observation["front_px"] if observation else None,

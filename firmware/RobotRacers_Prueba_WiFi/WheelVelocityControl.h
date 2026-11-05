@@ -1,6 +1,7 @@
 #pragma once
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 namespace robotracers {
 
@@ -9,7 +10,8 @@ namespace robotracers {
 struct WheelVelocityControl {
   static constexpr double MM_PER_COUNT = 3.14159265358979323846 * 23.0 / 59.94;
   static constexpr int PWM_MAX = 160;
-  static constexpr int MAX_VELOCITY_MM_S = 300;
+  // Límite del formato de consigna, sin techo adicional de la aplicación.
+  static constexpr int MAX_VELOCITY_MM_S = std::numeric_limits<int32_t>::max();
 
   void reset(int64_t count, double now_s) {
     target_ = 0; reference_ = speed_ = eventSpeed_ = integral_ = 0;

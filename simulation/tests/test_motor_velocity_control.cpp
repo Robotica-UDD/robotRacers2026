@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 
 using robotracers::WheelVelocityControl;
@@ -41,9 +42,9 @@ void reset_and_idle() {
   CHECK(rig.control.reference() == 0.);
   CHECK(!rig.control.stalled());
   rig.control.setTarget(1000);
-  CHECK(rig.control.target() == 300);
+  CHECK(rig.control.target() == 1000);
   rig.control.setTarget(-1000);
-  CHECK(rig.control.target() == -300);
+  CHECK(rig.control.target() == -1000);
 }
 
 void startup_ramp() {
@@ -268,7 +269,7 @@ void quantized_friction_plant() {
 }
 
 void velocity_300_control_stop_and_reverse() {
-  CHECK(WheelVelocityControl::MAX_VELOCITY_MM_S == 300);
+  CHECK(WheelVelocityControl::MAX_VELOCITY_MM_S >= 300);
   CHECK(WheelVelocityControl::PWM_MAX == 160);
   for (const int desired : {300, -300}) {
     Rig rig;
@@ -310,6 +311,60 @@ void velocity_300_control_stop_and_reverse() {
     CHECK(rig.control.pwm() == 0);
   }
 }
+
+void large_velocity_and_integer_limits() {
+  const int max_velocity = std::numeric_limits<int32_t>::max();
+  CHECK(WheelVelocityControl::MAX_VELOCITY_MM_S == max_velocity);
+  CHECK(WheelVelocityControl::PWM_MAX == 160);
+  Rig extreme;
+  extreme.control.setTarget(max_velocity);
+  CHECK(extreme.control.target() == max_velocity);
+  CHECK(extreme.step(0) == 35);
+  extreme.control.setTarget(0);
+  CHECK(extreme.control.pwm() == 0);
+  extreme.control.setTarget(std::numeric_limits<int32_t>::min());
+  CHECK(extreme.control.target() == -max_velocity);
+  CHECK(extreme.step(0) == -35);
+  CHECK(std::isfinite(extreme.control.reference()));
+  extreme.control.setTarget(0);
+  CHECK(extreme.control.pwm() == 0);
+
+  for (const int direction : {-1, 1}) {
+    Rig rig;
+    const int desired = direction * 1000000;
+    rig.control.setTarget(desired);
+    CHECK(rig.control.target() == desired);  // Sin el antiguo techo de 300.
+    for (int i = 1; i <= 1000; ++i) {
+      const int pwm = rig.step(direction * (i / 5));
+      CHECK(pwm * direction >= 0 && !rig.control.stalled());
+      CHECK(std::abs(rig.control.reference()) <= 150. * rig.time + .01);
+    }
+    CHECK(std::abs(rig.control.pwm()) == 160);
+    rig.control.setTarget(0);
+    CHECK(rig.control.pwm() == 0 && !rig.control.startup());
+    const int64_t coast_count = rig.count;
+    for (int i = 0; i < 5; ++i) CHECK(rig.step(coast_count) == 0);
+    rig.control.setTarget(-desired);
+    CHECK(rig.control.target() == -desired);
+    CHECK(rig.step(coast_count) == 0);
+    bool reversed = false;
+    for (int i = 0; i < 200; ++i) {
+      const int pwm = rig.step(coast_count);
+      CHECK(pwm * direction <= 0 && !rig.control.stalled());
+      if (pwm != 0) { CHECK(pwm == -direction * 35); reversed = true; break; }
+    }
+    CHECK(reversed);
+    const int64_t base = rig.count;
+    for (int i = 1; i <= 1000; ++i) {
+      const int pwm = rig.step(base - direction * (i / 5));
+      CHECK(pwm * direction <= 0 && !rig.control.stalled());
+    }
+    CHECK(std::abs(rig.control.pwm()) == 160);
+    rig.control.setTarget(0);
+    CHECK(rig.control.pwm() == 0);
+    for (int i = 0; i < 100; ++i) CHECK(rig.step(rig.count) == 0);
+  }
+}
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -327,5 +382,6 @@ int main(int argc, char** argv) {
   else if (scenario == "pi_limits_and_antiwindup") pi_limits_and_antiwindup();
   else if (scenario == "quantized_friction_plant") quantized_friction_plant();
   else if (scenario == "velocity_300_control_stop_and_reverse") velocity_300_control_stop_and_reverse();
+  else if (scenario == "large_velocity_and_integer_limits") large_velocity_and_integer_limits();
   else CHECK(false);
 }

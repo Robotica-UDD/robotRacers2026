@@ -25,6 +25,7 @@ from fastapi import APIRouter, HTTPException, Request as WebRequest
 
 
 MAX_JSON_BYTES = 8192
+MAX_VELOCITY_MM_S = 2_147_483_647  # Formato de consigna firmado de 32 bits.
 RUNTIME = Path(__file__).resolve().parents[1] / ".runtime" / "robot-link.json"
 PRIVATE_NETWORKS = tuple(ipaddress.IPv4Network(value) for value in
                          ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"))
@@ -42,7 +43,7 @@ def _numeric_pair(value, *, integers=False):
 
 def _velocity_limit(status):
     value = status.get("max_velocity_mm_s", 100)
-    return value if type(value) is int and 1 <= value <= 300 else 0
+    return value if type(value) is int and 1 <= value <= MAX_VELOCITY_MM_S else 0
 
 
 class RobotLinkError(RuntimeError):
@@ -476,7 +477,7 @@ class RobotLink:
 
     def start_navigation(self, *, resume=False, require_velocity=False, required_velocity_mm_s=0):
         """Arma una sesión nueva sin aplicar velocidad ni reintentar órdenes."""
-        if type(required_velocity_mm_s) is not int or not 0 <= required_velocity_mm_s <= 300:
+        if type(required_velocity_mm_s) is not int or not 0 <= required_velocity_mm_s <= MAX_VELOCITY_MM_S:
             raise RobotLinkError("El límite de velocidad requerido no es válido.", 422)
         if not self._io_lock.acquire(timeout=self.http_timeout_s + .2):
             raise RobotLinkError("El enlace está ocupado; vuelve a intentarlo.", 409)
@@ -524,7 +525,7 @@ class RobotLink:
         return self._drive_command("velocity", left_mm_s, right_mm_s)
 
     def _drive_command(self, command, left, right):
-        maximum = 300 if command == "velocity" else 100
+        maximum = MAX_VELOCITY_MM_S if command == "velocity" else 100
         if any(type(value) is not int or not -maximum <= value <= maximum for value in (left, right)):
             raise RobotLinkError(f"Las velocidades deben ser enteros entre {-maximum} y {maximum}.", 422)
         with self._udp_lock:

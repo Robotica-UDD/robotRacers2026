@@ -287,7 +287,7 @@ def test_old_firmware_cannot_silently_accept_high_slider_speed(harness):
     assert harness.udp.packets == []
 
 
-@pytest.mark.parametrize("limit", [0, -1, 301, True, 100.5, "300"])
+@pytest.mark.parametrize("limit", [0, -1, 2_147_483_648, True, 100.5, "300"])
 def test_invalid_advertised_limits_do_not_allow_velocity_packets(harness, limit):
     harness.http.status.update(velocity_control=True, encoder_ready=True, max_velocity_mm_s=limit)
     with pytest.raises(RobotLinkError):
@@ -302,6 +302,24 @@ def test_raw_pwm_keeps_its_previous_bound_with_new_velocity_firmware(harness):
         harness.link.drive_navigation(101, 0)
     assert error.value.status_code == 422
     assert harness.udp.packets == []
+
+
+def test_velocity_has_no_old_300_ceiling_with_representation_firmware(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True, max_velocity_mm_s=2_147_483_647)
+    harness.link.start_navigation(require_velocity=True, required_velocity_mm_s=1000)
+    harness.link.drive_velocity_navigation(1000, -600)
+    assert harness.udp.commands("velocity")[-1]["left"] == 1000
+    assert harness.udp.commands("velocity")[-1]["right"] == -600
+    with pytest.raises(RobotLinkError):
+        harness.link.drive_velocity_navigation(-2_147_483_648, 0)
+
+
+def test_previous_300_firmware_requires_update_for_expanded_scale(harness):
+    harness.http.status.update(velocity_control=True, encoder_ready=True, max_velocity_mm_s=300)
+    with pytest.raises(RobotLinkError) as error:
+        harness.link.start_navigation(require_velocity=True, required_velocity_mm_s=1000)
+    assert error.value.status_code == 409
+    assert harness.http.actions("/navigation/start") == []
 
 
 def test_constructing_saved_link_and_closing_never_sends_commands(harness):

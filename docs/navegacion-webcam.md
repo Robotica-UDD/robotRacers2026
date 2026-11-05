@@ -110,8 +110,14 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
 
 La tarjeta **Navegación** incluye dos sliders independientes:
 
-- **Avance:** velocidad máxima entre 50 y 300 mm/s; inicialmente 100 mm/s.
-- **Giro:** velocidad máxima entre 12 y 100°/s; inicialmente 32°/s.
+- **Avance:** consigna máxima desde 50 mm/s; inicialmente 100 mm/s.
+- **Giro:** consigna máxima desde 12°/s; inicialmente 32°/s.
+
+Los topes de aplicación de 300 mm/s y 100°/s se retiraron. Cada control tiene
+**Ampliar escala**, que duplica el rango visible sin cambiar la consigna, y una
+casilla numérica para introducir un valor mayor y confirmarlo con Enter o al
+salir del campo. La escala se ajusta para mostrar el número confirmado. Llegar
+al extremo del slider no duplica la velocidad por sí solo.
 
 Puedes cambiarlos antes de iniciar o durante el recorrido. El servicio aplica
 las consignas gradualmente, conserva el destino y guarda los valores para la
@@ -122,9 +128,16 @@ no una velocidad constante garantizada durante todo el movimiento.
 
 La interfaz agrupa los movimientos del slider y confirma el valor guardado con
 el servicio. Si falla una actualización, muestra un aviso y recupera el último
-valor confirmado. La versión anterior del firmware admite hasta 100 mm/s;
-para superar ese límite se requiere la versión que anuncia
-`max_velocity_mm_s: 300`. Cada inicio comprueba el límite real del robot.
+valor confirmado. Las versiones anteriores del firmware admiten 100 o
+300 mm/s. La versión actual acepta el intervalo del formato firmado de 32 bits
+y anuncia `max_velocity_mm_s: 2147483647`; ese número describe el mensaje, no la
+velocidad física del robot. Cada inicio comprueba la capacidad de la versión
+conectada, y los números que no caben en el formato se rechazan.
+
+La potencia máxima sigue siendo PWM 160 de 255 y se conservan las rampas y el
+frenado. La velocidad alcanzable depende de la alimentación, carga y motores.
+Pololu especifica 6500 rpm sin carga a 6 V para el modelo #5178; ese dato no es
+una medición del robot sobre el suelo. [Especificaciones de Pololu](https://www.pololu.com/product/5178/specs).
 
 ## Límites del control y de la medición
 
@@ -134,8 +147,8 @@ para superar ese límite se requiere la versión que anuncia
 | Distancia máxima al seleccionar o iniciar | 600 mm |
 | Paso de giro a avance | Error de orientación de hasta 8° |
 | Volver a girar durante el avance | Error mayor de 25° |
-| Velocidad máxima de avance | Slider de 50 a 300 mm/s; valor inicial de 100 mm/s y base mínima de marcha de 50 mm/s |
-| Velocidad máxima de giro | Slider de 12 a 100°/s; valor inicial de 32°/s, con separación de ruedas estimada en 190 mm |
+| Velocidad máxima de avance | Escala ampliable y entrada numérica desde 50 mm/s; valor inicial de 100 mm/s |
+| Velocidad máxima de giro | Escala ampliable y entrada numérica desde 12°/s; valor inicial de 32°/s |
 | Aproximación al destino | Reduce la consigna según distancia de frenado; usa 120 mm/s² para anticipar la parada |
 | Fin del giro | Reduce según el ángulo pendiente; usa 70°/s² como referencia de frenado |
 | Subida y bajada de consigna en Python | 120 y 180 mm/s², respectivamente |
@@ -207,7 +220,8 @@ la inercia, la iluminación, la altura de la cámara y el montaje del marcador.
 El servicio Python abre una sesión de control mediante HTTP autenticado en
 `POST /navigation/start`. Una confirmación correcta permite enviar consignas
 asociadas a esa sesión al puerto UDP 4210, a 20 Hz, mediante `command: velocity`.
-Los campos `left` y `right` son enteros en mm/s, entre −100 y 100; el perfil de
+Los campos `left` y `right` son enteros en mm/s, entre −2147483647 y 2147483647;
+se rechaza −2147483648 para evitar desbordar el valor absoluto. El perfil de
 esta aplicación usa los intervalos menores de la tabla anterior. Cada paquete lleva una secuencia
 creciente y renueva un plazo local de **300 ms** en el firmware. El armado inicial
 concede hasta un segundo para recibir el primer mando.
@@ -267,8 +281,8 @@ la captura de imagen hasta la aplicación de una consigna.
 ## Comprobaciones realizadas
 
 - El firmware con encoders se compiló con Arduino-ESP32 **2.0.14**:
-  **765001 bytes de programa y 50432 bytes de RAM**. Se cargó por USB y se
-  verificaron `max_velocity_mm_s: 300`, `velocity_control: true`, `encoder_ready: true`, ambos PWM a cero
+  **764933 bytes de programa y 50432 bytes de RAM**. Se cargó por USB y se
+  verificaron `max_velocity_mm_s: 2147483647`, `velocity_control: true`, `encoder_ready: true`, ambos PWM a cero
   y ninguna sesión de movimiento activa. La prueba de movimiento sigue pendiente.
 - Con la versión anterior del robot físico se enviaron consignas UDP **0/0** para verificar
   la caducidad local de 300 ms y el rechazo de paquetes posteriores. Esta

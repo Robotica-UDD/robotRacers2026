@@ -1,4 +1,4 @@
-// Última modificación: 2026-11-05 19:56 | America/Santiago (UTC-03).
+// Última modificación: 2026-11-05 20:15 | America/Santiago (UTC-03).
 // ESP32-S3, Arduino-ESP32 2.0.14. HTTP/UDP y control local de encoders a 100 Hz.
 // La duración se cumple en un temporizador local; el encendido nunca mueve motores.
 #include <Arduino.h>
@@ -445,6 +445,8 @@ void serviceNavigationUDP() {
     if (!stopping && !velocity && strcmp(command, "drive") != 0) continue;
     const int left = request["left"].as<int>(), right = request["right"].as<int>();
     const int commandLimit = velocity ? MAX_VELOCITY_MM_S : 100;
+    // -MAX conserva un intervalo simétrico: INT_MIN se rechaza sin negarlo ni
+    // tomar su valor absoluto. drive continúa limitado a PWM -100..100.
     if (left < -commandLimit || left > commandLimit || right < -commandLimit || right > commandLimit ||
         request["lease_ms"].as<int>() != int(NAV_LEASE_MS) || (stopping && (left != 0 || right != 0))) continue;
     applyNavigationPacket(session, request["seq"].as<uint32_t>(), stopping, velocity, left, right);

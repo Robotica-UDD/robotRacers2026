@@ -14,6 +14,9 @@
     .navigation-controls{padding:23px}.navigation-controls .section-label{margin-bottom:16px}.navigation-status{font-size:12px;font-weight:600;margin:0 0 8px;color:#365d50}.navigation-status[data-mode="error"]{color:#a23e35}.navigation-status[data-mode="active"]{color:#916015}.navigation-instruction{font-size:12px;color:var(--muted);line-height:1.65;margin:0 0 16px;min-height:39px}.navigation-calibration{font-size:10px;color:var(--muted);margin:0 0 13px;display:flex;align-items:center;justify-content:space-between;gap:8px}.navigation-distance{font-variant-numeric:tabular-nums;white-space:nowrap}.navigation-controls .calibrate-button{margin:0 0 11px;font-size:11px;padding:10px 12px}.navigation-note{font-size:10px;color:var(--muted);margin:14px 0 0;text-align:center;line-height:1.6}.navigation-overlay{position:absolute;pointer-events:none;overflow:visible}.navigation-overlay[hidden],.navigation-overlay [hidden]{display:none}.viewport[data-selectable="true"]{cursor:crosshair}.calibration-dot{fill:#ffc96b;stroke:#142321;stroke-width:2}.navigation-target{fill:#9af1e12b;stroke:#6ce5ce;stroke-width:2}.navigation-tether{stroke:#6ce5ce;stroke-width:2;stroke-linecap:round;stroke-dasharray:6 5}.navigation-center{fill:#bcfff0;stroke:#0a6654;stroke-width:1.5}.navigation-cross{stroke:#bcfff0;stroke-width:1.5;stroke-linecap:round}@media(max-width:1050px){.navigation-controls{padding:19px}}
     .speed-controls{margin:0 0 17px;padding:14px 13px 11px;border:1px solid var(--line);border-radius:14px;background:#ffffff64}.speed-control+.speed-control{margin-top:17px}.speed-heading{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:10px}.speed-heading label{font-size:10px;line-height:1.5;color:#547367;margin:0;max-width:122px}.speed-heading output{font-size:23px;font-weight:550;letter-spacing:-.045em;white-space:nowrap;font-variant-numeric:tabular-nums}.speed-heading output small{font-size:10px;font-weight:400;letter-spacing:0;color:var(--muted);margin-left:4px}.speed-range{display:block;width:100%;height:5px;appearance:none;-webkit-appearance:none;border:0;border-radius:99px;padding:0;margin:8px 0 9px;background:linear-gradient(to right,#2d8b74 0%,#2d8b74 var(--fill,20%),#dce7e1 var(--fill,20%),#dce7e1 100%);cursor:pointer;accent-color:var(--accent);touch-action:pan-y}.speed-range::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;border:3px solid white;background:#207d68;box-shadow:0 1px 5px #1e443b33}.speed-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;border:3px solid white;background:#207d68;box-shadow:0 1px 5px #1e443b33}.speed-range:focus-visible{outline:3px solid #4b9e9066;outline-offset:7px}.speed-range:disabled{opacity:.45;cursor:default}.speed-bounds{display:flex;justify-content:space-between;font-size:9px;color:#87988f;font-variant-numeric:tabular-nums}.speed-note{font-size:10px;line-height:1.6;color:var(--muted);margin:14px 0 0}.speed-status{min-height:14px;font-size:9px;color:var(--accent);margin:4px 0 0}.speed-controls .error{margin-top:8px;font-size:11px;padding:9px}
   </style>
+  <style>
+    .speed-heading label{flex:1;min-width:0;max-width:none}.speed-value-edit{display:flex;align-items:baseline;gap:4px;flex:0 1 64%;min-width:0}.speed-value-edit small{font-size:10px;color:var(--muted);white-space:nowrap}.speed-number{font:inherit;font-size:23px;font-weight:550;letter-spacing:-.045em;font-variant-numeric:tabular-nums;min-width:0;width:100%;padding:2px 0;border:0;border-bottom:1px solid transparent;border-radius:0;background:transparent;color:inherit;text-align:right;appearance:textfield;-moz-appearance:textfield}.speed-number::-webkit-inner-spin-button,.speed-number::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.speed-number:hover{border-bottom-color:#5b9e8155}.speed-number:focus-visible{outline:2px solid #4b9e9066;outline-offset:3px;border-radius:3px}.speed-number[aria-invalid="true"]{border-bottom-color:#bc6656}.speed-number:disabled{opacity:.45}.speed-scale-action{display:block;border:0;background:transparent;color:var(--accent);font:inherit;font-size:10px;padding:6px 0 0;margin-left:auto;cursor:pointer}.speed-scale-action:hover:not(:disabled){text-decoration:underline}.speed-scale-action:disabled{opacity:.4;cursor:default}
+  </style>
 </head>
 <body>
   <main class="app">
@@ -68,14 +71,16 @@
           <div class="navigation-calibration"><span id="navigation-calibration-label">Calibración pendiente</span><span id="navigation-distance" class="navigation-distance"></span></div>
           <div class="speed-controls" aria-label="Velocidades máximas">
             <div class="speed-control">
-              <div class="speed-heading"><label for="navigation-forward-speed">Velocidad máxima de avance</label><output for="navigation-forward-speed"><span id="navigation-forward-value">100</span><small>mm/s</small></output></div>
+              <div class="speed-heading"><label for="navigation-forward-speed">Velocidad máxima de avance</label><div class="speed-value-edit"><input id="navigation-forward-number" class="speed-number" type="number" min="50" step="1" value="100" inputmode="numeric" autocomplete="off" aria-label="Velocidad máxima de avance, en milímetros por segundo" aria-describedby="navigation-speed-note navigation-speed-error" disabled><small>mm/s</small></div></div>
               <input id="navigation-forward-speed" class="speed-range" type="range" min="50" max="300" step="10" value="100" aria-describedby="navigation-speed-note" aria-valuetext="100 milímetros por segundo" disabled>
               <div class="speed-bounds" aria-hidden="true"><span id="navigation-forward-min">50</span><span id="navigation-forward-max">300</span></div>
+              <button id="navigation-forward-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
             </div>
             <div class="speed-control">
-              <div class="speed-heading"><label for="navigation-turn-speed">Velocidad máxima de giro</label><output for="navigation-turn-speed"><span id="navigation-turn-value">32</span><small>°/s</small></output></div>
+              <div class="speed-heading"><label for="navigation-turn-speed">Velocidad máxima de giro</label><div class="speed-value-edit"><input id="navigation-turn-number" class="speed-number" type="number" min="12" step="1" value="32" inputmode="numeric" autocomplete="off" aria-label="Velocidad máxima de giro, en grados por segundo" aria-describedby="navigation-speed-note navigation-speed-error" disabled><small>°/s</small></div></div>
               <input id="navigation-turn-speed" class="speed-range" type="range" min="12" max="100" step="1" value="32" aria-describedby="navigation-speed-note" aria-valuetext="32 grados por segundo" disabled>
               <div class="speed-bounds" aria-hidden="true"><span id="navigation-turn-min">12</span><span id="navigation-turn-max">100</span></div>
+              <button id="navigation-turn-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
             </div>
             <p id="navigation-speed-note" class="speed-note">Máximas: el robot reduce al acercarse al destino.</p>
             <p id="navigation-speed-status" class="speed-status" role="status"></p>
@@ -148,6 +153,12 @@
     let confirmedSpeeds = {forward_mm_s: 100, turn_deg_s: 32}, draftSpeeds = {...confirmedSpeeds};
     let confirmedSpeedRevision = -1;
     let speedLimits = {forward_min_mm_s: 50, forward_max_mm_s: 300, turn_min_deg_s: 12, turn_max_deg_s: 100};
+    let speedScales = {forward_mm_s: 300, turn_deg_s: 100}, speedScaleInitialized = false;
+    const speedNumberEditing = new Set();
+    const speedFields = {
+      forward_mm_s: {range: 'navigation-forward-speed', number: 'navigation-forward-number', expand: 'navigation-forward-expand', min: 'forward_min_mm_s', max: 'forward_max_mm_s', base: 300, label: 'El avance', unit: 'mm/s'},
+      turn_deg_s: {range: 'navigation-turn-speed', number: 'navigation-turn-number', expand: 'navigation-turn-expand', min: 'turn_min_deg_s', max: 'turn_max_deg_s', base: 100, label: 'El giro', unit: '°/s'}
+    };
     let speedPending = null, speedInFlight = false, speedDebounce = null, speedInputVersion = 0, speedLastInputAt = 0;
     let speedSending = null;
     let speedAckGeneration = 0;
@@ -584,7 +595,7 @@
     }
     function robotSupportsSpeedSettings() {
       const capability = Number.isFinite(robotState?.max_velocity_mm_s) && robotState.max_velocity_mm_s > 0 ? robotState.max_velocity_mm_s : 100;
-      const required = Math.max(confirmedSpeeds.forward_mm_s, 95 * Math.PI / 180 * confirmedSpeeds.turn_deg_s);
+      const required = Math.max(confirmedSpeeds.forward_mm_s, Math.ceil(95 * Math.PI / 180 * confirmedSpeeds.turn_deg_s));
       return required <= capability;
     }
     function canStartNavigation() {
@@ -719,26 +730,47 @@
       return first.forward_mm_s === second.forward_mm_s && first.turn_deg_s === second.turn_deg_s;
     }
     function speedEditPending() {
-      return speedInteractions.size > 0 || !!speedPending || speedInFlight || speedDebounce !== null;
+      return speedInteractions.size > 0 || speedNumberEditing.size > 0 || !!speedPending || speedInFlight || speedDebounce !== null;
     }
     function setSpeedError(text) {
       $('navigation-speed-error').textContent = text;
       $('navigation-speed-error').hidden = !text;
     }
+    function ensureSpeedScale(field, value, strictlyAbove = false) {
+      const info = speedFields[field], limit = speedLimits[info.max];
+      let scale = Math.max(speedLimits[info.min] + 1, Math.min(limit, speedScales[field]));
+      while (scale < limit && (scale < value || (strictlyAbove && scale === value))) scale = Math.min(limit, scale * 2);
+      speedScales[field] = scale;
+    }
+    function expandSpeedScale(field) {
+      if (confirmedSpeedRevision < 0) return;
+      const limit = speedLimits[speedFields[field].max];
+      speedScales[field] = Math.min(limit, speedScales[field] * 2);
+      renderSpeedControls();
+    }
     function renderSpeedControls() {
       const forward = $('navigation-forward-speed'), turn = $('navigation-turn-speed');
-      forward.min = speedLimits.forward_min_mm_s; forward.max = speedLimits.forward_max_mm_s;
-      turn.min = speedLimits.turn_min_deg_s; turn.max = speedLimits.turn_max_deg_s;
+      ensureSpeedScale('forward_mm_s', draftSpeeds.forward_mm_s);
+      ensureSpeedScale('turn_deg_s', draftSpeeds.turn_deg_s);
+      forward.min = speedLimits.forward_min_mm_s; forward.max = speedScales.forward_mm_s;
+      turn.min = speedLimits.turn_min_deg_s; turn.max = speedScales.turn_deg_s;
       forward.value = draftSpeeds.forward_mm_s; turn.value = draftSpeeds.turn_deg_s;
       forward.disabled = turn.disabled = !navigationAvailable || confirmedSpeedRevision < 0;
       forward.setAttribute('aria-valuetext', `${draftSpeeds.forward_mm_s} milímetros por segundo`);
       turn.setAttribute('aria-valuetext', `${draftSpeeds.turn_deg_s} grados por segundo`);
-      $('navigation-forward-value').textContent = draftSpeeds.forward_mm_s;
-      $('navigation-turn-value').textContent = draftSpeeds.turn_deg_s;
+      for (const [field, info] of Object.entries(speedFields)) {
+        const input = $(info.number);
+        input.min = speedLimits[info.min];
+        if (!speedNumberEditing.has(info.number)) input.value = draftSpeeds[field];
+        input.disabled = !navigationAvailable || confirmedSpeedRevision < 0;
+        const digits = input.value.length;
+        input.style.fontSize = digits > 8 ? '15px' : digits > 6 ? '18px' : '23px';
+        $(info.expand).disabled = confirmedSpeedRevision < 0 || speedScales[field] >= speedLimits[info.max];
+      }
       $('navigation-forward-min').textContent = speedLimits.forward_min_mm_s;
-      $('navigation-forward-max').textContent = speedLimits.forward_max_mm_s;
+      $('navigation-forward-max').textContent = speedScales.forward_mm_s;
       $('navigation-turn-min').textContent = speedLimits.turn_min_deg_s;
-      $('navigation-turn-max').textContent = speedLimits.turn_max_deg_s;
+      $('navigation-turn-max').textContent = speedScales.turn_deg_s;
       for (const [input, value] of [[forward, draftSpeeds.forward_mm_s], [turn, draftSpeeds.turn_deg_s]]) {
         const fraction = (value - Number(input.min)) / (Number(input.max) - Number(input.min));
         input.style.setProperty('--fill', `${Math.max(0, Math.min(100, fraction * 100))}%`);
@@ -760,6 +792,15 @@
       confirmedSpeedRevision = revision;
       speedLimits = {forward_min_mm_s: limits.forward_min_mm_s, forward_max_mm_s: limits.forward_max_mm_s,
         turn_min_deg_s: limits.turn_min_deg_s, turn_max_deg_s: limits.turn_max_deg_s};
+      const firstScale = !speedScaleInitialized;
+      if (firstScale) {
+        for (const [field, info] of Object.entries(speedFields)) {
+          const requested = next.speed_scale_defaults?.[field];
+          speedScales[field] = Math.min(speedLimits[info.max], Number.isInteger(requested) && requested > speedLimits[info.min] ? requested : info.base);
+        }
+        speedScaleInitialized = true;
+      }
+      for (const field of Object.keys(speedFields)) ensureSpeedScale(field, values[field], firstScale);
       if (!speedEditPending()) draftSpeeds = {...confirmedSpeeds};
       return true;
     }
@@ -772,9 +813,8 @@
       const delay = Math.max(0, 150 - (performance.now() - speedLastInputAt));
       speedDebounce = setTimeout(() => { speedDebounce = null; flushSpeedSettings(); }, delay);
     }
-    function speedInput() {
+    function queueSpeedSettings(proposed) {
       if (!navigationAvailable || confirmedSpeedRevision < 0) return;
-      const proposed = {forward_mm_s: Number($('navigation-forward-speed').value), turn_deg_s: Number($('navigation-turn-speed').value)};
       if (!Number.isInteger(proposed.forward_mm_s) || !Number.isInteger(proposed.turn_deg_s)) return;
       draftSpeeds = proposed;
       speedInputVersion++;
@@ -787,6 +827,42 @@
       } else speedPending = {values: {...proposed}, version: speedInputVersion};
       scheduleSpeedSettings();
       updateNavigationUI();
+    }
+    function speedInput(event) {
+      const field = Object.keys(speedFields).find(key => speedFields[key].range === event.currentTarget.id);
+      if (!field) return;
+      const proposed = {...draftSpeeds, [field]: Number(event.currentTarget.value)};
+      queueSpeedSettings(proposed);
+    }
+    function beginNumberSpeedEdit(event) {
+      if (event.currentTarget.disabled) return;
+      speedNumberEditing.add(event.currentTarget.id);
+      speedInteractions.add(event.currentTarget.id);
+    }
+    function numberSpeedInput(event) {
+      beginNumberSpeedEdit(event);
+      event.currentTarget.setAttribute('aria-invalid', 'false');
+      setSpeedError('');
+    }
+    function commitNumberSpeed(input) {
+      if (!speedNumberEditing.has(input.id)) return;
+      const field = Object.keys(speedFields).find(key => speedFields[key].number === input.id);
+      if (!field) return;
+      const info = speedFields[field], raw = input.value.trim(), value = Number(raw);
+      let error = '';
+      if (!raw || !Number.isFinite(value) || !Number.isInteger(value)) error = `${info.label} debe ser un número entero.`;
+      else if (value < speedLimits[info.min]) error = `${info.label} debe ser de al menos ${number.format(speedLimits[info.min])} ${info.unit}.`;
+      else if (value > speedLimits[info.max]) error = `${info.label} admite hasta ${number.format(speedLimits[info.max])} ${info.unit}.`;
+      if (!error && !navigationAvailable) error = 'No se pudo guardar: no hay conexión con el servicio local.';
+      speedNumberEditing.delete(input.id); speedInteractions.delete(input.id);
+      if (error) {
+        input.setAttribute('aria-invalid', 'true');
+        input.value = draftSpeeds[field];
+        setSpeedError(error); renderSpeedControls(); return;
+      }
+      input.setAttribute('aria-invalid', 'false');
+      ensureSpeedScale(field, value);
+      queueSpeedSettings({...draftSpeeds, [field]: value});
     }
     async function flushSpeedSettings() {
       if (speedInFlight || !speedPending) return;
@@ -804,11 +880,12 @@
         // Una respuesta fallida no se reenvía: hace falta otro ajuste del usuario.
         speedPending = null; clearSpeedDebounce();
         draftSpeeds = {...confirmedSpeeds};
+        for (const info of Object.values(speedFields)) { speedNumberEditing.delete(info.number); speedInteractions.delete(info.number); }
         setSpeedError(error.message || 'No se pudo guardar el cambio. Se mantienen las velocidades anteriores.');
       } finally {
         speedInFlight = false; speedSending = null;
         if (accepted && speedPending) scheduleSpeedSettings();
-        else if (accepted && !speedInteractions.size) draftSpeeds = {...confirmedSpeeds};
+        else if (accepted && !speedInteractions.size && !speedNumberEditing.size) draftSpeeds = {...confirmedSpeeds};
         updateNavigationUI();
       }
     }
@@ -818,7 +895,7 @@
     function endSpeedInteraction(event) {
       if (event?.currentTarget?.id) speedInteractions.delete(event.currentTarget.id);
       else speedInteractions.clear();
-      if (!speedPending && !speedInFlight && !speedInteractions.size) draftSpeeds = {...confirmedSpeeds};
+      if (!speedPending && !speedInFlight && !speedInteractions.size && !speedNumberEditing.size) draftSpeeds = {...confirmedSpeeds};
       renderSpeedControls();
     }
     function updateNavigationUI() {
@@ -942,6 +1019,16 @@
         if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) beginSpeedInteraction(event);
       });
       input.addEventListener('keyup', endSpeedInteraction);
+    }
+    for (const [field, info] of Object.entries(speedFields)) {
+      const input = $(info.number);
+      input.addEventListener('focus', beginNumberSpeedEdit);
+      input.addEventListener('input', numberSpeedInput);
+      input.addEventListener('blur', () => commitNumberSpeed(input));
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') { event.preventDefault(); commitNumberSpeed(input); }
+      });
+      $(info.expand).addEventListener('click', () => expandSpeedScale(field));
     }
     window.addEventListener('pointerup', endSpeedInteraction);
     window.addEventListener('pointercancel', endSpeedInteraction);
