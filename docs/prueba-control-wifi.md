@@ -63,7 +63,8 @@ El firmware arranca con ambos motores y la turbina apagados. La prueba fija
 solo acepta la combinación 100/100/1000. El mismo firmware admite ahora una
 sesión independiente de navegación: Python la arma por HTTP y envía consignas
 por UDP a 20 Hz, con caducidad local de 300 ms después de cada mando válido.
-No utiliza todavía los encoders ni evita obstáculos. La
+La sesión de navegación solicita velocidades en mm/s y las regula localmente
+con encoders; exige el firmware que ofrece esa capacidad. No evita obstáculos. La
 [guía de navegación](navegacion-webcam.md) describe la calibración obligatoria,
 la selección explícita del destino y los límites de esta prueba. Durante una
 misión de navegación ya confirmada, una pérdida de imagen o Wi-Fi pone los

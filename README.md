@@ -48,8 +48,8 @@ USB desde el mismo panel. [Cómo configurar y probar el control Wi-Fi](docs/prue
 
 La tarjeta **Navegación** permite calibrar el centro y el frente con dos clics,
 seleccionar un destino en la imagen y pulsar **Ir al punto**. La selección nunca
-inicia movimiento. Esta prueba usa corrección visual y Wi-Fi; todavía no utiliza
-encoders ni evita obstáculos. La precisión del perfil de movimiento actual
+inicia movimiento. Esta prueba usa corrección visual y Wi-Fi, y el firmware
+regula velocidades en mm/s con los encoders. No evita obstáculos. La precisión del perfil de movimiento actual
 está pendiente de validación física. Ante pérdida de imagen o Wi-Fi, espera con los motores a cero y
 continúa hacia el mismo destino cuando recupera el seguimiento y la conexión.
 D48 y las paradas manuales cancelan el recorrido. Consulta

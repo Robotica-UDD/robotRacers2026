@@ -2,8 +2,9 @@
 
 El panel de http://127.0.0.1:8010/ permite seleccionar un destino en la imagen
 y enviar al robot una secuencia de giro, avance y parada. Python y OpenCV
-obtienen la posición desde el AprilTag; las consignas llegan a la ESP32 por
-Wi-Fi. Esta prueba funciona sin Webots ni ROS 2.
+obtienen la posición desde el AprilTag; las consignas de velocidad llegan a la
+ESP32 por Wi-Fi y el firmware regula cada rueda con su encoder. Esta prueba
+funciona sin Webots ni ROS 2.
 
 El perfil actual de movimiento suave todavía no tiene una medición de precisión
 física. Se han comprobado el enlace, la parada de las órdenes y el controlador
@@ -113,11 +114,11 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
 | Distancia máxima al seleccionar o iniciar | 600 mm |
 | Paso de giro a avance | Error de orientación de hasta 8° |
 | Volver a girar durante el avance | Error mayor de 25° |
-| Tope de avance | 65 PWM por rueda; referencia inicial de 55 a 65 según la distancia |
-| Tope de giro | 55 PWM por rueda; referencia inicial de 45 a 55 según el ángulo |
-| Subida y bajada de consigna | 60 y 120 unidades PWM por segundo, respectivamente |
+| Velocidad de avance | De 30 a 70 mm/s según la distancia, con corrección diferencial; ninguna rueda supera 70 mm/s |
+| Velocidad de giro | Ruedas opuestas entre 15 y 33 mm/s, aproximadamente de 9 a 20°/s con separación de 190 mm |
+| Subida y bajada de consigna en Python | 100 y 150 mm/s², respectivamente |
 | Cambio de sentido o de movimiento | Pasa por cero antes de invertir; frena ambas ruedas antes de cambiar entre giro y avance |
-| Referencias de velocidad visual | 0,07 m/s y 20°/s; se reducen al acercarse al destino o al ángulo final |
+| Control local de velocidad | 100 Hz en la ESP32, con realimentación de ambos encoders |
 | Inicio de la parada | Distancia estimada de hasta 25 mm |
 | Asentamiento | 400 ms con consignas cero; acepta hasta 40 mm al terminar |
 | Duración del intento | Sin cancelación automática por tiempo total; el tiempo se muestra como diagnóstico |
@@ -126,21 +127,38 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
 | Imagen requerida para conducir | Observación actual visible, con antigüedad de hasta 150 ms |
 | Recuperación del seguimiento | Al menos 3 fotogramas distintos y 150 ms de detección estable |
 
-Los valores PWM son magnitudes de la escala 0 a 255 del firmware, con el signo
-indicando la dirección; **65 no significa el 65 % de potencia ni 65 mm/s**.
-No hay un impulso inicial a 100: las consignas aumentan con una rampa desde cero.
-La velocidad y la velocidad angular se estiman desde fotogramas distintos y se
-filtran con una constante de tiempo de 0,2 segundos. Si la velocidad observada
-supera la referencia, el control puede reducir la consigna hasta 20 PWM; los
-valores de 55 y 45 son referencias de arranque, no mínimos obligatorios.
-Aplica además pequeñas correcciones diferenciales al avanzar.
+Las órdenes de navegación expresan **milímetros por segundo por rueda**, con el
+signo indicando la dirección. No son valores PWM. Python coordina la orientación
+y la llegada desde la cámara, aplica una rampa a la velocidad solicitada y envía
+las consignas a la ESP32. El firmware debe incrementar el esfuerzo de arranque
+hasta observar movimiento en los encoders y después regular la velocidad de
+cada rueda. Una orden de 0/0 detiene también ese esfuerzo de arranque.
 
-Las referencias de 0,07 m/s y 20°/s no son una velocidad real garantizada: dependen
-de la escala visual, el montaje y la respuesta física de los motores. El control
-no aumenta ciegamente la potencia si no se mueve. Ante falta de progreso, hace
-una pausa breve, recalcula el movimiento desde la posición actual y vuelve a
-intentarlo. Puede seguir intentando hasta llegar o hasta una parada manual, un
-fallo o un cambio de fuente. Sin visión válida sigue esperando con consigna cero.
+El arranque comienza en PWM 35 y aumenta hasta un máximo de 160, de manera
+independiente para cada rueda, hasta registrar dos cuentas en el sentido pedido.
+Después pasa al controlador de velocidad, con transición gradual. Utiliza las
+polaridades verificadas, rueda de 23 mm y 59,94 cuentas por vuelta. Si una rueda
+no entrega progreso correcto durante cinco segundos con una orden activa, el
+firmware cancela el movimiento y requiere un nuevo inicio; no sigue aumentando
+la potencia indefinidamente. Una inversión espera a que la rueda frene.
+
+Para cargar esta versión, conecta el robot por USB y ejecuta
+`./simulation/webcam/upload_robot.command`. El actualizador comprueba que haya
+una única ESP32, verifica que esté detenida y compila antes de cargar. Mantiene
+las credenciales Wi-Fi y no ordena movimientos.
+
+El inicio exige que el firmware informe `velocity_control: true` y
+`encoder_ready: true`, tanto en el estado del panel como en una consulta fresca
+al armar. **No hay alternativa automática de PWM abierto** si falta ese control.
+La velocidad visual filtrada sigue disponible como diagnóstico; ya no reduce
+el PWM ni sustituye la realimentación local de encoders.
+
+Las velocidades solicitadas no garantizan una precisión física medida: la
+conversión desde pulsos requiere los parámetros correctos de ruedas y encoders.
+Ante falta de progreso visual, el servicio hace una pausa breve, recalcula el
+movimiento desde la posición actual y vuelve a intentarlo. Puede seguir intentando
+hasta llegar o hasta una parada manual, un fallo o un cambio de fuente. Sin
+visión válida sigue esperando con consigna cero.
 
 La geometría se calcula mediante una homografía del cuadrado conocido de 40 mm.
 Su plano de referencia es **el plano del marcador**, que está por encima del
@@ -150,16 +168,18 @@ cámara cenital y el marcador horizontal reduce el problema, pero no equivale a
 una calibración métrica del suelo. Las distancias mostradas son aproximadas.
 
 Esta implementación **no evita obstáculos** ni planifica alrededor de ellos.
-Tampoco utiliza todavía la realimentación de los encoders: corrige a partir de
-la posición visual. Los encoders del robot y el firmware anterior de secuencias
-no participan en esta prueba. La precisión real dependerá además del agarre,
+Los encoders regulan la velocidad de las ruedas; la cámara sigue determinando
+la orientación hacia el destino y cuándo detenerse. El firmware anterior de
+secuencias se conserva como referencia independiente. La precisión real depende del agarre,
 la inercia, la iluminación, la altura de la cámara y el montaje del marcador.
 
 ## Comunicación y parada
 
 El servicio Python abre una sesión de control mediante HTTP autenticado en
 `POST /navigation/start`. Una confirmación correcta permite enviar consignas
-asociadas a esa sesión al puerto UDP 4210, a 20 Hz. Cada paquete lleva una secuencia
+asociadas a esa sesión al puerto UDP 4210, a 20 Hz, mediante `command: velocity`.
+Los campos `left` y `right` son enteros en mm/s, entre −100 y 100; el perfil de
+esta aplicación usa los intervalos menores de la tabla anterior. Cada paquete lleva una secuencia
 creciente y renueva un plazo local de **300 ms** en el firmware. El armado inicial
 concede hasta un segundo para recibir el primer mando.
 
@@ -193,17 +213,22 @@ reconexión de la misma cámara no lo hacen.
 El primer inicio manual sin confirmación no se reintenta automáticamente. La
 recuperación automática corresponde a una misión que ya fue iniciada y confirmada.
 
-El estado del panel incluye orientación relativa al destino, últimos mandos de
-las ruedas, velocidad y giro estimados visualmente, tiempo transcurrido y
-secuencia de imagen. La latencia HTTP de la
+El estado de navegación expone `left_target_mm_s` y `right_target_mm_s` para las
+consignas enviadas. Los campos anteriores `last_left` y `last_right` se mantienen
+por compatibilidad y ahora también representan mm/s, **no PWM**. Incluye además
+orientación relativa al destino, velocidad y giro estimados visualmente, tiempo
+transcurrido y secuencia de imagen. El estado del robot informa las velocidades
+de encoder por rueda, los contadores y el PWM aplicado por el controlador local.
+La latencia HTTP de la
 tarjeta Robot mide una consulta de estado; no mide el recorrido completo desde
 la captura de imagen hasta la aplicación de una consigna.
 
 ## Comprobaciones realizadas
 
-- El firmware actual se compiló y cargó con Arduino-ESP32 **2.0.14**:
-  **753473 bytes de programa y 48856 bytes de RAM**.
-- Con el robot físico se enviaron únicamente consignas UDP **0/0** para verificar
+- El firmware con encoders se compiló con Arduino-ESP32 **2.0.14**:
+  **764925 bytes de programa y 50432 bytes de RAM**. La carga está pendiente:
+  el USB se desconectó antes del intento y el usuario pospuso la prueba física.
+- Con la versión anterior del robot físico se enviaron consignas UDP **0/0** para verificar
   la caducidad local de 300 ms y el rechazo de paquetes posteriores. Esta
   comprobación no hizo avanzar ni girar el robot.
 - Se comprobó también el armado de una sesión nueva tras una caducidad usando
@@ -219,8 +244,11 @@ la captura de imagen hasta la aplicación de una consigna.
   selección sin movimiento, límites de destino, pausa y recuperación de visión,
   cambios de fuente, D48, caducidad y recuperación de sesión, reinicio, confirmaciones
   tardías tras cancelar, persistencia sin movimiento, rampas, paso por cero,
-  reducción de consigna por velocidad visual, transporte y solicitudes inválidas.
+  consignas métricas, rechazo de firmware sin control por encoder, transporte y solicitudes inválidas.
   Usan dobles de cámara y robot, sin abrir hardware ni enviar tráfico al robot.
+- Once pruebas C++ del controlador real, compilado sin Arduino, cubren fricción
+  estática, pulsos cuantizados, arranque, regulación, saturación, parada,
+  inversión con inercia y el límite de cinco segundos sin respuesta.
 
 **Queda pendiente validar este perfil de movimiento en el robot real y medir
 su error final.** No se ha confirmado que el robot físico alcance las tolerancias
