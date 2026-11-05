@@ -33,16 +33,30 @@ class AprilTagDetector:
         parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
         dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
         self.detector = cv2.aruco.ArucoDetector(dictionary, parameters)
+        # Una impresión recortada con poco margen puede unir su contorno a una
+        # sombra o al soporte. Se prueban otras aproximaciones de cuadriláteros;
+        # se mantienen diccionario, identificación y corrección de bits.
+        contour_parameters = cv2.aruco.DetectorParameters()
+        contour_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+        contour_parameters.polygonalApproxAccuracyRate = 0.08
+        self.contour_detector = cv2.aruco.ArucoDetector(dictionary, contour_parameters)
+        intermediate_parameters = cv2.aruco.DetectorParameters()
+        intermediate_parameters.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
+        intermediate_parameters.polygonalApproxAccuracyRate = 0.06
+        self.intermediate_detector = cv2.aruco.ArucoDetector(dictionary, intermediate_parameters)
 
     def process(self, frame: np.ndarray) -> Detection:
         started = time.monotonic()
         gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         found: dict[int, np.ndarray] = {}
-        for scale in (1.0, 1.5, 3.0):
+        attempts = ((self.detector, 1.0), (self.contour_detector, 1.0),
+                    (self.intermediate_detector, 1.0),
+                    (self.detector, 1.5), (self.detector, 3.0))
+        for detector, scale in attempts:
             pixels = gray if scale == 1.0 else cv2.resize(
                 gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
             )
-            corners, ids, _ = self.detector.detectMarkers(pixels)
+            corners, ids, _ = detector.detectMarkers(pixels)
             if ids is not None:
                 for identifier, corner in zip(ids.flatten(), corners):
                     found.setdefault(int(identifier), np.asarray(corner, dtype=float).reshape(4, 2) / scale)

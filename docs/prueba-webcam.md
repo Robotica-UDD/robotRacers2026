@@ -102,7 +102,7 @@ uv sync --frozen --extra assets
 
 Las pruebas utilizan imágenes generadas y una cámara simulada; no abren hardware.
 El detector y la captura son independientes del servicio de navegación.
-La entrega pasa 33 pruebas específicas de webcam y las 104 pruebas del proyecto.
+La entrega pasa 79 pruebas específicas de webcam y las 150 pruebas del proyecto.
 Se comprobó la detección del PDF renderizado, la inclusión de recursos en el
 paquete instalable y el panel con imágenes generadas, incluidas pérdida de
 detección y parada. La webcam Trust 1080p Full HD conectada por USB se comprobó
@@ -117,6 +117,28 @@ otra cámara si cambian los índices al conectar o desconectar un equipo. Si no
 está disponible, solicita actualizar la lista. Durante el arranque tolera hasta
 cinco segundos de lecturas inicialmente vacías; una pérdida posterior de la
 captura sigue retirando la posición y orientación.
+
+### Contornos del marcador impreso
+
+El detector prueba primero la configuración estándar y después dos
+aproximaciones del contorno para tolerar pequeñas irregularidades del recorte
+o sombras del soporte, antes de ampliar la imagen. Mantiene el diccionario,
+la comprobación del identificador 0 y la corrección de bits originales. No
+convierte un cuadrado rechazado en una posición válida.
+
+La comparación local recuperó 13 de 13 imágenes nítidas del robot que antes
+se perdían por el contorno; los 10 fotogramas con desenfoque fuerte del mismo
+lote permanecieron sin detección. Esto valida esos fotogramas, no cualquier
+montaje o velocidad. En una vista más cercana, el patrón válido pero recortado
+hasta el negro volvió a perderse: el margen blanco continuo de 5 mm sigue
+siendo necesario para un montaje fiable. La comprobación con la nueva impresión
+física queda pendiente; los ajustes no reemplazan ese margen. El patrón debe
+estar visible y suficientemente enfocado para obtener una orientación válida.
+Se añadieron también 24 pruebas de tarjeta con el margen correcto: patrón de
+48, 80 y 160 píxeles, cuatro orientaciones y dos condiciones de iluminación.
+Todas conservan la identidad y el sentido del frente, sin ajustes adicionales
+de la corrección de bits. Son comprobaciones sintéticas, no mediciones de la
+nueva impresión física.
 
 La referencia anotada se generó mediante imagegen a partir de la foto aportada;
 sus instrucciones están registradas en `docs/recursos-webcam.json`. El PDF y el
