@@ -44,9 +44,11 @@ abre en **http://127.0.0.1:8010/**. La captura permanece apagada hasta pulsar
 Para usar otro puerto: `./simulation/webcam/run.command --port 8012`.
 
 1. Conecta la webcam y sitúala fija encima del área de prueba, mirando al suelo.
-2. Selecciona el índice de cámara y pulsa **Iniciar**. Los índices no son una
-   enumeración de dispositivos conectados: si aparece la cámara integrada o no
-   hay imagen, detén y prueba otro índice.
+2. En macOS, selecciona la webcam por su **nombre** y pulsa **Iniciar**. El panel
+   recomienda una cámara USB cuando la encuentra. Si acabas de conectarla, pulsa
+   **Actualizar cámaras** con la captura detenida. El nombre también aparece
+   sobre la imagen. Si no se pueden consultar los nombres, se muestran índices
+   manuales y se indica esa limitación.
 3. Si macOS solicita acceso a Cámara, permítelo para la aplicación que lanza
    Python. Si no aparece la imagen, comprueba Ajustes del Sistema → Privacidad y
    seguridad → Cámara y cierra otras aplicaciones que estén usando la webcam.
@@ -100,11 +102,21 @@ uv sync --frozen --extra assets
 
 Las pruebas utilizan imágenes generadas y una cámara simulada; no abren hardware.
 El detector y la captura son independientes del servicio de navegación.
-La entrega pasa 21 pruebas específicas de webcam y las 92 pruebas del proyecto.
+La entrega pasa 33 pruebas específicas de webcam y las 104 pruebas del proyecto.
 Se comprobó la detección del PDF renderizado, la inclusión de recursos en el
 paquete instalable y el panel con imágenes generadas, incluidas pérdida de
-detección y parada. La comprobación con webcam, impresión y montaje físicos
-queda pendiente de realizar con el robot.
+detección y parada. La webcam Trust 1080p Full HD conectada por USB se comprobó
+en este Mac, transmitiendo imágenes de 1280 × 720 píxeles al panel. La detección
+del marcador con la impresión y montaje físicos queda pendiente de realizar
+con el robot.
+
+El selector consulta AVFoundation sin abrir las cámaras y conserva el mismo
+orden que [OpenCV en macOS](https://github.com/opencv/opencv/blob/4.14.0/modules/videoio/src/cap_avfoundation_mac.mm).
+Al iniciar, vuelve a resolver el identificador del dispositivo para evitar abrir
+otra cámara si cambian los índices al conectar o desconectar un equipo. Si no
+está disponible, solicita actualizar la lista. Durante el arranque tolera hasta
+cinco segundos de lecturas inicialmente vacías; una pérdida posterior de la
+captura sigue retirando la posición y orientación.
 
 La referencia anotada se generó mediante imagegen a partir de la foto aportada;
 sus instrucciones están registradas en `docs/recursos-webcam.json`. El PDF y el
