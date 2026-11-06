@@ -1,8 +1,9 @@
 """Navegación local a un punto con la cámara cenital y una sesión de mando finita.
 
 La selección y la calibración nunca envían órdenes. El inicio es explícito;
-una misión activa espera sin moverse si pierde visión o enlace y continúa al
-recuperarlos. D48, una parada manual o un fallo de driver cancelan la misión.
+una misión activa tolera una pérdida breve de visión conservando el mando;
+si se prolonga o pierde el enlace, espera y continúa al recuperarlos.
+D48, una parada manual o un fallo de driver cancelan la misión.
 Las distancias se estiman en el plano horizontal del marcador de 40 mm.
 """
 from __future__ import annotations
@@ -18,6 +19,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot
+from .straight_control import StraightControl
 
 INT32_MAX = 2_147_483_647
 MAX_TURN_DEG_S = math.floor(INT32_MAX * 180. / (95. * math.pi))
@@ -50,6 +52,11 @@ class Navigation:
     FRESH_SECONDS = .20
     VISION_GRACE_SECONDS = .15
     BRIEF_VISION_GAP_SECONDS = .10
+    CONTINUATION_MAX_SECONDS = .40
+    CONTINUATION_MAX_TRAVEL_MM = 60.
+    CONTINUATION_MAX_SWEEP_DEG = 15.
+    TURN_CONFIRM_SECONDS = .25
+    TURN_CONFIRM_FRAMES = 3
     RESUME_STABLE_SECONDS = .15
     RESUME_FRAMES = 3
     RESUME_RETRY_SECONDS = 1.
@@ -728,7 +735,35 @@ class Navigation:
                 self._phase, self._message = phase, message
 
     @staticmethod
-    def _wheel_commands(mode, bearing, distance, mode_elapsed, *, forward_mm_s=100, turn_deg_s=32):
+    def _advance_speed(distance, forward_mm_s):
+        base = 50. + (forward_mm_s - 50.) * min(1., max(0., distance) / .15)
+        braking = math.sqrt(2. * 450. * max(0., distance * 1000. - 25.))
+        return max(50., min(base, braking))
+
+    def _continuation_window(self, mode, commands, distance, *, recent_speed=0.):
+        """Presupuesto por consignas, no odometría ni distancia física garantizada."""
+        left, right = commands
+        if mode in {"settling", "adjusting", "retrying"}:
+            return 0.
+        wheel_speed = max(abs(left), abs(right), abs(recent_speed))
+        window = self.BRIEF_VISION_GAP_SECONDS
+        if mode == "advancing" and left > 0 and right > 0 and distance is not None:
+            window = self.CONTINUATION_MAX_SECONDS
+            braking_distance = wheel_speed * wheel_speed / (2. * 450.)
+            remaining = max(0., distance * 1000. - self.ARRIVAL_M * 1000. - 10. - braking_distance)
+            if wheel_speed > 0:
+                window = min(window, self.CONTINUATION_MAX_TRAVEL_MM / wheel_speed,
+                             remaining / wheel_speed)
+        angular_deg_s = abs(math.degrees((right - left) / 190.))
+        if angular_deg_s > 0:
+            window = min(window, self.CONTINUATION_MAX_SWEEP_DEG / angular_deg_s)
+        if wheel_speed > 0:
+            window = min(window, self.CONTINUATION_MAX_TRAVEL_MM / wheel_speed)
+        return max(0., window)
+
+    @staticmethod
+    def _wheel_commands(mode, bearing, distance, mode_elapsed, *, forward_mm_s=100, turn_deg_s=32,
+                        steering_rate=None):
         """Consignas físicas por rueda en mm/s; el firmware regula con encoders."""
         if mode == "turning":
             angle = abs(math.degrees(bearing))
@@ -737,10 +772,9 @@ class Navigation:
             magnitude = max(20., min(95. * math.radians(turn_deg_s), 95. * math.radians(target_rate)))
             sign = 1 if bearing > 0 else -1
             return _velocity_mm_s(-sign * magnitude), _velocity_mm_s(sign * magnitude)
-        base_speed = 50. + (forward_mm_s - 50.) * min(1., max(0., distance) / .15)
-        braking_speed = math.sqrt(2. * 450. * max(0., distance * 1000. - 25.))
-        speed = max(50., min(base_speed, braking_speed))
-        angular_rate = max(-math.radians(12), min(math.radians(12), bearing * 1.5))
+        speed = Navigation._advance_speed(distance, forward_mm_s)
+        angular_rate = (max(-math.radians(8), min(math.radians(8), bearing * .8))
+                        if steering_rate is None else steering_rate)
         correction = 95. * angular_rate
         left, right = speed - correction, speed + correction
         scale = min(1., forward_mm_s / max(abs(left), abs(right)))
@@ -763,6 +797,12 @@ class Navigation:
         settle_started = None
         last_valid_capture = None
         last_valid_sequence = None
+        last_valid_distance = None
+        gap_window = None
+        recent_motion = []
+        camera_sequence, camera_capture = None, None
+        large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
+        straight = StraightControl()
         final_phase, final_message = "error", "Recorrido detenido."
         try:
             while not self._cancel.is_set():
@@ -776,6 +816,12 @@ class Navigation:
                 self._check_source(frame)
                 if self._cancel.is_set():
                     break
+                age = frame.get("frame_age_ms")
+                frame_sequence = frame.get("sequence")
+                if (type(frame_sequence) is int and frame_sequence != camera_sequence
+                        and isinstance(age, Real) and not isinstance(age, bool)
+                        and math.isfinite(age) and age >= 0):
+                    camera_sequence, camera_capture = frame_sequence, tick - age / 1000.
                 observation = self._observe(frame, calibration, target)
                 # No se conduce con la pose anterior cuando falla una detección.
                 if observation is not None and frame["frame_age_ms"] > self.VISION_GRACE_SECONDS * 1000:
@@ -783,11 +829,14 @@ class Navigation:
                 self._update_motion_estimate(frame, observation, tick)
                 if observation is None:
                     stable_since, stable_frames, last_sequence = None, 0, None
+                    large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
                 else:
                     sequence = frame.get("sequence")
                     if last_valid_capture is None or sequence != last_valid_sequence:
                         last_valid_capture = tick - frame["frame_age_ms"] / 1000
                         last_valid_sequence = sequence
+                        last_valid_distance = observation["distance_m"]
+                        gap_window = None
                     with self._lock:
                         self._vision_hold = False
                         self._vision_gap_ms = 0.
@@ -835,6 +884,7 @@ class Navigation:
                         session, armed_at, session_seen = new_session, tick, False
                         boot_id = remote.get("boot_id")
                         mode = None
+                        straight.reset()
                         with self._lock:
                             self._session = session
                         remote = self.robot.state()
@@ -867,12 +917,14 @@ class Navigation:
                         session, session_seen = None, False
                         waiting_vision = True
                         mode = None
+                        straight.reset()
                         # Reconfirmar varios fotogramas antes de restaurar un enlace.
                         stable_since, stable_frames, last_sequence = None, 0, None
                         stable = False
                         next_arm = tick
 
                 if session is None:
+                    straight.reset()
                     self._set_phase("paused_connection", "Esperando conexión y seguimiento. El destino se conserva.")
                     if (connected and stable and not arming and tick >= next_arm
                             and not remote.get("moving") and not remote.get("navigation_active")):
@@ -882,9 +934,18 @@ class Navigation:
                     continue
 
                 age_ms = frame.get("frame_age_ms")
+                recent_motion = [(stamp, speed) for stamp, speed in recent_motion if tick - stamp <= .25]
+                with self._lock:
+                    held = (self._last_left, self._last_right)
+                hold_seconds = self._continuation_window(mode, held, last_valid_distance,
+                    recent_speed=max((speed for _, speed in recent_motion), default=0.))
+                if observation is None:
+                    gap_window = hold_seconds if gap_window is None else min(gap_window, hold_seconds)
+                    hold_seconds = gap_window
                 can_hold = (observation is None and not waiting_vision
                             and last_valid_capture is not None
-                            and 0 <= tick - last_valid_capture <= self.BRIEF_VISION_GAP_SECONDS
+                            and 0 <= tick - last_valid_capture < hold_seconds
+                            and camera_capture is not None and 0 <= tick - camera_capture <= self.VISION_GRACE_SECONDS
                             and self._same_source(frame, calibration)
                             and frame.get("running") is True and frame.get("opening") is False
                             and isinstance(age_ms, Real) and not isinstance(age_ms, bool)
@@ -906,7 +967,7 @@ class Navigation:
                         self._abandon()
                         session, session_seen = None, False
                         waiting_vision = True
-                    remaining_gap = last_valid_capture + self.BRIEF_VISION_GAP_SECONDS - time.monotonic()
+                    remaining_gap = last_valid_capture + hold_seconds - time.monotonic()
                     self._cancel.wait(min(self.CONTROL_INTERVAL, max(0., remaining_gap)))
                     continue
 
@@ -917,6 +978,8 @@ class Navigation:
                         self._vision_gap_ms = 0.
 
                 if observation is None or (waiting_vision and not stable):
+                    straight.reset()
+                    large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
                     self._set_phase("paused_vision", "Esperando una imagen estable. El destino se conserva.")
                     try:
                         self._zero_drive()  # Renueva la sesión sin mover el robot.
@@ -974,6 +1037,8 @@ class Navigation:
                                 break
                             target = next_target
                             mode = None
+                            straight.reset()
+                            large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
                             retry_until = settle_started = None
                             no_progress_seconds = 0.
                             best_distance = best_angle = math.inf
@@ -991,12 +1056,25 @@ class Navigation:
                         desired = "turning" if angle > math.radians(8) else "advancing"
                     elif mode == "turning" and angle <= math.radians(8):
                         desired = "advancing"
-                    elif mode == "advancing" and angle > math.radians(25):
-                        desired = "turning"
+                    elif mode == "advancing":
+                        if angle > math.radians(25):
+                            if large_angle_since is None:
+                                large_angle_since = tick
+                            if frame_sequence != large_angle_sequence:
+                                large_angle_frames += 1
+                                large_angle_sequence = frame_sequence
+                            if (tick - large_angle_since >= self.TURN_CONFIRM_SECONDS
+                                    and large_angle_frames >= self.TURN_CONFIRM_FRAMES):
+                                desired = "turning"
+                        else:
+                            large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
                     if desired != mode and mode is not None:
+                        straight.reset()
+                        large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
                         mode = "adjusting"
                         self._set_phase(mode, "Frenando suavemente antes de cambiar de movimiento…")
                     elif desired != mode:
+                        straight.reset()
                         mode, mode_started = desired, active_seconds
                         best_angle = angle
                         self._set_phase(mode, "Orientando hacia el destino…" if mode == "turning"
@@ -1014,10 +1092,15 @@ class Navigation:
                     if mode == "adjusting":
                         left = right = 0
                     else:
+                        steering = (straight.update(bearing, tick - frame["frame_age_ms"] / 1000.,
+                                     frame_sequence, self._advance_speed(distance, speeds["forward_mm_s"]), distance)
+                                    if mode == "advancing" else None)
                         left, right = self._wheel_commands(mode, bearing, distance, active_seconds - mode_started,
-                                                           **speeds)
+                                                           **speeds, steering_rate=steering)
                 try:
                     self._ramp_drive(left, right)
+                    with self._lock:
+                        recent_motion.append((tick, max(abs(self._last_left), abs(self._last_right))))
                     was_controlling = True
                 except Exception:
                     self._abandon()

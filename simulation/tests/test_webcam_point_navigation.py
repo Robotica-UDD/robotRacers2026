@@ -168,6 +168,9 @@ def rig():
     nav.WAYPOINT_SETTLE_SECONDS = .02
     nav.RESUME_STABLE_SECONDS = .03
     nav.RESUME_RETRY_SECONDS = .03
+    # Las regresiones antiguas usan una ventana corta; las pruebas específicas
+    # siguientes ejercitan por separado la continuación nueva de 400 ms.
+    nav.CONTINUATION_MAX_SECONDS = .10
     try:
         yield camera, robot, nav
     finally:
@@ -219,14 +222,20 @@ def test_turn_sign_and_small_forward_correction_are_positive_left(rig):
     left, right = next(command for command in robot.drives if command != (0, 0))
     assert -53 <= left < 0 and 0 < right <= 53
     # Una vez orientado, una pequeña desviación mantiene avance con corrección.
-    camera.pose(heading=math.radians(40))  # Destino a 45°, quedan 5° a izquierda.
+    until = time.monotonic() + .3
+    while time.monotonic() < until:
+        camera.pose(heading=math.radians(40))  # Destino a 45°, quedan 5° a izquierda.
+        time.sleep(.02)  # El filtro consume fotogramas nuevos, no repite una imagen fija.
     wait_for(lambda: any(l >= 0 and r > l for l, r in robot.drives))
     assert nav.state()["phase"] == "advancing"
     # La histéresis no vuelve a giro con 15°; sí cuando supera 25°.
     camera.pose(heading=math.radians(30))
     time.sleep(.03)
     assert nav.state()["phase"] == "advancing"
-    camera.pose(heading=math.radians(10))
+    until = time.monotonic() + .34
+    while time.monotonic() < until:
+        camera.pose(heading=math.radians(10))
+        time.sleep(.02)
     wait_for(lambda: nav.state()["phase"] == "turning")
 
 
@@ -1023,7 +1032,8 @@ def test_moderate_speed_increase_keeps_precision_floor():
 
 def test_forward_floor_does_not_clamp_inner_wheel_and_distort_steering():
     left, right = Navigation._wheel_commands("advancing", .3, .03, 0.)
-    assert (left, right) == (40, 80)  # Centro a60 mm/s, corrección diferencial conservada.
+    assert 0 < left < 50 < right and left + right == 120  # No fuerza la rueda interior a50.
+    assert right - left < 40  # Corrección más suave que el perfil anterior.
     assert left < 50 and (left + right) / 2 == 60
     for bearing in (-.4, -.1, 0., .1, .4):
         left, right = Navigation._wheel_commands("advancing", bearing, .6, 0.)
@@ -1529,3 +1539,100 @@ def test_start_revision_body_strictness_and_legacy_empty_body_remain_compatible(
         assert robot.starts == 0
         assert client.post("/api/navigation/start", json={}, headers=headers).status_code == 200
         assert robot.starts == 1
+
+
+def test_continuation_window_uses_time_travel_rotation_and_arrival_budgets(rig):
+    _, _, nav = rig
+    nav.CONTINUATION_MAX_SECONDS = .4
+    assert nav._continuation_window('advancing', (100, 100), .3) == pytest.approx(.4)
+    assert nav._continuation_window('advancing', (200, 200), .3) == pytest.approx(.3)
+    assert nav._continuation_window('advancing', (100, 100), .045) == 0  # Reserva también el frenado.
+    assert 0 < nav._continuation_window('advancing', (100, 100), .060) < .15
+    assert nav._continuation_window('advancing', (100, 100), .02) == 0
+    assert nav._continuation_window('settling', (100, 100), .3) == 0
+    assert nav._continuation_window('adjusting', (-100, 100), .3) == 0
+    assert nav._continuation_window('advancing', (100, 100), .3, recent_speed=400.) == pytest.approx(.15)
+    fast_pivot = nav._continuation_window('turning', (-663, 663), .3)
+    assert fast_pivot < .04  # El barrido acota un giro rápido, aunque haya imágenes sin marcador.
+
+
+def test_extended_fresh_camera_gap_keeps_exact_command_then_recovers_without_stop(rig):
+    camera, robot, nav = rig
+    nav.CONTINUATION_MAX_SECONDS = .4
+    begin_observed_motion(camera, robot, nav)
+    wait_for(lambda: robot.drives[-1][0] == robot.drives[-1][1] and robot.drives[-1][0] >= 80)
+    camera.update(visible=False, marker_corners=None)
+    wait_for(lambda: nav.state()['vision_grace_active'])
+    held, count = robot.drives[-1], len(robot.drives)
+    until = time.monotonic() + .18
+    while time.monotonic() < until:
+        camera.update(visible=False, frame_age_ms=0.)
+        time.sleep(.02)
+    assert nav.state()['vision_grace_active'] and nav.state()['vision_gap_ms'] > 100
+    assert all(command == held for command in robot.drives[count:])
+    camera.pose()
+    camera.update(visible=True)
+    wait_for(lambda: not nav.state()['vision_grace_active'])
+    assert nav.state()['phase'] == 'advancing' and nav.state()['vision_pauses'] == 0
+    assert (0, 0) not in robot.drives[count:]
+
+
+def test_extended_gap_never_refreshes_budget_without_tag_and_preserves_pending_point(rig):
+    camera, robot, nav = rig
+    nav.CONTINUATION_MAX_SECONDS = .4
+    begin_observed_motion(camera, robot, nav)
+    wait_for(lambda: robot.drives[-1][0] == robot.drives[-1][1] and robot.drives[-1][0] >= 80)
+    pending = nav.state()['target_px']
+    camera.update(visible=False, marker_corners=None)
+    until = time.monotonic() + .47
+    while time.monotonic() < until:
+        camera.update(visible=False, frame_age_ms=0.)
+        time.sleep(.02)
+    assert nav.state()['phase'] == 'paused_vision' and robot.drives[-1] == (0, 0)
+    assert nav.state()['active'] and nav.state()['target_px'] == pending
+    assert nav.state()['waypoint_index'] == 0
+    stable_vision(camera, nav)
+    wait_for(lambda: nav.state()['phase'] == 'advancing')
+
+
+def test_frozen_camera_sequence_cannot_extend_motion_with_forged_fresh_age(rig):
+    camera, robot, nav = rig
+    nav.CONTINUATION_MAX_SECONDS = .4
+    begin_observed_motion(camera, robot, nav)
+    camera.update(visible=False, marker_corners=None)
+    wait_for(lambda: nav.state()['vision_grace_active'])
+    wait_for(lambda: nav.state()['phase'] == 'paused_vision', timeout=.23)
+    assert robot.drives[-1] == (0, 0)
+
+
+def test_brief_heading_outlier_does_not_trigger_an_in_place_turn(rig):
+    camera, robot, nav = rig
+    begin_observed_motion(camera, robot, nav)
+    wait_for(lambda: robot.drives[-1][0] == robot.drives[-1][1] and robot.drives[-1][0] >= 80)
+    count = len(robot.drives)
+    for _ in range(4):
+        camera.pose(heading=-math.radians(35))
+        time.sleep(.025)
+    assert nav.state()['phase'] == 'advancing'
+    assert all(left > 0 and right > 0 for left, right in robot.drives[count:])
+    camera.pose()
+    time.sleep(.03)
+    assert nav.state()['phase'] == 'advancing'
+
+
+def test_sustained_heading_error_still_requests_a_proper_turn(rig):
+    camera, robot, nav = rig
+    begin_observed_motion(camera, robot, nav)
+    until = time.monotonic() + .34
+    while time.monotonic() < until:
+        camera.pose(heading=-math.radians(35))
+        time.sleep(.02)
+    wait_for(lambda: nav.state()['phase'] == 'turning')
+    assert any(left < 0 < right for left, right in robot.drives)
+
+
+def test_steering_correction_does_not_modify_turn_commands():
+    for bearing in (-math.pi, -.5, .5, math.pi):
+        original = Navigation._wheel_commands('turning', bearing, .3, 0., turn_deg_s=400)
+        assert Navigation._wheel_commands('turning', bearing, .3, 0., turn_deg_s=400,
+                                          steering_rate=math.radians(8)) == original

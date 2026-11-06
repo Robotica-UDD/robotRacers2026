@@ -957,6 +957,11 @@
       $('navigation-status').textContent = navigationBusy === 'calibrate' ? 'Guardando calibración' : calibrationPaused ? 'Calibración en pausa' : calibrationStage === 'center' ? '1 de 2 · Centro del robot' : calibrationStage === 'front' ? '2 de 2 · Frente del robot' : navigationStartPending && !navigationState?.active ? 'Preparando recorrido' : navigationAvailable ? phases[navigationState?.phase] || 'Navegación' : 'Navegación no disponible';
       $('navigation-status').dataset.mode = navigationState?.phase === 'error' ? 'error' : active ? 'active' : 'idle';
       $('navigation-instruction').textContent = calibrationPaused ? 'Tu selección está guardada. Cuando vuelva la visión y la conexión, continúa desde este paso.' : calibrationStage === 'center' ? 'Haz clic en el centro entre las dos ruedas.' : calibrationStage === 'front' ? 'El centro sigue al robot. Haz clic en un punto hacia su frente, en el plano del marcador.' : navigationState?.message || (navigationCalibrated() ? 'Haz clic en la imagen para añadir puntos en orden. Después inicia el recorrido.' : 'Calibra el centro y el frente del robot antes de añadir puntos.');
+      if (active && navigationState?.vision_grace_active === true && !['stop', 'clear-targets'].includes(navigationBusy) && !['stopping', 'error', 'paused_vision', 'paused_connection', 'reconnecting', 'paused'].includes(navigationState.phase)) {
+        $('navigation-status').textContent = 'Recuperando marcador';
+        $('navigation-status').dataset.mode = 'active';
+        $('navigation-instruction').textContent = 'Manteniendo el último mando mientras recupera el marcador.';
+      }
       if (!active && !calibrationStage && robotState?.connected && robotState?.ready && (robotState.velocity_control !== true || !robotSupportsSpeedSettings())) {
         $('navigation-status').textContent = 'Actualización del robot pendiente';
         $('navigation-instruction').textContent = 'Actualiza el firmware por USB para usar estas velocidades. Tu calibración y tu destino están guardados.';

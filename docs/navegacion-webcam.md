@@ -93,8 +93,8 @@ el punto pendiente pulsando **Iniciar recorrido**; después de completar toda la
 lista, ese mismo botón permite repetirla desde el primer punto. Si añades puntos
 después de completar una ruta, el siguiente inicio recorre solo los nuevos.
 
-Si se pierde una detección o la conexión Wi-Fi, la misión **espera con los
-motores a cero**, conservando la lista, su progreso y la calibración. Al recuperarse una
+Si la pérdida de detección supera el margen breve o se pierde la conexión Wi-Fi,
+la misión **espera con los motores a cero**, conservando la lista, su progreso y la calibración. Al recuperarse una
 imagen estable y el enlace, continúa automáticamente hacia el punto pendiente.
 No debes volver a seleccionarlo ni iniciar otra misión. Un cambio real de
 cámara o resolución sí requiere repetir la calibración.
@@ -150,6 +150,21 @@ el robot real. La velocidad alcanzable depende de la alimentación, carga y moto
 Pololu especifica 6500 rpm sin carga a 6 V para el modelo #5178; ese dato no es
 una medición del robot sobre el suelo. [Especificaciones de Pololu](https://www.pololu.com/product/5178/specs).
 
+## Corrección suave durante el avance
+
+El avance utiliza un control proporcional y derivativo (PD) del rumbo, con
+filtrado de la orientación y de su variación entre imágenes. Una zona muerta de
+1,5° evita perseguir pequeñas oscilaciones de la medición. La corrección está
+limitada a 8°/s y cambia gradualmente, hasta 25°/s². La rueda interior conserva
+avance positivo y la corrección disminuye cerca del destino. No acumula una
+corrección integral visual que pueda quedarse cargada tras una pérdida.
+
+Solo procesa imágenes distintas. Reinicia el filtro al cambiar de punto, al
+salir del avance o tras una pausa larga. Una lectura aislada que indique más de
+25° de error ya no provoca un giro en el sitio: debe persistir durante 250 ms y
+al menos tres imágenes diferentes. Los giros hacia el destino conservan el
+perfil anterior. La regulación por encoder de cada rueda también se mantiene.
+
 ## Límites del control y de la medición
 
 | Parámetro del programa | Valor configurado |
@@ -157,7 +172,7 @@ una medición del robot sobre el suelo. [Especificaciones de Pololu](https://www
 | Frecuencia del control de movimiento | 20 Hz |
 | Distancia máxima al seleccionar o iniciar | 600 mm |
 | Paso de giro a avance | Error de orientación de hasta 8° |
-| Volver a girar durante el avance | Error mayor de 25° |
+| Volver a girar durante el avance | Error mayor de 25° durante 250 ms y al menos 3 imágenes distintas |
 | Velocidad máxima de avance | Escala ampliable y entrada numérica desde 50 mm/s; valor inicial de 100 mm/s |
 | Velocidad máxima de giro | Escala ampliable y entrada numérica desde 12°/s; valor inicial de 32°/s |
 | Aproximación al destino | Reduce la consigna según distancia de frenado; usa 450 mm/s² para anticipar la parada |
@@ -172,7 +187,7 @@ una medición del robot sobre el suelo. [Especificaciones de Pololu](https://www
 | Tiempo sin progreso observado | Tras 5 segundos activos, pausa 0,5 segundos, vuelve a estimar y reintenta con los mismos topes |
 | Imagen requerida al iniciar | Antigüedad de hasta 200 ms |
 | Imagen requerida para conducir | Observación actual visible, con antigüedad de hasta 150 ms |
-| Fallo breve de detección | Hasta 100 ms desde la última captura válida, mantiene el último mando sin acelerar; exige misma cámara activa e imagen reciente |
+| Fallo breve de detección | En avance, hasta 400 ms, 60 mm o 15° estimados, lo primero que se agote; también reduce la ventana cerca del destino. Exige la misma cámara entregando imágenes nuevas y recientes |
 | Recuperación del seguimiento | Al menos 3 fotogramas distintos y 150 ms de detección estable |
 
 Las órdenes de navegación expresan **milímetros por segundo por rueda**, con el
@@ -243,14 +258,23 @@ la sesión y rechaza los paquetes atrasados de esa sesión. La parada explícita
 se envía por UDP y también por HTTP. Este mecanismo no depende de que el
 navegador siga abierto ni de que Python pueda enviar una orden posterior.
 
-Si falla brevemente la detección, pero la misma cámara sigue activa y entregando
-imágenes recientes, el servicio conserva el último mando mientras la última
-captura válida tenga hasta 100 ms. No aumenta la consigna ni calcula nuevas
-correcciones o una llegada usando la pose anterior. Esto evita frenar y volver
-a arrancar por un fotograma sin marcador. La comprobación se realiza a 20 Hz;
-los 100 ms son un umbral del programa, no un tiempo físico de parada garantizado.
+Si falla brevemente la detección mientras avanza, pero la misma cámara sigue
+entregando imágenes nuevas y recientes, el servicio conserva exactamente el
+último mando. La ventana máxima es de **400 ms** desde la última detección real,
+con presupuestos de **60 mm de recorrido por rueda** y **15° de giro** estimados
+según las consignas; se aplica lo que se agote antes. Cerca del destino reduce
+la ventana para reservar el margen de llegada y la distancia de frenado estimada. Al girar en el sitio conserva
+como máximo 100 ms, también reducido por los presupuestos de recorrido y giro.
+Frenar, cambiar de movimiento o llegar no extiende el último mando.
 
-Si la detección no vuelve dentro de ese margen, envía 0/0 y espera. La cámara
+Los presupuestos de recorrido y giro no son desplazamientos físicos medidos:
+el host recibe estados de encoder aproximadamente una vez por segundo y no hace
+odometría con ellos. El control de cada rueda sí permanece activo en la ESP32 a
+100 Hz. No aumenta la consigna, confirma llegadas ni cambia de punto mientras
+no ve el marcador. Las imágenes nuevas sin marcador no renuevan el presupuesto.
+La interfaz muestra **Recuperando marcador** y retira la posición visual anterior.
+
+Si la detección no vuelve dentro de ese margen, envía 0/0 y espera, conservando la ruta y el punto pendiente. La cámara
 desconectada, una imagen atrasada, una fuente distinta o una parada manual no
 usan ese margen. Tras tres fotogramas distintos y al menos 150 ms de seguimiento
 estable, recalcula desde la posición observada, conservando el destino.
@@ -321,7 +345,8 @@ la captura de imagen hasta la aplicación de una consigna.
 - Un recorrido virtual de cuatro puntos con giros se completó en orden dentro
   de una misma sesión. Se verificaron la continuación desde un punto intermedio,
   el borrado durante el movimiento y el rechazo de solicitudes atrasadas después
-  de borrar o detener. La suite completa pasó **504 pruebas**.
+  de borrar o detener. La suite completa pasó **553 pruebas**, incluyendo ruido de orientación,
+  correcciones suaves, continuación breve sin marcador y parada al agotar el presupuesto.
 - Las pruebas automatizadas cubren geometría, sentido de los giros, correcciones,
   selección sin movimiento, límites de destino, pausa y recuperación de visión,
   cambios de fuente, D48, caducidad y recuperación de sesión, reinicio, confirmaciones
