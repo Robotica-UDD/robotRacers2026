@@ -16,6 +16,7 @@
   </style>
   <style>
     .speed-heading label{flex:1;min-width:0;max-width:none}.speed-value-edit{display:flex;align-items:baseline;gap:4px;flex:0 1 64%;min-width:0}.speed-value-edit small{font-size:10px;color:var(--muted);white-space:nowrap}.speed-number{font:inherit;font-size:23px;font-weight:550;letter-spacing:-.045em;font-variant-numeric:tabular-nums;min-width:0;width:100%;padding:2px 0;border:0;border-bottom:1px solid transparent;border-radius:0;background:transparent;color:inherit;text-align:right;appearance:textfield;-moz-appearance:textfield}.speed-number::-webkit-inner-spin-button,.speed-number::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.speed-number:hover{border-bottom-color:#5b9e8155}.speed-number:focus-visible{outline:2px solid #4b9e9066;outline-offset:3px;border-radius:3px}.speed-number[aria-invalid="true"]{border-bottom-color:#bc6656}.speed-number:disabled{opacity:.45}.speed-scale-action{display:block;border:0;background:transparent;color:var(--accent);font:inherit;font-size:10px;padding:6px 0 0;margin-left:auto;cursor:pointer}.speed-scale-action:hover:not(:disabled){text-decoration:underline}.speed-scale-action:disabled{opacity:.4;cursor:default}
+    .obstacle-tools{margin:0 0 17px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#ffffff58}.map-modes{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:3px;background:#dbe8e175;border-radius:10px}.map-mode{font:inherit;font-size:10px;font-weight:600;line-height:1.35;border:0;border-radius:8px;padding:9px 6px;background:transparent;color:#567168}.map-mode[aria-pressed="true"]{background:#fff;color:#175f50;box-shadow:0 1px 4px #244b3a12}.obstacle-draft-status{font-size:10px;line-height:1.6;color:var(--muted);margin:10px 0 0}.obstacle-draft-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:5px}.obstacle-draft-actions[hidden]{display:none}.obstacle-link{font:inherit;font-size:10px;color:var(--accent);background:none;border:0;padding:3px 0}.obstacle-link:hover:not(:disabled){text-decoration:underline}.obstacle-margin-row{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-top:12px}.obstacle-margin-row label{font-size:10px;line-height:1.4;margin:0}.obstacle-margin-value{display:flex;align-items:center;gap:5px}.obstacle-margin-value input{width:54px;font:inherit;font-size:12px;font-variant-numeric:tabular-nums;text-align:right;color:#24463e;border:1px solid var(--line);border-radius:7px;background:#ffffffaa;padding:6px}.obstacle-margin-value small{font-size:10px;color:var(--muted)}.obstacle-tools .button{font-size:10px;padding:9px;margin-top:10px}.planning-status{font-size:10px;line-height:1.55;margin:10px 0 0;color:#58786c}.planning-status:empty{display:none}.planning-status[data-mode="blocked"]{color:#a23e35}.navigation-obstacle{fill:#d85e493d;stroke:#e58a79;stroke-width:2}.navigation-obstacle-clearance{fill:#e6b65115;stroke:#e2b559;stroke-width:1.3;stroke-dasharray:5 4}.navigation-planned-path{fill:none;stroke:#6ce5ce;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.navigation-path-dot{fill:#d0fff3;stroke:#20775f;stroke-width:1}.navigation-obstacle-draft{fill:#f18c6540;stroke:#ffba8d;stroke-width:2;stroke-dasharray:5 4}.navigation-obstacle-vertex{fill:#ffe0bd;stroke:#723e2a;stroke-width:1.5}
     .navigation-route-line{stroke:#8edec9bb;stroke-width:2;fill:none;stroke-linejoin:round}.navigation-waypoint-number{font-family:inherit;font-weight:650;text-anchor:middle;dominant-baseline:central;fill:#173c36}.navigation-progress{font-size:11px;font-weight:600;color:#547367;margin:-3px 0 13px;font-variant-numeric:tabular-nums}.navigation-route-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.navigation-route-actions .button{padding:11px 7px;font-size:11px;gap:6px;min-width:0}
   </style>
 </head>
@@ -39,6 +40,12 @@
           <div id="viewport" class="viewport">
             <img id="camera-image" alt="Imagen en directo con recuadro del marcador y flecha hacia el frente del robot">
             <svg id="navigation-overlay" class="navigation-overlay" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" hidden>
+              <g id="navigation-obstacle-clearances"></g>
+              <g id="navigation-obstacles"></g>
+              <polyline id="navigation-planned-path" class="navigation-planned-path" vector-effect="non-scaling-stroke" hidden/>
+              <g id="navigation-path-dots"></g>
+              <polyline id="navigation-obstacle-draft" class="navigation-obstacle-draft" vector-effect="non-scaling-stroke" hidden/>
+              <g id="navigation-obstacle-vertices"></g>
               <polyline id="navigation-route-line" class="navigation-route-line" vector-effect="non-scaling-stroke" hidden/>
               <line id="navigation-tether" class="navigation-tether" vector-effect="non-scaling-stroke" hidden/>
               <circle id="navigation-center" class="navigation-center" vector-effect="non-scaling-stroke" hidden/>
@@ -73,6 +80,23 @@
           <p id="navigation-instruction" class="navigation-instruction">Calibra el centro y el frente del robot antes de añadir puntos.</p>
           <p id="navigation-progress" class="navigation-progress" role="status">Sin puntos</p>
           <div class="navigation-calibration"><span id="navigation-calibration-label">Calibración pendiente</span><span id="navigation-distance" class="navigation-distance"></span></div>
+          <div class="obstacle-tools" aria-label="Herramientas del mapa">
+            <div class="map-modes" role="group" aria-label="Herramienta de dibujo">
+              <button id="navigation-point-mode" class="map-mode" type="button" aria-pressed="true" disabled>Marcar puntos</button>
+              <button id="navigation-obstacle-mode" class="map-mode" type="button" aria-pressed="false" disabled>Dibujar obstáculo</button>
+            </div>
+            <p id="navigation-obstacle-hint" class="obstacle-draft-status" role="status">Marca destinos o dibuja el contorno de un obstáculo con cuatro clics.</p>
+            <div id="navigation-obstacle-draft-actions" class="obstacle-draft-actions" hidden>
+              <button id="navigation-obstacle-undo" class="obstacle-link" type="button">Deshacer vértice</button>
+              <button id="navigation-obstacle-cancel" class="obstacle-link" type="button">Cancelar dibujo</button>
+            </div>
+            <div class="obstacle-margin-row">
+              <label for="navigation-obstacle-margin">Margen de seguridad</label>
+              <span class="obstacle-margin-value"><input id="navigation-obstacle-margin" type="number" min="10" max="200" step="1" value="30" inputmode="numeric" aria-label="Margen de seguridad, en milímetros" title="Espacio adicional al tamaño del robot" disabled><small>mm</small></span>
+            </div>
+            <p id="navigation-planning-status" class="planning-status" role="status"></p>
+            <button id="navigation-obstacle-clear" class="button secondary" type="button" disabled>Borrar obstáculos</button>
+          </div>
           <div class="speed-controls" aria-label="Velocidades máximas">
             <div class="speed-control">
               <div class="speed-heading"><label for="navigation-forward-speed">Velocidad máxima de avance</label><div class="speed-value-edit"><input id="navigation-forward-number" class="speed-number" type="number" min="50" step="1" value="100" inputmode="numeric" autocomplete="off" aria-label="Velocidad máxima de avance, en milímetros por segundo" aria-describedby="navigation-speed-note navigation-speed-error" disabled><small>mm/s</small></div></div>
@@ -156,6 +180,8 @@
     let navigationActionVersion = 0, navigationCameraKey = '';
     let routePointQueue = [], routePointSending = false, routeEditGeneration = 0;
     let routePointSendingGeneration = -1;
+    let navigationTool = 'points', obstacleDraft = [], obstaclePointer = null, obstacleDraftSource = '';
+    let obstacleMarginEditing = false, obstacleMarginPending = false;
     let calibrationStage = '', calibrationCenter = null, calibrationAnchor = null;
     let calibrationCenterTag = null, calibrationProjectionReady = false, calibrationSourceKey = '';
     let cameraStateReceivedAt = 0;
@@ -407,7 +433,7 @@
       const actionBusy = robotConnectBusy || robotPulseSubmitting || robotStopBusy;
       const navigating = navigationOwnsRobot();
       const configurationBlocked = navigating && !navigationAllowsReconnect();
-      $('robot-pulse').disabled = !linked || !robotState?.ready || moving || robotPulsePending || actionBusy || configuring || navigating || !!calibrationStage || navigationBusy === 'calibrate';
+      $('robot-pulse').disabled = !linked || !robotState?.ready || moving || robotPulsePending || actionBusy || configuring || navigating || !!calibrationStage || navigationTool === 'obstacle' || obstacleDraft.length > 0 || ['calibrate', 'obstacles', 'obstacle-settings'].includes(navigationBusy);
       $('robot-stop').disabled = !linked || !(moving || navigating) || robotStopBusy;
       $('robot-pulse-label').textContent = moving ? 'Avanzando…' : robotPulsePending ? 'Confirmando parada…' : 'Avanzar 1 segundo';
       $('robot-stop-label').textContent = robotStopBusy ? 'Deteniendo…' : 'Detener';
@@ -542,6 +568,8 @@
     async function stopRobot() {
       if ($('robot-stop').disabled) return;
       robotStopBusy = true;
+      routeEditGeneration++; routePointQueue = []; cancelObstacleDraft(false);
+      navigationActionVersion++; navigationAppliedVersion = ++navigationReadVersion;
       robotAppliedVersion = ++robotReadVersion;
       setRobotError('');
       updateRobotButtons();
@@ -575,6 +603,106 @@
       const count = navigationWaypoints().length, index = navigationState?.waypoint_index;
       return Number.isInteger(index) ? Math.max(0, Math.min(count, index)) : 0;
     }
+    function navigationObstacles() {
+      const polygons = navigationState?.obstacles_px;
+      return Array.isArray(polygons) ? polygons.filter(polygon => Array.isArray(polygon) && polygon.length === 4 && polygon.every(finitePoint)) : [];
+    }
+    function canEditObstacles() {
+      return navigationAvailable && cameraFrameFresh() && navigationCalibrated() && !navigationOwnsRobot() && !navigationBusy && !calibrationStage && !routePointsPending() &&
+        !robotState?.moving && !robotPulsePending && !robotPulseSubmitting && !robotStopBusy && !robotConnectBusy;
+    }
+    function cancelObstacleDraft(render = true) {
+      obstacleDraft = []; obstaclePointer = null; obstacleDraftSource = '';
+      if (render) updateNavigationUI();
+    }
+    function setNavigationTool(tool) {
+      if (!['points', 'obstacle'].includes(tool) || !canEditObstacles()) return;
+      routeEditGeneration++; routePointQueue = [];
+      cancelObstacleDraft(false); navigationTool = tool;
+      setNavigationError(''); updateNavigationUI();
+    }
+    function obstacleQuadValid(points) {
+      if (!Array.isArray(points) || points.length !== 4 || !points.every(finitePoint)) return false;
+      const cross = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+      const on = (a, b, p) => Math.abs(cross(a, b, p)) < 1e-8 && p[0] >= Math.min(a[0], b[0]) - 1e-8 && p[0] <= Math.max(a[0], b[0]) + 1e-8 && p[1] >= Math.min(a[1], b[1]) - 1e-8 && p[1] <= Math.max(a[1], b[1]) + 1e-8;
+      const intersect = (a, b, c, d) => {
+        const abC = cross(a, b, c), abD = cross(a, b, d), cdA = cross(c, d, a), cdB = cross(c, d, b);
+        return (abC * abD < 0 && cdA * cdB < 0) || on(a, b, c) || on(a, b, d) || on(c, d, a) || on(c, d, b);
+      };
+      for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) if (Math.hypot(points[i][0] - points[j][0], points[i][1] - points[j][1]) < 2) return false;
+      const area = Math.abs(points.reduce((sum, point, i) => sum + point[0] * points[(i + 1) % 4][1] - point[1] * points[(i + 1) % 4][0], 0)) / 2;
+      return area > 4 && !intersect(points[0], points[1], points[2], points[3]) && !intersect(points[1], points[2], points[3], points[0]);
+    }
+    async function appendObstaclePoint(point) {
+      if (!canEditObstacles() || navigationTool !== 'obstacle' || !finitePoint(point)) return;
+      if (navigationObstacles().length >= 32) { setNavigationError('Se pueden guardar hasta 32 obstáculos. Borra los anteriores para añadir otros.'); return; }
+      const key = cameraKey();
+      if (obstacleDraftSource && obstacleDraftSource !== key) cancelObstacleDraft(false);
+      obstacleDraftSource = key;
+      obstacleDraft.push(point); obstaclePointer = null;
+      setNavigationError(''); updateNavigationUI();
+      if (obstacleDraft.length < 4) return;
+      if (!obstacleQuadValid(obstacleDraft)) {
+        obstacleDraft.pop();
+        setNavigationError('El contorno se cruza o es demasiado pequeño. Marca los vértices siguiendo el borde; puedes deshacer o cancelar.');
+        updateNavigationUI(); return;
+      }
+      const revision = navigationRouteRevision();
+      if (revision === null) { obstacleDraft.pop(); setNavigationError('Espera a que se confirme el mapa antes de guardar el obstáculo.'); return; }
+      const generation = routeEditGeneration;
+      const polygon = obstacleDraft.map(point => [...point]);
+      const accepted = await navigationPost('obstacles', {polygons_px: [...navigationObstacles().map(polygon => polygon.map(point => [...point])), polygon], frame_width: state.frame_width, frame_height: state.frame_height, camera_id: state.camera_id || null, expected_route_revision: revision});
+      if (generation !== routeEditGeneration) return;
+      if (accepted) { cancelObstacleDraft(false); navigationTool = 'points'; }
+      else obstacleDraft = polygon.slice(0, 3);
+      updateNavigationUI();
+    }
+    function clearNavigationObstacles() {
+      if (!navigationAvailable || navigationBusy === 'clear-obstacles' || (!navigationObstacles().length && !obstacleDraft.length && navigationState?.planning_status !== 'blocked')) return;
+      routeEditGeneration++; routePointQueue = [];
+      cancelObstacleDraft(false); navigationTool = 'points';
+      navigationPost('clear-obstacles', {});
+    }
+    async function saveObstacleMargin() {
+      const input = $('navigation-obstacle-margin');
+      if (!obstacleMarginEditing) return;
+      obstacleMarginEditing = false;
+      const margin = Number(input.value);
+      const confirmed = navigationState?.obstacle_settings?.safety_margin_mm ?? 30;
+      if (!input.value.trim() || !Number.isInteger(margin) || margin < 10 || margin > 200) {
+        input.value = confirmed; setNavigationError('El margen debe ser un entero entre 10 y 200 mm.'); updateNavigationUI(); return;
+      }
+      if (margin === confirmed) { updateNavigationUI(); return; }
+      if (!canEditObstacles() || navigationRouteRevision() === null) { input.value = confirmed; updateNavigationUI(); return; }
+      routeEditGeneration++; routePointQueue = [];
+      cancelObstacleDraft(false); obstacleMarginPending = true;
+      try { await navigationPost('obstacle-settings', {safety_margin_mm: margin, expected_route_revision: navigationRouteRevision()}); }
+      finally { obstacleMarginPending = false; input.value = navigationState?.obstacle_settings?.safety_margin_mm ?? confirmed; updateNavigationUI(); }
+    }
+    function moveObstaclePointer(event) {
+      if (navigationTool !== 'obstacle' || !obstacleDraft.length || !canEditObstacles()) return;
+      obstaclePointer = nativeImagePoint(event.clientX, event.clientY, viewport.getBoundingClientRect(), state.frame_width, state.frame_height);
+      drawNavigationOverlay();
+    }
+    function renderObstacleTools() {
+      const editable = canEditObstacles(), count = navigationObstacles().length, mapBlocked = navigationState?.planning_status === 'blocked';
+      $('navigation-point-mode').setAttribute('aria-pressed', String(navigationTool === 'points'));
+      $('navigation-obstacle-mode').setAttribute('aria-pressed', String(navigationTool === 'obstacle'));
+      $('navigation-point-mode').disabled = !editable;
+      $('navigation-obstacle-mode').disabled = !editable || count >= 32;
+      $('navigation-obstacle-hint').textContent = navigationBusy === 'obstacles' ? 'Guardando obstáculo…' : navigationTool === 'obstacle' ? `Vértice ${Math.min(4, obstacleDraft.length + 1)} de 4 · Sigue el borde del obstáculo.` : count ? `${count} ${count === 1 ? 'obstáculo guardado' : 'obstáculos guardados'} · El camino se calcula automáticamente.` : 'Marca destinos o dibuja el contorno de un obstáculo con cuatro clics.';
+      $('navigation-obstacle-draft-actions').hidden = !obstacleDraft.length;
+      $('navigation-obstacle-cancel').disabled = !!navigationBusy;
+      $('navigation-obstacle-undo').disabled = !!navigationBusy || !obstacleDraft.length;
+      $('navigation-obstacle-clear').disabled = !navigationAvailable || navigationBusy === 'clear-obstacles' || (!count && !obstacleDraft.length && !mapBlocked);
+      $('navigation-obstacle-clear').textContent = navigationBusy === 'clear-obstacles' ? 'Borrando obstáculos…' : 'Borrar obstáculos';
+      const input = $('navigation-obstacle-margin');
+      input.disabled = !editable || obstacleMarginPending;
+      if (!obstacleMarginEditing && !obstacleMarginPending) input.value = navigationState?.obstacle_settings?.safety_margin_mm ?? 30;
+      const plan = $('navigation-planning-status');
+      plan.dataset.mode = navigationState?.planning_status || 'empty';
+      plan.textContent = count || mapBlocked ? navigationState?.planning_message || (navigationState?.planning_status === 'ready' ? 'Camino disponible.' : 'Esperando la posición del robot para calcular el camino.') : '';
+    }
     function navigationRouteRevision() {
       const revision = navigationState?.route_revision;
       return Number.isInteger(revision) && revision >= 0 ? revision : null;
@@ -605,7 +733,7 @@
       return [(clientX - box.left) / box.scale, (clientY - box.top) / box.scale];
     }
     function navigationOwnsRobot() {
-      return !!navigationState?.active || navigationStartPending || ['start', 'stop', 'clear-targets'].includes(navigationBusy);
+      return !!navigationState?.active || navigationStartPending || ['start', 'stop', 'clear-targets', 'clear-obstacles'].includes(navigationBusy);
     }
     function navigationAllowsReconnect() {
       return !!navigationState?.active && ['paused_connection', 'reconnecting'].includes(navigationState.phase);
@@ -625,9 +753,10 @@
       return required <= capability;
     }
     function canStartNavigation() {
-      return canEditNavigation() && !calibrationStage && navigationCalibrated() && navigationWaypoints().length > 0 && navigationRouteRevision() !== null &&
+      return canEditNavigation() && !calibrationStage && navigationTool === 'points' && !obstacleDraft.length && !obstacleMarginPending && !obstacleMarginEditing && navigationCalibrated() && navigationWaypoints().length > 0 && navigationRouteRevision() !== null &&
         robotAvailable && !!robotState?.connected && !!robotState.ready &&
-        robotState.velocity_control === true && robotState.encoder_ready === true && robotSupportsSpeedSettings() && !speedPending && !speedInFlight;
+        robotState.velocity_control === true && robotState.encoder_ready === true && robotSupportsSpeedSettings() && !speedPending && !speedInFlight &&
+        navigationState?.planning_status !== 'blocked' && (!navigationObstacles().length || navigationState?.planning_status === 'ready');
     }
     function setNavigationError(text) {
       $('navigation-error').textContent = text;
@@ -656,11 +785,13 @@
       try { sessionStorage.setItem('robotracers.calibration-drafts', JSON.stringify(drafts)); } catch { /* La prueba también funciona sin almacenamiento de sesión. */ }
     }
     function synchronizeCalibrationSource() {
-      if (!(state?.frame_width > 0 && state?.frame_height > 0) || (!state.camera_id && !Number.isInteger(state.camera_index))) return;
+      // La identidad vacía durante una reconexión no equivale a otra cámara.
+      if (state?.opening || !state?.camera_id || !(state.frame_width > 0 && state.frame_height > 0)) return;
       const key = cameraKey();
       if (key === calibrationSourceKey) return;
       if (calibrationStage) persistCalibrationDraft();
       const previous = calibrationSourceKey;
+      if (obstacleDraftSource && obstacleDraftSource !== key) { routeEditGeneration++; routePointQueue = []; obstacleDraft = []; obstaclePointer = null; obstacleDraftSource = ''; navigationTool = 'points'; }
       calibrationSourceKey = key;
       calibrationStage = ''; calibrationCenter = null; calibrationCenterTag = null; calibrationAnchor = null; calibrationProjectionReady = false;
       const draft = calibrationDrafts()[key];
@@ -714,6 +845,7 @@
     function beginCalibration() {
       if (calibrationStage) { cancelCalibration(); return; }
       if (!canEditNavigation()) return;
+      cancelObstacleDraft(false); navigationTool = 'points';
       calibrationAnchor = markerPose();
       if (!calibrationAnchor) return;
       calibrationSourceKey = calibrationAnchor.key;
@@ -748,6 +880,49 @@
       line.setAttribute('points', points.map(point => `${point[0]},${point[1]}`).join(' '));
       setSvgVisible(line, points.length > 1);
     }
+    function drawPolygonGroup(id, polygons, className) {
+      const group = $(id);
+      const valid = Array.isArray(polygons) ? polygons.filter(polygon => Array.isArray(polygon) && polygon.length >= 3 && polygon.every(finitePoint)) : [];
+      while (group.children.length > valid.length) group.removeChild(group.lastElementChild);
+      while (group.children.length < valid.length) {
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('class', className); polygon.setAttribute('vector-effect', 'non-scaling-stroke');
+        group.appendChild(polygon);
+      }
+      valid.forEach((polygon, index) => group.children[index].setAttribute('points', polygon.map(point => point.join(',')).join(' ')));
+      return valid.length;
+    }
+    function drawObstacleOverlay(scale) {
+      const sourceMatches = navigationCameraKey === cameraKey();
+      const obstacles = sourceMatches ? navigationObstacles() : [];
+      drawPolygonGroup('navigation-obstacle-clearances', sourceMatches && obstacles.length ? navigationState?.inflated_obstacles_px : [], 'navigation-obstacle-clearance');
+      drawPolygonGroup('navigation-obstacles', obstacles, 'navigation-obstacle');
+      const path = sourceMatches && navigationState?.planning_status === 'ready' && Array.isArray(navigationState?.planned_path_px) && navigationState.planned_path_px.every(finitePoint) ? navigationState.planned_path_px : [];
+      const line = $('navigation-planned-path'), dots = $('navigation-path-dots');
+      line.setAttribute('points', path.map(point => point.join(',')).join(' '));
+      setSvgVisible(line, obstacles.length > 0 && path.length > 1);
+      const intermediates = obstacles.length ? path.slice(1, -1) : [];
+      while (dots.children.length > intermediates.length) dots.removeChild(dots.lastElementChild);
+      while (dots.children.length < intermediates.length) {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('class', 'navigation-path-dot'); dot.setAttribute('vector-effect', 'non-scaling-stroke'); dots.appendChild(dot);
+      }
+      intermediates.forEach((point, index) => { const dot = dots.children[index]; dot.setAttribute('cx', point[0]); dot.setAttribute('cy', point[1]); dot.setAttribute('r', 2.5 / scale); });
+      const draft = obstacleDraftSource === cameraKey() ? obstacleDraft : [];
+      const preview = [...draft];
+      if (finitePoint(obstaclePointer) && draft.length) preview.push(obstaclePointer);
+      if (preview.length >= 4) preview.push(preview[0]);
+      const draftLine = $('navigation-obstacle-draft'), vertices = $('navigation-obstacle-vertices');
+      draftLine.setAttribute('points', preview.map(point => point.join(',')).join(' '));
+      setSvgVisible(draftLine, preview.length > 1);
+      while (vertices.children.length > draft.length) vertices.removeChild(vertices.lastElementChild);
+      while (vertices.children.length < draft.length) {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.setAttribute('class', 'navigation-obstacle-vertex'); dot.setAttribute('vector-effect', 'non-scaling-stroke'); vertices.appendChild(dot);
+      }
+      draft.forEach((point, index) => { const dot = vertices.children[index]; dot.setAttribute('cx', point[0]); dot.setAttribute('cy', point[1]); dot.setAttribute('r', 4.5 / scale); });
+      return {hasObstacles: obstacles.length > 0, visible: obstacles.length > 0 || draft.length > 0, path};
+    }
     function drawNavigationOverlay() {
       const overlay = $('navigation-overlay');
       if (!cameraFrameFresh()) { setSvgVisible(overlay, false); return; }
@@ -761,6 +936,9 @@
       const center = cameraVisionFresh() && navigationCalibrated() && finitePoint(navigationState?.center_px) ? navigationState.center_px : null;
       const points = navigationCameraKey === cameraKey() ? navigationWaypoints() : [];
       drawRoutePoints(points, navigationWaypointIndex(), box.scale);
+      const obstacleLayer = drawObstacleOverlay(box.scale);
+      if (obstacleLayer.hasObstacles) setSvgVisible($('navigation-route-line'), false);
+      const steeringTarget = obstacleLayer.hasObstacles && navigationState?.planning_status !== 'ready' ? null : navigationCameraKey === cameraKey() && finitePoint(navigationState?.steering_target_px) ? navigationState.steering_target_px : obstacleLayer.hasObstacles ? obstacleLayer.path[1] || null : target;
       const ring = $('navigation-target'), cross = $('navigation-cross'), tether = $('navigation-tether'), dot = $('navigation-center'), calibrationDot = $('navigation-calibration-dot');
       if (target) {
         ring.setAttribute('cx', target[0]); ring.setAttribute('cy', target[1]); ring.setAttribute('r', (points.length ? 17 : 13) / box.scale);
@@ -768,15 +946,15 @@
         cross.setAttribute('d', `M ${target[0] - arm} ${target[1]} H ${target[0] + arm} M ${target[0]} ${target[1] - arm} V ${target[1] + arm}`);
       }
       if (center) { dot.setAttribute('cx', center[0]); dot.setAttribute('cy', center[1]); dot.setAttribute('r', 4 / box.scale); }
-      if (center && target) {
+      if (center && steeringTarget) {
         tether.setAttribute('x1', center[0]); tether.setAttribute('y1', center[1]);
-        tether.setAttribute('x2', target[0]); tether.setAttribute('y2', target[1]);
+        tether.setAttribute('x2', steeringTarget[0]); tether.setAttribute('y2', steeringTarget[1]);
       }
       const preview = cameraVisionFresh() && calibrationProjectionReady && finitePoint(calibrationCenter) && (calibrationStage || navigationBusy === 'calibrate');
       if (preview) { calibrationDot.setAttribute('cx', calibrationCenter[0]); calibrationDot.setAttribute('cy', calibrationCenter[1]); calibrationDot.setAttribute('r', 5 / box.scale); }
       setSvgVisible(ring, !!target); setSvgVisible(cross, !!target && !points.length); setSvgVisible(dot, !!center);
-      setSvgVisible(tether, !!center && !!target); setSvgVisible(calibrationDot, !!preview);
-      setSvgVisible(overlay, points.length > 0 || !!target || !!center || !!preview);
+      setSvgVisible(tether, !!center && !!steeringTarget); setSvgVisible(calibrationDot, !!preview);
+      setSvgVisible(overlay, points.length > 0 || !!target || !!center || !!preview || obstacleLayer.visible);
     }
     function sameSpeeds(first, second) {
       return first.forward_mm_s === second.forward_mm_s && first.turn_deg_s === second.turn_deg_s;
@@ -957,7 +1135,7 @@
       $('navigation-status').textContent = navigationBusy === 'calibrate' ? 'Guardando calibración' : calibrationPaused ? 'Calibración en pausa' : calibrationStage === 'center' ? '1 de 2 · Centro del robot' : calibrationStage === 'front' ? '2 de 2 · Frente del robot' : navigationStartPending && !navigationState?.active ? 'Preparando recorrido' : navigationAvailable ? phases[navigationState?.phase] || 'Navegación' : 'Navegación no disponible';
       $('navigation-status').dataset.mode = navigationState?.phase === 'error' ? 'error' : active ? 'active' : 'idle';
       $('navigation-instruction').textContent = calibrationPaused ? 'Tu selección está guardada. Cuando vuelva la visión y la conexión, continúa desde este paso.' : calibrationStage === 'center' ? 'Haz clic en el centro entre las dos ruedas.' : calibrationStage === 'front' ? 'El centro sigue al robot. Haz clic en un punto hacia su frente, en el plano del marcador.' : navigationState?.message || (navigationCalibrated() ? 'Haz clic en la imagen para añadir puntos en orden. Después inicia el recorrido.' : 'Calibra el centro y el frente del robot antes de añadir puntos.');
-      if (active && navigationState?.vision_grace_active === true && !['stop', 'clear-targets'].includes(navigationBusy) && !['stopping', 'error', 'paused_vision', 'paused_connection', 'reconnecting', 'paused'].includes(navigationState.phase)) {
+      if (active && navigationState?.vision_grace_active === true && !['stop', 'clear-targets', 'clear-obstacles'].includes(navigationBusy) && !['stopping', 'error', 'paused_vision', 'paused_connection', 'reconnecting', 'paused'].includes(navigationState.phase)) {
         $('navigation-status').textContent = 'Recuperando marcador';
         $('navigation-status').dataset.mode = 'active';
         $('navigation-instruction').textContent = 'Manteniendo el último mando mientras recupera el marcador.';
@@ -974,11 +1152,12 @@
       $('navigation-calibrate').textContent = calibrationStage ? 'Cancelar calibración' : 'Calibrar robot';
       $('navigation-calibrate').disabled = !!navigationBusy || active || (!calibrationStage && !canEditNavigation());
       $('navigation-start').disabled = !canStartNavigation();
-      $('navigation-start-label').textContent = active ? ['stop', 'clear-targets'].includes(navigationBusy) || navigationState?.phase === 'stopping' ? 'Deteniendo recorrido' : /^(paused|reconnecting)/.test(navigationState?.phase || '') ? 'Recorrido en pausa' : 'Recorrido en curso' : 'Iniciar recorrido';
-      $('navigation-stop').disabled = !active || ['stop', 'clear-targets'].includes(navigationBusy);
+      $('navigation-start-label').textContent = active ? ['stop', 'clear-targets', 'clear-obstacles'].includes(navigationBusy) || navigationState?.phase === 'stopping' ? 'Deteniendo recorrido' : /^(paused|reconnecting)/.test(navigationState?.phase || '') ? 'Recorrido en pausa' : 'Recorrido en curso' : 'Iniciar recorrido';
+      $('navigation-stop').disabled = !active || ['stop', 'clear-targets', 'clear-obstacles'].includes(navigationBusy);
       $('navigation-clear').disabled = !navigationAvailable || navigationBusy === 'clear-targets' || (!pointCount && !routePointsPending());
       $('navigation-clear-label').textContent = navigationBusy === 'clear-targets' ? 'Borrando…' : 'Borrar puntos';
-      viewport.dataset.selectable = canEditNavigation(!calibrationStage) && (!!calibrationStage || (navigationCalibrated() && navigationRouteRevision() !== null)) ? 'true' : 'false';
+      viewport.dataset.selectable = (navigationTool === 'obstacle' && !calibrationStage ? canEditObstacles() : canEditNavigation(!calibrationStage) && (!!calibrationStage || (navigationCalibrated() && navigationRouteRevision() !== null))) ? 'true' : 'false';
+      renderObstacleTools();
       renderSpeedControls();
       updateRobotButtons();
       drawNavigationOverlay();
@@ -1021,7 +1200,7 @@
         const result = await api(`/api/navigation/${action}`, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body: JSON.stringify(body)});
         if (actionVersion !== navigationActionVersion) return false;
         navigationAppliedVersion = ++navigationReadVersion;
-        renderNavigation(result, ['stop', 'clear-targets'].includes(action), speedGeneration);
+        renderNavigation(result, ['stop', 'clear-targets', 'clear-obstacles'].includes(action), speedGeneration);
         return true;
       } catch (error) {
         if (actionVersion === navigationActionVersion) setNavigationError(error.message || 'No se pudo completar la solicitud.');
@@ -1064,6 +1243,12 @@
       }
     }
     async function selectNavigationPoint(event) {
+      if (!calibrationStage && navigationTool === 'obstacle') {
+        if (!canEditObstacles()) return;
+        const obstaclePoint = nativeImagePoint(event.clientX, event.clientY, viewport.getBoundingClientRect(), state.frame_width, state.frame_height);
+        if (obstaclePoint) await appendObstaclePoint(obstaclePoint);
+        return;
+      }
       if (!canEditNavigation(!calibrationStage)) return;
       const point = nativeImagePoint(event.clientX, event.clientY, viewport.getBoundingClientRect(), state.frame_width, state.frame_height);
       if (!point) return;
@@ -1098,14 +1283,24 @@
     }
     function stopNavigation() {
       if (!navigationOwnsRobot() || navigationBusy === 'stop') return;
+      routeEditGeneration++; routePointQueue = []; cancelObstacleDraft(false);
       navigationPost('stop', {});
     }
     function clearNavigationPoints() {
       if (!navigationAvailable || navigationBusy === 'clear-targets' || (!navigationWaypoints().length && !routePointsPending())) return;
       routeEditGeneration++;
-      routePointQueue = [];
+      routePointQueue = []; cancelObstacleDraft(false);
       navigationPost('clear-targets', {});
     }
+    $('navigation-point-mode').addEventListener('click', () => setNavigationTool('points'));
+    $('navigation-obstacle-mode').addEventListener('click', () => setNavigationTool('obstacle'));
+    $('navigation-obstacle-cancel').addEventListener('click', () => { if (!navigationBusy) { cancelObstacleDraft(false); navigationTool = 'points'; updateNavigationUI(); } });
+    $('navigation-obstacle-undo').addEventListener('click', () => { if (!navigationBusy) { obstacleDraft.pop(); obstaclePointer = null; updateNavigationUI(); } });
+    $('navigation-obstacle-clear').addEventListener('click', clearNavigationObstacles);
+    $('navigation-obstacle-margin').addEventListener('focus', () => { obstacleMarginEditing = true; updateNavigationUI(); });
+    $('navigation-obstacle-margin').addEventListener('blur', saveObstacleMargin);
+    $('navigation-obstacle-margin').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); saveObstacleMargin(); } });
+    window.addEventListener('keydown', event => { if (event.key === 'Escape' && navigationTool === 'obstacle' && !navigationBusy) { cancelObstacleDraft(false); navigationTool = 'points'; updateNavigationUI(); } });
     $('navigation-calibrate').addEventListener('click', beginCalibration);
     $('navigation-start').addEventListener('click', startNavigation);
     $('navigation-stop').addEventListener('click', stopNavigation);
@@ -1134,6 +1329,8 @@
     window.addEventListener('pointercancel', endSpeedInteraction);
     window.addEventListener('blur', endSpeedInteraction);
     viewport.addEventListener('click', selectNavigationPoint);
+    viewport.addEventListener('pointermove', moveObstaclePointer);
+    viewport.addEventListener('pointerleave', () => { obstaclePointer = null; drawNavigationOverlay(); });
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(drawNavigationOverlay).observe(viewport);
     window.addEventListener('resize', drawNavigationOverlay);
     updateNavigationUI();
