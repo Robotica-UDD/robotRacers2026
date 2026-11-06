@@ -553,12 +553,17 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, pr
         assert math.hypot(robot.x - goal[0], robot.y - goal[1]) <= nav.ARRIVAL_M + .001
         assert result["remaining_mm"] <= 26
         first_left, first_right = next(command for command in robot.drives if command != (0, 0))
+        # Esta aceptación usa una planta de 20 ms y rampas aceleradas que leen
+        # el reloj real: el primer valor puede variar con la carga del proceso.
+        # El invariante es el sentido y el límite del perfil seleccionado;
+        # la pendiente de la rampa se comprueba por separado con tiempos fijos.
+        turn_limit = math.ceil(95 * math.radians(profile[1]))
         if abs(initial_bearing) <= 8:
-            assert 0 < first_left <= 100 and 0 < first_right <= 100
+            assert 0 < first_left <= profile[0] and 0 < first_right <= profile[0]
         elif initial_bearing > 0:
-            assert -53 <= first_left < 0 and 0 < first_right <= 53
+            assert -turn_limit <= first_left < 0 and 0 < first_right <= turn_limit
         else:
-            assert 0 < first_left <= 53 and -53 <= first_right < 0
+            assert 0 < first_left <= turn_limit and -turn_limit <= first_right < 0
         assert any(left > 0 and right > 0 for left, right in robot.drives)
         assert robot.drives[-1] == (0, 0) and robot.stops == 1 and robot.starts == 1
         assert all(abs(left) <= profile[0] and abs(right) <= profile[0] for left, right in robot.drives)
