@@ -20,6 +20,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot
 from .straight_control import StraightControl
+from .obstacle_planner import (plan_path, segment_is_clear, point_clearance_mm,
+                               validate_obstacles)
 
 INT32_MAX = 2_147_483_647
 MAX_TURN_DEG_S = math.floor(INT32_MAX * 180. / (95. * math.pi))
@@ -80,8 +82,10 @@ class Navigation:
         self.robot = robot
         self._runtime_path = Path(runtime_path) if runtime_path is not None else None
         self._speeds_path = self._runtime_path.with_name("navigation-speeds.json") if self._runtime_path else None
+        self._obstacles_path = self._runtime_path.with_name("navigation-obstacles.json") if self._runtime_path else None
         self._lock = threading.RLock()
         self._persistence_lock = threading.Lock()
+        self._planning_lock = threading.Lock()
         self._calibration: Calibration | None = None
         self._target: list[float] | None = None
         self._waypoints: list[list[float]] = []
@@ -111,8 +115,264 @@ class Navigation:
         self._vision_pauses = self._brief_vision_gaps = self._mode_switches = 0
         self._speeds = {"forward_mm_s": 100, "turn_deg_s": 32}
         self._speed_revision = 0
+        self._obstacles = []
+        self._obstacle_load_error = None
+        self._obstacle_source = None
+        self._safety_margin_mm = 30
+        self._planned_path = []
+        self._inflated_obstacles = []
+        self._planned_legs = []
+        self._avoidance_points = []
+        self._avoidance_index = 0
+        self._steering_target = None
+        self._planning_status = "empty"
+        self._planning_message = "Añade puntos al recorrido."
+        self._plan_key = None
+        self._plan_center = None
         self._load_calibration()
         self._load_speeds()
+        self._load_obstacles()
+
+    def _obstacle_settings(self):
+        return {"robot_radius_mm": 150, "safety_margin_mm": self._safety_margin_mm,
+                "tracking_margin_mm": 40}
+
+    def _load_obstacles(self):
+        if self._obstacles_path is None or not self._obstacles_path.exists():
+            return
+        try:
+            if self._obstacles_path.stat().st_size > 65536:
+                raise ValueError()
+            value = json.loads(self._obstacles_path.read_text(encoding="utf-8"))
+            if not isinstance(value, dict) or set(value) != {"version", "source", "polygons_px", "safety_margin_mm"}:
+                raise ValueError()
+            if type(value["version"]) is not int or value["version"] != 1 or type(value["safety_margin_mm"]) is not int or not 10 <= value["safety_margin_mm"] <= 200:
+                raise ValueError()
+            source = value["source"]
+            if source is None:
+                if value["polygons_px"] != []:
+                    raise ValueError()
+                polygons = []
+            else:
+                if not isinstance(source, dict) or set(source) != {"camera_id", "frame_width", "frame_height"}:
+                    raise ValueError()
+                self._request_source(source, source["frame_width"], source["frame_height"], source["camera_id"])
+                polygons = validate_obstacles(value["polygons_px"], source["frame_width"], source["frame_height"])
+            self._obstacles, self._obstacle_source = polygons, source
+            self._safety_margin_mm = value["safety_margin_mm"]
+        except (OSError, ValueError, TypeError, KeyError, NavigationError):
+            self._obstacle_load_error = "No se pudo leer el mapa guardado. Bórralo o dibújalo de nuevo."
+
+    def _save_obstacles(self):
+        if self._obstacles_path is None:
+            return
+        with self._persistence_lock:
+            with self._lock:
+                if self._obstacle_load_error:
+                    return  # Solo borrar o dibujar explícitamente libera un mapa rechazado.
+                value = {"version": 1, "source": self._obstacle_source,
+                         "polygons_px": self._obstacles, "safety_margin_mm": self._safety_margin_mm}
+                encoded = json.dumps(value, allow_nan=False)
+            try:
+                self._obstacles_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = self._obstacles_path.with_name(self._obstacles_path.name + ".tmp")
+                temporary.write_text(encoded, encoding="utf-8")
+                temporary.chmod(0o600)
+                temporary.replace(self._obstacles_path)
+            except OSError:
+                pass
+
+    @staticmethod
+    def _source_changed(frame, source):
+        if source is None:
+            return False
+        identity, width, height = (frame.get(field) for field in ("camera_id", "frame_width", "frame_height"))
+        return ((isinstance(identity, str) and identity and identity != source["camera_id"])
+                or (type(width) is int and width > 0 and width != source["frame_width"])
+                or (type(height) is int and height > 0 and height != source["frame_height"]))
+
+    def _invalidate_plan_locked(self):
+        self._planned_path = []
+        self._inflated_obstacles = []
+        self._planned_legs = []
+        self._avoidance_points = []
+        self._avoidance_index = 0
+        self._steering_target = None
+        self._planning_status = "waiting" if self._waypoints else "empty"
+        self._planning_message = "Esperando posición para calcular el recorrido." if self._waypoints else "Añade puntos al recorrido."
+        self._plan_key = self._plan_center = None
+
+    def _check_route_revision(self, expected):
+        if type(expected) is not int or expected < 0:
+            raise NavigationError("La revisión de la ruta debe ser un entero no negativo.", 422)
+        if expected != self._route_generation:
+            raise NavigationError("La ruta o el mapa cambió. Actualiza el panel antes de editar.")
+
+    def set_obstacles(self, polygons_px, frame_width, frame_height, camera_id, expected_route_revision):
+        frame = self._camera_state()
+        self._check_source(frame)
+        self._request_source(frame, frame_width, frame_height, camera_id)
+        try:
+            polygons = validate_obstacles(polygons_px, frame_width, frame_height)
+        except ValueError as exc:
+            raise NavigationError(str(exc), 422) from None
+        with self._lock:
+            self._editable()
+            self._check_route_revision(expected_route_revision)
+            self._obstacles = polygons
+            self._obstacle_load_error = None
+            self._obstacle_source = {"camera_id": camera_id, "frame_width": frame_width, "frame_height": frame_height}
+            self._route_generation += 1
+            self._invalidate_plan_locked()
+        self._save_obstacles()
+        self._save_calibration()
+        return self.state()
+
+    def set_obstacle_settings(self, safety_margin_mm, expected_route_revision):
+        if type(safety_margin_mm) is not int or not 10 <= safety_margin_mm <= 200:
+            raise NavigationError("El margen de seguridad debe ser un entero entre 10 y 200 mm.", 422)
+        with self._lock:
+            self._editable()
+            self._check_route_revision(expected_route_revision)
+            if self._obstacle_load_error:
+                raise NavigationError(self._obstacle_load_error)
+            self._safety_margin_mm = safety_margin_mm
+            self._route_generation += 1
+            self._invalidate_plan_locked()
+        self._save_obstacles()
+        self._save_calibration()
+        return self.state()
+
+    def clear_obstacles(self):
+        with self._lock:
+            self._route_generation += 1
+            self._obstacles, self._obstacle_source = [], None
+            self._obstacle_load_error = None
+            self._invalidate_plan_locked()
+            self._pending_mission = False
+            if self._active:
+                self._cancel_reason = "Obstáculos borrados. Robot detenido."
+                self._cancel.set()
+                self._phase = "stopping"
+            self._message = "Obstáculos borrados. Inicia de nuevo para continuar."
+        self._safe_stop()
+        self._save_obstacles()
+        self._save_calibration()
+        return self.state()
+
+    def _calculate_plan(self, frame, calibration, points, index, obstacles, settings, generation):
+        if self._obstacle_load_error:
+            return {"status": "blocked", "message": self._obstacle_load_error, "path": [],
+                    "inflated": [], "legs": [], "center": None}
+        if not points:
+            return {"status": "empty", "message": "Añade puntos al recorrido.", "path": [],
+                    "inflated": [], "legs": [], "center": None}
+        if calibration is None or not self._same_source(frame, calibration) or not self._vision(frame):
+            return {"status": "waiting", "message": "Se necesita el marcador visible para calcular el recorrido.",
+                    "path": [], "inflated": [], "legs": [], "center": None}
+        try:
+            center = observe_robot(frame["marker_corners"], calibration)["center_px"]
+        except (ValueError, TypeError, KeyError):
+            return {"status": "waiting", "message": "No se pudo medir la posición para planificar.",
+                    "path": [], "inflated": [], "legs": [], "center": None}
+        goals = points[index:]
+        if not obstacles:
+            return {"status": "ready" if goals else "empty", "message": "Recorrido preparado." if goals else "Añade puntos al recorrido.",
+                    "path": [center] + goals if goals else [], "inflated": [], "legs": [], "center": center}
+        path, legs, inflated, start = [center], [], [], center
+        try:
+            for goal in goals or [center]:
+                with self._lock:
+                    if generation != self._route_generation or (self._active and self._cancel.is_set()):
+                        return {"status": "waiting", "message": "El recorrido cambió durante el cálculo.",
+                                "path": [], "inflated": [], "legs": [], "center": center}
+                result = plan_path(frame["marker_corners"], calibration, start, goal, obstacles,
+                                   **settings, max_segment_m=.45)
+                inflated = result["inflated_obstacles_px"]
+                leg = [list(point) for point in result["path_px"][1:]] or [list(goal)]
+                if goals:
+                    path.extend(leg)
+                    legs.append(leg)
+                start = goal
+        except ValueError as exc:
+            return {"status": "blocked" if goals else "empty", "message": str(exc),
+                    "path": [], "inflated": inflated, "legs": [], "center": center}
+        return {"status": "ready" if goals else "empty", "message": "Recorrido preparado." if goals else "Añade puntos al recorrido.",
+                "path": path if goals else [], "inflated": inflated, "legs": legs, "center": center}
+
+    def _refresh_plan(self, frame=None, *, force=False, runtime=False):
+        frame = self._camera_state() if frame is None else frame
+        if not self._planning_lock.acquire(blocking=force):
+            return None
+        try:
+            with self._lock:
+                if self._active and not runtime:
+                    return None
+                calibration = self._calibration
+                points = [list(point) for point in self._waypoints]
+                index = self._waypoint_index if self._waypoint_index < len(points) else (0 if not self._active else len(points))
+                generation = self._route_generation
+                obstacles = [[list(point) for point in polygon] for polygon in self._obstacles]
+                settings = self._obstacle_settings()
+                key = (generation, index, calibration)
+                cached_key, cached_center = self._plan_key, self._plan_center
+            if not force and cached_key == key and cached_center is not None and self._vision(frame):
+                try:
+                    if observe_robot(frame["marker_corners"], calibration, cached_center)["distance_m"] < .01:
+                        return None
+                except (ValueError, TypeError):
+                    pass
+            if runtime:
+                with self._lock:
+                    self._planning_status, self._planning_message = "waiting", "Calculando recorrido…"
+            result = self._calculate_plan(frame, calibration, points, index, obstacles, settings, generation)
+            with self._lock:
+                if (generation != self._route_generation or calibration != self._calibration
+                        or (self._active and not runtime)):
+                    return None
+                self._planning_status, self._planning_message = result["status"], result["message"]
+                self._planned_path, self._inflated_obstacles = result["path"], result["inflated"]
+                self._planned_legs = result["legs"]
+                self._plan_key, self._plan_center = key, result["center"]
+                if obstacles and result["legs"]:
+                    self._avoidance_points, self._avoidance_index = result["legs"][0], 0
+                    self._steering_target = list(self._avoidance_points[0])
+                else:
+                    self._avoidance_points, self._avoidance_index = [], 0
+                    self._steering_target = list(points[index]) if index < len(points) else None
+            return result
+        finally:
+            self._planning_lock.release()
+
+    def _runtime_plan(self, frame, calibration):
+        # El robot permanece sin consigna de movimiento durante A*, incluso si
+        # el cálculo dura más que la sesión UDP y esta debe armarse otra vez.
+        try:
+            self._zero_drive()
+        except Exception:
+            pass
+        result = self._refresh_plan(frame, force=True, runtime=True)
+        fresh = self._camera_state()
+        if result is None or result["status"] != "ready":
+            return None, result["center"] if result else None
+        if not self._vision(fresh) or fresh["frame_age_ms"] > self.VISION_GRACE_SECONDS * 1000:
+            with self._lock:
+                self._planning_status, self._planning_message = "waiting", "Esperando una imagen reciente después del cálculo."
+                self._planned_path = []
+            return None, None
+        try:
+            moved = self._observe(fresh, calibration, result["center"], required=True)
+        except NavigationError:
+            return None, None
+        if moved["distance_m"] > .01:
+            return None, None
+        with self._lock:
+            return (list(self._steering_target) if self._steering_target else None), result["center"]
+
+    @staticmethod
+    def _obstacle_speed_limit(clearance_mm, physical_clearance_mm):
+        extra = max(0., clearance_mm - physical_clearance_mm - 15.)
+        return max(0., -45. + math.sqrt(45. ** 2 + 2. * 450. * extra))
 
     @staticmethod
     def _validated_speeds(forward_mm_s, turn_deg_s):
@@ -274,33 +534,37 @@ class Navigation:
             return self._calibration.camera_id if self._calibration is not None else None
 
     def _check_source(self, frame: dict):
-        """Un cambio efectivo de fuente exige repetir los dos clics."""
+        """Un cambio efectivo de fuente invalida geometría y mapa; no una apertura vacía."""
         with self._lock:
             calibration = self._calibration
-            if calibration is None:
+            calibration_source = ({"camera_id": calibration.camera_id, "frame_width": calibration.width,
+                                   "frame_height": calibration.height} if calibration else None)
+            changed_calibration = self._source_changed(frame, calibration_source)
+            changed_map = self._source_changed(frame, self._obstacle_source)
+            if not changed_calibration and not changed_map:
                 return
-            identity = frame.get("camera_id")
-            width, height = frame.get("frame_width"), frame.get("frame_height")
-            changed = ((isinstance(identity, str) and identity and identity != calibration.camera_id)
-                       or (type(width) is int and width > 0 and width != calibration.width)
-                       or (type(height) is int and height > 0 and height != calibration.height))
-            if not changed:
-                return
-            self._calibration = None
             self._route_generation += 1
-            self._waypoints = []
-            self._waypoint_index = 0
-            self._last_arrival_mm = None
-            self._target = None
+            if changed_calibration:
+                self._calibration = None
+                self._waypoints = []
+                self._waypoint_index = 0
+                self._last_arrival_mm = None
+                self._target = None
+            if changed_map:
+                self._obstacles, self._obstacle_source = [], None
+                self._obstacle_load_error = "El mapa guardado corresponde a otra cámara o resolución. Bórralo o dibújalo de nuevo."
+            self._invalidate_plan_locked()
             self._pending_mission = False
-            self._message = "Cambió la cámara o la resolución. Repite la calibración."
+            self._message = "Cambió la cámara o la resolución. Revisa la calibración y el mapa."
             if self._active:
                 self._cancel_reason = self._message
                 self._cancel.set()
                 self._phase = "stopping"
             else:
-                self._phase = "uncalibrated"
+                self._phase = "uncalibrated" if self._calibration is None else "selected"
         self._save_calibration()
+        # Conservar el archivo incompatible hasta que el usuario confirme borrarlo
+        # evita que un reinicio convierta el mapa rechazado en espacio libre.
 
     def _vision(self, frame: dict) -> bool:
         age = frame.get("frame_age_ms")
@@ -350,6 +614,7 @@ class Navigation:
             self._last_arrival_mm = None
             self._target = None
             self._pending_mission = False
+            self._invalidate_plan_locked()
             self._phase = "idle"
             self._message = "Centro y frente calibrados. Selecciona un punto cercano."
         self._save_calibration()
@@ -394,6 +659,7 @@ class Navigation:
                 self._last_arrival_mm = None
             self._sync_target_locked()
             self._pending_mission = False
+            self._invalidate_plan_locked()
             self._phase = "selected"
             self._message = "Ruta preparada. Inicia el recorrido cuando la zona esté despejada."
         self._save_calibration()
@@ -416,6 +682,7 @@ class Navigation:
             self._last_arrival_mm = None
             self._target = None
             self._pending_mission = False
+            self._invalidate_plan_locked()
             if self._active:
                 self._cancel_reason = "Ruta borrada. Robot detenido."
                 self._cancel.set()
@@ -445,10 +712,15 @@ class Navigation:
     def state(self):
         frame = self._camera_state()
         self._check_source(frame)
+        self._refresh_plan(frame)
         with self._lock:
             calibration = self._calibration
             target = None if self._target is None else list(self._target)
             observation = self._observe(frame, calibration, target)
+            map_visible = (self._obstacle_source is not None and all(
+                frame.get(field) == self._obstacle_source.get(field)
+                for field in ("camera_id", "frame_width", "frame_height")))
+            planning_visible = not self._obstacles or (map_visible and self._vision(frame))
             return {"phase": self._phase, "active": self._active,
                     "calibrated": calibration is not None and self._same_source(frame, calibration),
                     "message": self._message, "target_px": target,
@@ -456,6 +728,13 @@ class Navigation:
                     "waypoint_index": self._waypoint_index, "waypoint_count": len(self._waypoints),
                     "route_revision": self._route_generation,
                     "last_arrival_mm": self._last_arrival_mm,
+                    "obstacles_px": self._obstacles if map_visible else [],
+                    "obstacle_settings": self._obstacle_settings(),
+                    "planned_path_px": self._planned_path if planning_visible else [],
+                    "inflated_obstacles_px": self._inflated_obstacles if planning_visible else [],
+                    "planning_status": self._planning_status if planning_visible else "waiting",
+                    "planning_message": self._planning_message if planning_visible else "Esperando posición para planificar.",
+                    "steering_target_px": self._steering_target if planning_visible else None,
                     "pending_mission": self._pending_mission,
                     "vision_grace_active": self._vision_hold, "vision_gap_ms": self._vision_gap_ms,
                     "vision_pauses": self._vision_pauses, "brief_vision_gaps": self._brief_vision_gaps,
@@ -505,6 +784,15 @@ class Navigation:
         self._check_source(frame)
         with self._lock:
             self._editable()
+            planning_revision = self._route_generation
+            if expected_route_revision is not None and expected_route_revision != planning_revision:
+                raise NavigationError("La ruta cambió. Actualiza el panel antes de iniciar.")
+        planned = self._refresh_plan(frame, force=True)
+        fresh = self._camera_state()
+        with self._lock:
+            self._editable()
+            if planning_revision != self._route_generation:
+                raise NavigationError("La ruta o el mapa cambió durante el cálculo. Vuelve a iniciar.")
             if expected_route_revision is not None and expected_route_revision != self._route_generation:
                 raise NavigationError("La ruta cambió. Actualiza el panel antes de iniciar.")
             calibration = self._calibration
@@ -513,6 +801,14 @@ class Navigation:
             index = self._waypoint_index if self._waypoint_index < len(self._waypoints) else 0
             target = list(self._waypoints[index])
             observation = self._observe(frame, calibration, target, required=True)
+            if self._obstacle_load_error:
+                raise NavigationError(self._obstacle_load_error)
+            if self._obstacles:
+                if planned is None or planned["status"] != "ready":
+                    raise NavigationError(self._planning_message or "No existe un camino libre para esta ruta.")
+                current = self._observe(fresh, calibration, planned["center"], required=True)
+                if current["distance_m"] > .01:
+                    raise NavigationError("El robot se movió durante el cálculo. Vuelve a iniciar.")
             if observation["distance_m"] > self.MAX_DISTANCE_M:
                 raise NavigationError("El destino quedó a más de 600 mm. Vuelve a seleccionarlo.")
             remote = self.robot.state()
@@ -528,6 +824,8 @@ class Navigation:
             self._waypoint_index = index
             self._sync_target_locked()
             self._last_arrival_mm = None
+            self._steering_target = (list(self._avoidance_points[0]) if self._obstacles and self._avoidance_points
+                                     else list(target))
             self._active = True
             self._phase = "arming"
             self._message = "Preparando el recorrido…"
@@ -803,6 +1101,12 @@ class Navigation:
         camera_sequence, camera_capture = None, None
         large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
         straight = StraightControl()
+        with self._lock:
+            avoiding = bool(self._obstacles)
+            if avoiding and self._steering_target is not None:
+                target = list(self._steering_target)
+        needs_plan = False
+        blocked_center = None
         final_phase, final_message = "error", "Recorrido detenido."
         try:
             while not self._cancel.is_set():
@@ -922,12 +1226,24 @@ class Navigation:
                         stable_since, stable_frames, last_sequence = None, 0, None
                         stable = False
                         next_arm = tick
+                        needs_plan = avoiding
+                        blocked_center = None
 
                 if session is None:
                     straight.reset()
                     self._set_phase("paused_connection", "Esperando conexión y seguimiento. El destino se conserva.")
                     if (connected and stable and not arming and tick >= next_arm
                             and not remote.get("moving") and not remote.get("navigation_active")):
+                        if avoiding and needs_plan:
+                            if blocked_center is not None and observation is not None and observe_robot(
+                                    frame["marker_corners"], calibration, blocked_center)["distance_m"] < .01:
+                                self._cancel.wait(self.CONTROL_INTERVAL)
+                                continue
+                            target, blocked_center = self._runtime_plan(frame, calibration)
+                            if target is None:
+                                self._cancel.wait(self.CONTROL_INTERVAL)
+                                continue
+                            needs_plan = False
                         self._launch_rearm(required_velocity)  # HTTP en otro trabajador, sin bloquear el control.
                         next_arm = tick + self.RESUME_RETRY_SECONDS
                     self._cancel.wait(self.CONTROL_INTERVAL)
@@ -942,7 +1258,7 @@ class Navigation:
                 if observation is None:
                     gap_window = hold_seconds if gap_window is None else min(gap_window, hold_seconds)
                     hold_seconds = gap_window
-                can_hold = (observation is None and not waiting_vision
+                can_hold = (not avoiding and observation is None and not waiting_vision
                             and last_valid_capture is not None
                             and 0 <= tick - last_valid_capture < hold_seconds
                             and camera_capture is not None and 0 <= tick - camera_capture <= self.VISION_GRACE_SECONDS
@@ -981,6 +1297,12 @@ class Navigation:
                     straight.reset()
                     large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
                     self._set_phase("paused_vision", "Esperando una imagen estable. El destino se conserva.")
+                    if avoiding:
+                        needs_plan, blocked_center = True, None
+                        with self._lock:
+                            self._planning_status = "waiting"
+                            self._planning_message = "Esperando seguimiento estable para recalcular."
+                            self._planned_path = []
                     try:
                         self._zero_drive()  # Renueva la sesión sin mover el robot.
                     except Exception:
@@ -994,6 +1316,67 @@ class Navigation:
                     retry_until = None
                     no_progress_seconds = 0.
                     best_distance, best_angle = math.inf, math.inf
+                if avoiding:
+                    with self._lock:
+                        obstacles = self._obstacles
+                        physical_clearance = 150 + self._safety_margin_mm
+                    center = observation["center_px"]
+                    if needs_plan:
+                        moved = (blocked_center is None or observe_robot(
+                            frame["marker_corners"], calibration, blocked_center)["distance_m"] >= .01)
+                        if moved:
+                            next_target, blocked_center = self._runtime_plan(frame, calibration)
+                            if next_target is not None:
+                                target = next_target
+                                needs_plan = False
+                                mode = None
+                                straight.reset()
+                        if needs_plan:
+                            self._set_phase("paused_obstacle", self._planning_message)
+                            self._zero_drive()
+                            self._cancel.wait(self.CONTROL_INTERVAL)
+                            continue
+                        frame = self._camera_state()
+                        observation = self._observe(frame, calibration, target)
+                        if observation is None:
+                            waiting_vision = True
+                            self._zero_drive()
+                            continue
+                        center = observation["center_px"]
+                    try:
+                        clear = (segment_is_clear(frame["marker_corners"], calibration, center, center,
+                                                  obstacles, clearance_mm=physical_clearance)
+                                 and segment_is_clear(frame["marker_corners"], calibration, center, target,
+                                                      obstacles, clearance_mm=physical_clearance))
+                        clearance = point_clearance_mm(frame["marker_corners"], calibration, center, obstacles)
+                    except ValueError:
+                        clear, clearance = False, 0.
+                    if not clear:
+                        self._zero_drive()
+                        needs_plan, blocked_center = True, None
+                        straight.reset()
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    safe_speed = self._obstacle_speed_limit(clearance, physical_clearance)
+                    about_to_stop = (observation["distance_m"] <= .015)
+                    will_advance = (mode == "advancing" or (mode is None and abs(observation["bearing_rad"]) <= math.radians(3)))
+                    if safe_speed < 50. and will_advance and not about_to_stop:
+                        self._zero_drive()
+                        self._set_phase("paused_obstacle", "Falta espacio para avanzar y frenar con seguridad.")
+                        with self._lock:
+                            self._planning_status = "blocked"
+                            self._planning_message = "Falta espacio para avanzar y frenar con seguridad."
+                        needs_plan, blocked_center = True, center
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    if safe_speed >= 50.:
+                        speeds = {**speeds, "forward_mm_s": min(speeds["forward_mm_s"], math.floor(safe_speed))}
+                    with self._lock:
+                        self._planned_path = [list(center)] + self._avoidance_points[self._avoidance_index:] + [
+                            list(point) for leg in self._planned_legs[1:] for point in leg]
+                    is_subpoint = self._avoidance_index + 1 < len(self._avoidance_points)
+                else:
+                    is_subpoint = False
                 distance, bearing = observation["distance_m"], observation["bearing_rad"]
                 angle = abs(bearing)
                 if retry_until is not None:
@@ -1018,10 +1401,25 @@ class Navigation:
                     else:
                         settle_started = None
                     with self._lock:
-                        settle_duration = (self.WAYPOINT_SETTLE_SECONDS if
+                        settle_duration = (self.WAYPOINT_SETTLE_SECONDS if is_subpoint or
                                            self._waypoint_index + 1 < len(self._waypoints) else self.SETTLE_SECONDS)
                     if settle_started is not None and active_seconds - settle_started >= settle_duration:
-                        if distance <= self.SETTLED_M:
+                        if distance <= (.025 if is_subpoint else self.SETTLED_M):
+                            if is_subpoint:
+                                with self._lock:
+                                    if self._cancel.is_set():
+                                        break
+                                    self._avoidance_index += 1
+                                    target = list(self._avoidance_points[self._avoidance_index])
+                                    self._steering_target = list(target)
+                                mode = None
+                                straight.reset()
+                                large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
+                                retry_until = settle_started = None
+                                no_progress_seconds = 0.
+                                best_distance = best_angle = math.inf
+                                self._cancel.wait(self.CONTROL_INTERVAL)
+                                continue
                             with self._lock:
                                 if self._cancel.is_set():
                                     break
@@ -1036,6 +1434,8 @@ class Navigation:
                                 final_phase, final_message = "arrived", "Ruta completada. Robot detenido."
                                 break
                             target = next_target
+                            if avoiding:
+                                needs_plan, blocked_center = True, None
                             mode = None
                             straight.reset()
                             large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
@@ -1045,7 +1445,7 @@ class Navigation:
                             self._cancel.wait(self.CONTROL_INTERVAL)
                             continue
                         mode = None
-                elif distance <= self.ARRIVAL_M:
+                elif distance <= (.015 if is_subpoint else self.ARRIVAL_M):
                     mode, mode_started = "settling", active_seconds
                     settle_started = None
                     self._set_phase(mode, "Deteniendo el robot en el destino…")
@@ -1053,11 +1453,11 @@ class Navigation:
                 else:
                     desired = mode
                     if mode is None:
-                        desired = "turning" if angle > math.radians(8) else "advancing"
-                    elif mode == "turning" and angle <= math.radians(8):
+                        desired = "turning" if angle > math.radians(3 if avoiding else 8) else "advancing"
+                    elif mode == "turning" and angle <= math.radians(3 if avoiding else 8):
                         desired = "advancing"
                     elif mode == "advancing":
-                        if angle > math.radians(25):
+                        if angle > math.radians(15 if avoiding else 25):
                             if large_angle_since is None:
                                 large_angle_since = tick
                             if frame_sequence != large_angle_sequence:
@@ -1193,6 +1593,24 @@ def make_navigation_router(navigation: Navigation) -> APIRouter:
         data = await action_body(request, {"forward_mm_s", "turn_deg_s"})
         return await asyncio.to_thread(perform, navigation.set_speeds,
                                        data["forward_mm_s"], data["turn_deg_s"])
+
+    @router.post("/obstacles")
+    async def obstacles(request: Request):
+        data = await action_body(request, {"polygons_px", "frame_width", "frame_height", "camera_id", "expected_route_revision"})
+        return await asyncio.to_thread(perform, navigation.set_obstacles, data["polygons_px"],
+                                       data["frame_width"], data["frame_height"], data["camera_id"],
+                                       data["expected_route_revision"])
+
+    @router.post("/clear-obstacles")
+    async def clear_obstacles(request: Request):
+        await action_body(request, set())
+        return await asyncio.to_thread(perform, navigation.clear_obstacles)
+
+    @router.post("/obstacle-settings")
+    async def obstacle_settings(request: Request):
+        data = await action_body(request, {"safety_margin_mm", "expected_route_revision"})
+        return await asyncio.to_thread(perform, navigation.set_obstacle_settings,
+                                       data["safety_margin_mm"], data["expected_route_revision"])
 
     @router.post("/start")
     async def start(request: Request):

@@ -50,9 +50,11 @@ La tarjeta **Navegación** permite calibrar el centro y el frente con dos clics,
 marcar varios puntos en la imagen y pulsar **Iniciar recorrido**. Los recorre en
 orden y **Borrar puntos** detiene y vacía la lista. La selección nunca
 inicia movimiento. Esta prueba usa corrección visual y Wi-Fi, y el firmware
-regula velocidades en mm/s con los encoders. No evita obstáculos. La precisión del perfil de movimiento actual
+regula velocidades en mm/s con los encoders. La herramienta **Dibujar obstáculo**
+permite marcar polígonos de cuatro lados y calcular desvíos con margen para el
+robot completo. **Borrar obstáculos** conserva los puntos de destino. La precisión del perfil de movimiento actual
 está pendiente de validación física. La corrección durante el avance está filtrada y amortiguada. Una pérdida breve
-del marcador conserva el último mando con un presupuesto de tiempo y movimiento;
+del marcador conserva el último mando con un presupuesto de tiempo y movimiento cuando no hay obstáculos;
 no confirma llegadas sin visión. Ante pérdida prolongada de imagen o Wi-Fi, espera con los motores a cero y
 continúa hacia el punto pendiente cuando recupera el seguimiento y la conexión.
 D48 y las paradas manuales cancelan el recorrido. Consulta

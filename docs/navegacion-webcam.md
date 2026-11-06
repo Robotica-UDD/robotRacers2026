@@ -105,7 +105,8 @@ Es distinto de una reconexión de la webcam o del Wi-Fi durante una misión acti
 que se reanuda automáticamente.
 
 Empieza con destinos cercanos. Se aceptan desplazamientos estimados de hasta
-**0,60 m** desde el centro actual. Los puntos muy próximos al borde de la imagen
+**0,60 m** en línea recta desde el centro actual. El camino que rodea un obstáculo
+puede ser más largo. Los puntos muy próximos al borde de la imagen
 se rechazan: el margen mínimo es el mayor entre 20 píxeles y el 60 % del lado
 medio del marcador detectado. Esto ayuda a conservar el seguimiento; también
 debes comprobar que todo el robot permanezca dentro del área de prueba.
@@ -113,6 +114,60 @@ debes comprobar que todo el robot permanezca dentro del área de prueba.
 No puedes añadir puntos ni recalibrar mientras un recorrido esté activo.
 **Borrar puntos** sí está disponible durante el movimiento y lo detiene.
 La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegación.
+
+## Dibujar obstáculos y rodearlos
+
+1. Deja el robot detenido y la cámara fija. Pulsa **Dibujar obstáculo**.
+2. Marca las cuatro esquinas siguiendo el borde del objeto en orden, por ejemplo
+   superior izquierda, superior derecha, inferior derecha e inferior izquierda.
+   El cuarto clic cierra y guarda el polígono. No cruces sus lados. Puedes
+   cancelar un dibujo incompleto o pulsar Escape.
+3. Repite para los demás obstáculos. Los polígonos rojos representan los objetos;
+   la zona amarilla representa el espacio reservado para rodearlos.
+4. Ajusta el **Margen de seguridad** si necesitas más separación. Inicialmente
+   es de 30 mm adicionales al tamaño reservado para el robot.
+5. Marca tus destinos y revisa el camino verde antes de pulsar
+   **Iniciar recorrido**. El planificador introduce puntos intermedios para
+   rodear los obstáculos y mantiene el orden de tus destinos numerados.
+6. **Borrar obstáculos** detiene el recorrido y elimina solamente los obstáculos.
+   Conserva tus destinos, la calibración y las velocidades. **Borrar puntos**
+   conserva el mapa de obstáculos.
+
+El planificador utiliza una envolvente circular de **150 mm de radio**, centrada
+entre las ruedas. Es una aproximación conservadora del modelo disponible: sus
+límites de X=−52,85..83,15 mm e Y=±115 mm caben en un radio de unos 142 mm.
+La envolvente permite comprobar los giros sin asumir que el robot es un punto.
+Al margen elegido se añaden 40 mm para tolerar el seguimiento de la trayectoria.
+Con el margen inicial, la ruta del centro se calcula a 220 mm del obstáculo.
+Esto puede descartar pasillos estrechos que requerirían maniobras con una
+envolvente rectangular y medidas físicas más precisas.
+
+Los obstáculos y el camino se proyectan al plano del marcador mediante la
+calibración existente. Las separaciones son **estimaciones del modelo**, no
+distancias medidas sobre el suelo. El paralaje, la inclinación de la cámara y
+el montaje del marcador afectan su exactitud. Mantén un margen amplio en las
+primeras pruebas y comprueba el tamaño real del robot con sus accesorios.
+Marca la huella que ocupa cada objeto sobre el suelo y deja holgura adicional
+para objetos altos o con piezas que sobresalgan.
+
+Con obstáculos, el servicio comprueba el siguiente tramo y adapta la velocidad
+según el espacio libre y la distancia de frenado estimada. Al perder el marcador
+envía cero y espera una imagen estable; conserva el destino y recalcula el
+camino desde la posición recuperada. La ventana de continuación sin marcador
+descrita más abajo se aplica únicamente cuando no hay obstáculos.
+
+Si un destino está dentro de la zona reservada, el robot empieza demasiado cerca
+de un obstáculo o no existe un pasillo suficiente, el inicio queda bloqueado.
+No utiliza una línea directa como alternativa. Cambiar la cámara o su resolución
+invalida el mapa; mover físicamente la cámara requiere recalibrar y dibujarlo
+de nuevo, aunque la resolución sea la misma.
+
+El mapa es manual y estático: solo representa lo que dibujaste. No detecta ni
+añade automáticamente objetos que aparezcan después. La implementación funciona
+directamente en Python y OpenCV. La separación por tamaño del robot y expansión
+de obstáculos sigue el enfoque de espacio de configuración descrito en
+[Costmap 2D de Nav2](https://docs.nav2.org/jazzy/configuration_and_development/configuration_guide/core_servers/costmap_2d/);
+esta aplicación no requiere ROS 2.
 
 ## Ajustar las velocidades
 
@@ -171,8 +226,8 @@ perfil anterior. La regulación por encoder de cada rueda también se mantiene.
 |---|---|
 | Frecuencia del control de movimiento | 20 Hz |
 | Distancia máxima al seleccionar o iniciar | 600 mm |
-| Paso de giro a avance | Error de orientación de hasta 8° |
-| Volver a girar durante el avance | Error mayor de 25° durante 250 ms y al menos 3 imágenes distintas |
+| Paso de giro a avance | Hasta 8° sin obstáculos y hasta 3° con obstáculos |
+| Volver a girar durante el avance | Más de 25° sin obstáculos o 15° con obstáculos durante 250 ms y al menos 3 imágenes distintas |
 | Velocidad máxima de avance | Escala ampliable y entrada numérica desde 50 mm/s; valor inicial de 100 mm/s |
 | Velocidad máxima de giro | Escala ampliable y entrada numérica desde 12°/s; valor inicial de 32°/s |
 | Aproximación al destino | Reduce la consigna según distancia de frenado; usa 450 mm/s² para anticipar la parada |
@@ -236,7 +291,8 @@ paralaje introducen error en la distancia y en el punto alcanzado. Mantener la
 cámara cenital y el marcador horizontal reduce el problema, pero no equivale a
 una calibración métrica del suelo. Las distancias mostradas son aproximadas.
 
-Esta implementación **no evita obstáculos** ni planifica alrededor de ellos.
+La evitación utiliza únicamente los obstáculos dibujados: no detecta otros
+objetos ni obstáculos en movimiento automáticamente.
 Los encoders regulan la velocidad de las ruedas; la cámara sigue determinando
 la orientación hacia el destino y cuándo detenerse. El firmware anterior de
 secuencias se conserva como referencia independiente. La precisión real depende del agarre,
@@ -259,7 +315,7 @@ se envía por UDP y también por HTTP. Este mecanismo no depende de que el
 navegador siga abierto ni de que Python pueda enviar una orden posterior.
 
 Si falla brevemente la detección mientras avanza, pero la misma cámara sigue
-entregando imágenes nuevas y recientes, el servicio conserva exactamente el
+entregando imágenes nuevas y recientes y no hay obstáculos dibujados, el servicio conserva exactamente el
 último mando. La ventana máxima es de **400 ms** desde la última detección real,
 con presupuestos de **60 mm de recorrido por rueda** y **15° de giro** estimados
 según las consignas; se aplica lo que se agote antes. Cerca del destino reduce
@@ -309,6 +365,21 @@ el destino por una ruta de un solo punto. El panel incluye `expected_route_revis
 peticiones anteriores a una edición o borrado de la ruta. Estas peticiones usan la cabecera
 local `X-Requested-With: XMLHttpRequest`, igual que los controles anteriores.
 
+El mapa se edita mediante `POST /api/navigation/obstacles`, con la lista completa
+`polygons_px`, la identidad y resolución de cámara y `expected_route_revision`.
+`POST /api/navigation/clear-obstacles` detiene y vacía solo el mapa;
+`POST /api/navigation/obstacle-settings` recibe `safety_margin_mm` y la revisión
+esperada. Cada edición invalida las órdenes anteriores y obliga a comprobar el
+camino de nuevo. El mapa y su margen se guardan en
+`simulation/.runtime/navigation-obstacles.json`, excluido de Git.
+
+El estado incluye `obstacles_px`, `obstacle_settings`, `planned_path_px`,
+`inflated_obstacles_px`, `planning_status` y `planning_message`.
+`steering_target_px` señala el punto intermedio que sigue el robot;
+`target_px` conserva el destino elegido por el usuario. Los puntos de desvío no
+incrementan el contador de destinos completados. Un mapa guardado que no pueda
+validarse bloquea el inicio hasta borrarlo o sustituirlo.
+
 El estado de navegación expone `left_target_mm_s` y `right_target_mm_s` para las
 consignas enviadas. Los campos anteriores `last_left` y `last_right` se mantienen
 por compatibilidad y ahora también representan mm/s, **no PWM**. Incluye además
@@ -345,14 +416,23 @@ la captura de imagen hasta la aplicación de una consigna.
 - Un recorrido virtual de cuatro puntos con giros se completó en orden dentro
   de una misma sesión. Se verificaron la continuación desde un punto intermedio,
   el borrado durante el movimiento y el rechazo de solicitudes atrasadas después
-  de borrar o detener. La suite completa pasó **553 pruebas**, incluyendo ruido de orientación,
-  correcciones suaves, continuación breve sin marcador y parada al agotar el presupuesto.
+  de borrar o detener. La suite completa pasó **606 pruebas**, incluyendo ruido de orientación,
+  correcciones suaves, continuidad breve sin obstáculos, dibujo y persistencia de mapas,
+  caminos bloqueados y desvíos por varios destinos.
 - Las pruebas automatizadas cubren geometría, sentido de los giros, correcciones,
   selección sin movimiento, límites de destino, pausa y recuperación de visión,
   cambios de fuente, D48, caducidad y recuperación de sesión, reinicio, confirmaciones
   tardías tras cancelar, persistencia sin movimiento, rampas, paso por cero,
   consignas métricas, rechazo de firmware sin control por encoder, transporte y solicitudes inválidas.
   Usan dobles de cámara y robot, sin abrir hardware ni enviar tráfico al robot.
+- El planificador tiene pruebas de cuadriláteros cóncavos y convexos, pasillos
+  bloqueados, tangencias, perspectiva y límites de cálculo. Con cámara fija,
+  rotar o trasladar el marcador conserva el lado elegido para el desvío.
+- Una prueba cinemática de ida y vuelta completó dos destinos alrededor del
+  mismo obstáculo, respetando una separación de centro superior a 180 mm en
+  toda la traza. Esta cifra pertenece al modelo ideal, no a una medición física.
+- Se comprobó visualmente el dibujo de cuatro esquinas y el camino calculado
+  en un navegador con captura sintética y movimiento deshabilitado.
 - Catorce pruebas C++ del controlador real, compilado sin Arduino, cubren fricción
   estática, pulsos cuantizados, arranque, regulación, saturación, parada,
   inversión con inercia y el límite de cinco segundos sin respuesta.
