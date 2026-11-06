@@ -133,16 +133,29 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
    Conserva tus destinos, la calibración y las velocidades. **Borrar puntos**
    conserva el mapa de obstáculos.
 
-El planificador utiliza una envolvente circular de **150 mm de radio**, centrada
-entre las ruedas. Es una aproximación conservadora del modelo disponible: sus
-límites de X=−52,85..83,15 mm e Y=±115 mm caben en un radio de unos 142 mm.
-La envolvente permite comprobar los giros sin asumir que el robot es un punto.
-Con el margen en 0 se conserva solamente esa envolvente de 150 mm: también se
-desactivan los 40 mm adicionales de seguimiento. Un valor positivo conserva
-el perfil con reserva de seguimiento; por ejemplo, 30 mm más 40 mm de reserva
-calculan el camino del centro a 220 mm del obstáculo.
-Esto puede descartar pasillos estrechos que requerirían maniobras con una
-envolvente rectangular y medidas físicas más precisas.
+El planificador utiliza una envolvente circular de **116,1 mm de radio**,
+centrada entre las ruedas y calculada a partir de la huella del modelo
+ensamblado. Incluye el barrido de los tacos de las ruedas al girar. El radio
+anterior de 150 mm se obtenía de una caja rectangular con esquinas vacías y
+descartaba posiciones donde sí cabía el robot. La huella y su procedencia están
+en `simulation/webcam/robot_footprint.py` y en
+[la revisión geométrica](activos_revision_geometrica.md).
+
+La misma envolvente se utiliza al planificar, comprobar cada tramo durante el
+movimiento y mostrar las distancias. Permite comprobar también los giros sin
+reducir al robot a un punto. Con el margen en 0 se conserva solamente ese radio:
+también se desactivan los 40 mm adicionales de seguimiento. Un valor positivo
+conserva el perfil con reserva de seguimiento; por ejemplo, 30 mm más 40 mm de
+reserva calculan el camino del centro a 186,1 mm del obstáculo.
+
+La búsqueda A* explora una cuadrícula de 5–10 mm alrededor de los obstáculos.
+Conecta la posición actual con una celda libre mediante un segmento comprobado,
+busca el rodeo y elimina quiebres innecesarios cuando hay visibilidad directa.
+Después verifica geométricamente todos los segmentos completos. Estar cerca de
+un objeto no descarta el recorrido si esa envolvente cabe y hay conexión hasta
+el destino. Pasillos que solo admitan una orientación concreta pueden necesitar
+un planificador de maniobras orientadas; esta versión conserva espacio para
+girar en cualquier dirección.
 
 El borde de la imagen se comprueba por separado: no es un obstáculo físico.
 Allí se reserva espacio para mantener completo el marcador, incluyendo su
@@ -173,8 +186,8 @@ envía cero y espera una imagen estable; conserva el destino y recalcula el
 camino desde la posición recuperada. La ventana de continuación sin marcador
 descrita más abajo se aplica únicamente cuando no hay obstáculos.
 
-Si un destino está dentro de la zona reservada, el robot empieza demasiado cerca
-de un obstáculo o no existe un pasillo suficiente, el inicio queda bloqueado.
+Si la envolvente de un destino o del inicio invade un obstáculo, o no existe un
+pasillo suficiente, el inicio queda bloqueado.
 Antes de buscar desvíos revisa todos los destinos e identifica el número del
 punto que no cabe. El margen 0 no convierte al robot en un punto ni permite
 colocar su centro dentro de un obstáculo.
@@ -440,7 +453,7 @@ la captura de imagen hasta la aplicación de una consigna.
 - Un recorrido virtual de cuatro puntos con giros se completó en orden dentro
   de una misma sesión. Se verificaron la continuación desde un punto intermedio,
   el borrado durante el movimiento y el rechazo de solicitudes atrasadas después
-  de borrar o detener. La suite completa pasó **642 pruebas**, incluyendo ruido de orientación,
+  de borrar o detener. Las pruebas incluyen ruido de orientación,
   correcciones suaves, continuidad breve sin obstáculos, dibujo y persistencia de mapas,
   caminos bloqueados y desvíos por varios destinos.
 - Las pruebas automatizadas cubren geometría, sentido de los giros, correcciones,
@@ -452,9 +465,15 @@ la captura de imagen hasta la aplicación de una consigna.
 - El planificador tiene pruebas de cuadriláteros cóncavos y convexos, pasillos
   bloqueados, tangencias, perspectiva y límites de cálculo. Con cámara fija,
   rotar o trasladar el marcador conserva el lado elegido para el desvío.
-- Una prueba cinemática con margen de 30 mm completó ida y vuelta entre dos destinos alrededor del
-  mismo obstáculo, respetando una separación de centro superior a 180 mm en
-  toda la traza. Esta cifra pertenece al modelo ideal, no a una medición física.
+- Una prueba cinemática con margen de 30 mm completa ida y vuelta entre dos
+  destinos alrededor del mismo obstáculo, comprobando la separación del centro
+  respecto al radio del modelo más el margen en toda la traza.
+- Una regresión reproduce la disposición del 6 de noviembre: robot a unos
+  145 mm del obstáculo, objetivo por encima y a la izquierda. La envolvente
+  anterior bloquea el inicio; la corregida encuentra un rodeo por la izquierda
+  y comprueba cada tramo. También se ensayan rotaciones, desplazamientos del
+  marcador y posiciones que realmente colisionan. Son pruebas del modelo,
+  no una medición física.
 - Se comprobó visualmente el dibujo de cuatro esquinas y el camino calculado
   en un navegador con captura sintética y movimiento deshabilitado.
 - Catorce pruebas C++ del controlador real, compilado sin Arduino, cubren fricción

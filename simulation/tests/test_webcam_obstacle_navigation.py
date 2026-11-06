@@ -12,7 +12,8 @@ import pytest
 
 import simulation.webcam.navigation as navigation_module
 from simulation.webcam.navigation import INT32_MAX, Navigation, NavigationError
-from simulation.webcam.obstacle_planner import point_clearance_mm, segment_is_clear
+from simulation.webcam.obstacle_planner import point_clearance_mm, point_clearances_mm, segment_is_clear
+from simulation.webcam.robot_footprint import ROBOT_RADIUS_MM
 from simulation.webcam.straight_control import StraightControl
 from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, wait_for
 
@@ -65,12 +66,12 @@ def test_preview_detours_without_changing_user_waypoint_or_sending_motor_command
     assert state["target_px"] == [808., 480.] and state["waypoints_px"] == [[808., 480.]]
     assert len(state["planned_path_px"]) >= 4 and state["inflated_obstacles_px"]
     assert state["steering_target_px"] != state["target_px"]
-    assert state["obstacle_settings"] == {"robot_radius_mm": 150, "safety_margin_mm": 30, "tracking_margin_mm": 40}
+    assert state["obstacle_settings"] == {"robot_radius_mm": ROBOT_RADIUS_MM, "safety_margin_mm": 30, "tracking_margin_mm": 40}
     assert not segment_is_clear(camera.state()["marker_corners"], nav._calibration,
-                                [472, 480], [808, 480], QUAD, clearance_mm=180)
+                                [472, 480], [808, 480], QUAD, clearance_mm=ROBOT_RADIUS_MM + 30)
     for start, end in zip(state["planned_path_px"], state["planned_path_px"][1:]):
         assert segment_is_clear(camera.state()["marker_corners"], nav._calibration,
-                                start, end, QUAD, clearance_mm=220)
+                                start, end, QUAD, clearance_mm=ROBOT_RADIUS_MM + 30 + 40)
     assert robot.starts == robot.stops == 0 and robot.drives == []
 
 
@@ -304,11 +305,12 @@ def test_local_speed_budget_reserves_reaction_and_braking_space_without_changing
     wait_for(lambda: nav.state()["phase"] == "advancing", timeout=2.)
     time.sleep(.4)
     clearance = point_clearance_mm(camera.state()["marker_corners"], nav._calibration, [472, 480], QUAD)
-    limit = nav._obstacle_speed_limit(clearance, 180.)
+    required = ROBOT_RADIUS_MM + 30
+    limit = nav._obstacle_speed_limit(clearance, required)
     forward = [max(left, right) for left, right in robot.drives if left > 0 and right > 0]
     assert forward and max(forward) <= math.floor(limit) < 300
-    assert nav._obstacle_speed_limit(190., 180.) == 0.
-    assert nav._obstacle_speed_limit(1000., 180.) > nav._obstacle_speed_limit(220., 180.)
+    assert nav._obstacle_speed_limit(required + 10, required) == 0.
+    assert nav._obstacle_speed_limit(1000., required) > nav._obstacle_speed_limit(required + 40, required)
     assert nav._wheel_commands("turning", math.pi / 2, .5, 0.) == (-53, 53)
 
 
@@ -333,7 +335,7 @@ def test_closed_loop_detours_through_subpoints_without_entering_physical_clearan
                 self.y += speed * math.sin(self.heading) * dt
             self.heading += delta
             self.camera.pose(x=472 + self.x * 600, y=480 - self.y * 600, heading=self.heading, scale=600.)
-            self.clearances.append(point_clearance_mm(self.camera.state()["marker_corners"], nav._calibration,
+            self.clearances.append(point_clearances_mm(self.camera.state()["marker_corners"], nav._calibration,
                                                       [472 + self.x * 600, 480 - self.y * 600], QUAD))
 
     # El reloj físico de la planta avanza veinte veces más rápido en este ensayo.
@@ -361,7 +363,8 @@ def test_closed_loop_detours_through_subpoints_without_entering_physical_clearan
         state = nav.state()
         assert state["phase"] == "arrived", (state["phase"], state["planning_message"], state["message"])
         assert state["waypoint_index"] == state["waypoint_count"] == 1
-        assert min(robot.clearances) >= 180. - .1
+        assert min(value["obstacle_mm"] for value in robot.clearances) >= ROBOT_RADIUS_MM + 30 - .1
+        assert min(value["camera_mm"] for value in robot.clearances) > nav._camera_view_margin(nav._calibration, 30)
         assert robot.starts == 1 and robot.stops == 1
         assert math.hypot(robot.x - .56, robot.y) <= .04
     finally:
@@ -395,9 +398,10 @@ def test_camera_border_is_not_treated_as_a_solid_robot_radius_obstacle():
         assert state["planning_status"] == "ready", state["planning_message"]
         assert info["view_mm"] == pytest.approx(159., abs=.2)
         assert info["view_required_mm"] == pytest.approx(103.76, abs=.2)
-        assert info["obstacle_mm"] > 390 and info["obstacle_required_mm"] == 170
-        # La antigua resta del radio físico al borde habría detenido el robot.
-        assert nav._obstacle_speed_limit(info["view_mm"], info["obstacle_required_mm"]) == 0.
+        assert info["obstacle_mm"] > 390 and info["obstacle_required_mm"] == ROBOT_RADIUS_MM + 20
+        # El borde de cámara conserva el margen del marcador, independiente de
+        # la envolvente física empleada para los obstáculos.
+        assert info["view_required_mm"] < info["obstacle_required_mm"]
         assert nav._obstacle_speed_limit(info["view_mm"], info["view_required_mm"]) > 100.
         nav.start()
         wait_for(lambda: nav.state()["phase"] == "advancing")
@@ -415,14 +419,15 @@ def test_visible_marker_margin_and_real_obstacle_report_different_blocking_reaso
         state = far_border_obstacle(nav)
         assert state["planning_status"] == "blocked"
         assert "destino" in state["planning_message"] and "borde" in state["planning_message"]
-        assert "210 mm" not in state["planning_message"]  # El borde usa143,8 mm, no el radio físico.
+        required = f"{ROBOT_RADIUS_MM + 20 + 40:.0f} mm"
+        assert required not in state["planning_message"]  # El borde usa el margen del marcador.
         with pytest.raises(NavigationError):
             nav.start()
         assert robot.starts == 0
         nav.select_target(900., 359., 1280, 720, "usb-camera")
         state = nav.state()
         assert state["planning_status"] == "blocked"
-        assert "obstáculo" in state["planning_message"] and "210 mm" in state["planning_message"]
+        assert "obstáculo" in state["planning_message"] and required in state["planning_message"]
         with pytest.raises(NavigationError):
             nav.start()
         assert robot.starts == 0
@@ -447,7 +452,7 @@ def test_zero_mode_defaults_and_json_persistence_remove_all_optional_reserves(tm
     path = tmp_path / "navigation-state.json"
     nav = Navigation(camera, robot, path)
     assert nav.state()["obstacle_settings"] == {
-        "robot_radius_mm": 150, "safety_margin_mm": 0, "tracking_margin_mm": 0}
+        "robot_radius_mm": ROBOT_RADIUS_MM, "safety_margin_mm": 0, "tracking_margin_mm": 0}
     calibration(nav)
     goal(nav)
     obstacles(nav)
@@ -493,7 +498,7 @@ def test_zero_margin_fits_a_real_360mm_corridor_while_positive_margin_blocks(sce
     assert state["planning_status"] == "blocked"
     zero = nav.set_obstacle_settings(0, nav.state()["route_revision"])
     assert zero["planning_status"] == "ready", zero["planning_message"]
-    assert zero["obstacle_settings"] == {"robot_radius_mm": 150, "safety_margin_mm": 0, "tracking_margin_mm": 0}
+    assert zero["obstacle_settings"] == {"robot_radius_mm": ROBOT_RADIUS_MM, "safety_margin_mm": 0, "tracking_margin_mm": 0}
     assert robot.starts == 0 and robot.drives == []
 
 
@@ -501,11 +506,12 @@ def test_zero_margin_adaptive_budget_can_command_below_50_without_forcing_the_fl
     camera, robot, nav = scene
     nav.set_obstacle_settings(0, nav.state()["route_revision"])
     goal(nav)
-    state = obstacles(nav, corridor(387., 573.))  #310mm, solo5mm libres por lado al centro.
+    half_gap_px = (ROBOT_RADIUS_MM + 5.) * .6
+    state = obstacles(nav, corridor(480. - half_gap_px, 480. + half_gap_px))  # Solo5mm libres por lado.
     assert state["planning_status"] == "ready", state["planning_message"]
-    limit = nav._obstacle_speed_limit(155., 150., reserve_mm=0)
+    limit = nav._obstacle_speed_limit(ROBOT_RADIUS_MM + 5., ROBOT_RADIUS_MM, reserve_mm=0)
     assert 1 < limit < 50
-    assert nav._obstacle_speed_limit(155., 150.) == 0  # El perfil positivo conserva reserva15.
+    assert nav._obstacle_speed_limit(ROBOT_RADIUS_MM + 5., ROBOT_RADIUS_MM) == 0  # El perfil positivo conserva reserva15.
     nav.start()
     camera.pose(x=640., y=480., scale=600.)
     wait_for(lambda: nav._avoidance_index == 1, timeout=2.)
@@ -531,7 +537,7 @@ def test_all_goals_are_prevalidated_and_occupied_point_two_is_reported_before_as
     state = obstacles(nav)
     assert state["planning_status"] == "blocked"
     assert state["planning_message"].startswith("Punto 2:")
-    assert "envolvente del robot" in state["planning_message"] and "150 mm" in state["planning_message"]
+    assert "envolvente del robot" in state["planning_message"] and f"{ROBOT_RADIUS_MM:.0f} mm" in state["planning_message"]
     assert state["waypoints_px"] == [[808., 480.], [640., 480.]]
     with pytest.raises(NavigationError):
         nav.start()

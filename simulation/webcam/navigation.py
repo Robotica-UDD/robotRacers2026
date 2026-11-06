@@ -19,6 +19,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot
+from .robot_footprint import ROBOT_RADIUS_MM
 from .straight_control import StraightControl
 from .obstacle_planner import (plan_path, segment_is_clear, point_clearances_mm,
                                camera_visibility_margin_mm, validate_obstacles)
@@ -135,7 +136,7 @@ class Navigation:
         self._load_obstacles()
 
     def _obstacle_settings(self):
-        return {"robot_radius_mm": 150, "safety_margin_mm": self._safety_margin_mm,
+        return {"robot_radius_mm": ROBOT_RADIUS_MM, "safety_margin_mm": self._safety_margin_mm,
                 "tracking_margin_mm": 0 if self._safety_margin_mm == 0 else 40}
 
     @staticmethod
@@ -219,7 +220,7 @@ class Navigation:
             return {"obstacle_mm": values["obstacle_mm"] if math.isfinite(values["obstacle_mm"]) else None,
                     "view_mm": values["camera_mm"] if math.isfinite(values["camera_mm"]) else None,
                     "view_required_mm": self._camera_view_margin(calibration, safety_margin),
-                    "obstacle_required_mm": 150 + safety_margin}
+                    "obstacle_required_mm": ROBOT_RADIUS_MM + safety_margin}
         except (ValueError, KeyError, TypeError):
             return None
 
@@ -303,7 +304,8 @@ class Navigation:
         path, legs, inflated, start = [center], [], [], center
         number = index + 1
         try:
-            planning_clearance = sum(settings.values())
+            planning_clearance = (settings["robot_radius_mm"] + settings["safety_margin_mm"]
+                                  + settings["tracking_margin_mm"])
             view_clearance = self._camera_view_margin(calibration, settings["safety_margin_mm"], planning=True)
             # Validar todos los destinos antes de buscar rutas a los anteriores.
             for number, goal in enumerate(goals, index + 1):
@@ -1361,7 +1363,7 @@ class Navigation:
                     with self._lock:
                         obstacles = self._obstacles
                         safety_margin = self._safety_margin_mm
-                        physical_clearance = 150 + safety_margin
+                        physical_clearance = ROBOT_RADIUS_MM + safety_margin
                     view_clearance = self._camera_view_margin(calibration, safety_margin)
                     center = observation["center_px"]
                     if needs_plan:
