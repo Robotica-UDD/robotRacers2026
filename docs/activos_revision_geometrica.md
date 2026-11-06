@@ -51,14 +51,18 @@ El portador blanco del marcador, de 52 × 52 mm, se genera aparte. La huella
 resultante abarca X=−52,85..83,15 mm e Y=±115,9 mm; los tacos sobresalen 0,9 mm
 por lado respecto al ancho nominal de 230 mm. Su radio máximo en una postura
 es 115,983490 mm. Incluyendo cualquier posición de giro de las ruedas es
-116,006415 mm, redondeado hacia arriba a **116,1 mm** para navegación.
+116,006415 mm, redondeado hacia arriba a **116,1 mm** como cota circular.
 `simulation/webcam/robot_footprint.py` conserva los vértices y deriva el radio.
 Los extremos X e Y pertenecen a piezas distintas: combinar ambos en la esquina
 de una caja había originado una reserva inexistente de 150 mm de radio.
 
 La calibración de la webcam fija el centro entre ruedas y el frente real; no
 se sustituye por la posición del marcador simulado. En la configuración física
-comprobada el portador desplazado también queda dentro de ese círculo. Esta
+comprobada el portador desplazado también queda dentro de ese círculo. Con
+separación cero, la navegación utiliza directamente el polígono orientado y
+añade las cuatro esquinas del portador físico según esa calibración; no exige
+que todo el círculo quede libre. El círculo se conserva para el perfil opcional
+de separación positiva. Esta
 comprobación corresponde al modelo reconstruido: accesorios, cables sueltos o
 cambios de montaje todavía requieren comprobar el robot físico.
 

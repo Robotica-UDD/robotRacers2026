@@ -133,38 +133,32 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
    Conserva tus destinos, la calibración y las velocidades. **Borrar puntos**
    conserva el mapa de obstáculos.
 
-El planificador utiliza una envolvente circular de **116,1 mm de radio**,
-centrada entre las ruedas y calculada a partir de la huella del modelo
-ensamblado. Incluye el barrido de los tacos de las ruedas al girar. El radio
-anterior de 150 mm se obtenía de una caja rectangular con esquinas vacías y
-descartaba posiciones donde sí cabía el robot. La huella y su procedencia están
-en `simulation/webcam/robot_footprint.py` y en
+Con **0 mm**, la planificación usa el **contorno orientado del robot**: carrocería,
+ruedas y portador del marcador, proyectados desde el centro entre ruedas según
+la dirección real del frente. No utiliza el círculo de 116,1 mm como distancia
+mínima a los obstáculos. Ese círculo cubría todas las orientaciones a la vez y
+podía bloquear una postura que sí cabía. El contorno visible en verdeazul permite
+comprobar qué forma está usando el programa.
+
+El plan contempla avances, retrocesos y giros en el sitio. Comprueba el barrido
+de la huella durante cada movimiento, no solo sus extremos. Prefiere recorridos
+con más espacio cuando hay alternativas, sin convertir esa preferencia en una
+franja prohibida adicional. Si el robot está junto a un obstáculo, puede retroceder
+antes de girar. Si la posición estimada ya aparece en contacto, busca una maniobra
+que reduzca ese contacto hasta salir; no exige apartarlo manualmente para volver
+a calcular. La salida se hace a velocidad reducida.
+
+El borde de la cámara tampoco lleva un radio reservado. Se comprueba la posición
+real de las cuatro esquinas del marcador en cada postura prevista, sin los
+84 mm que antes se exigían alrededor del centro para cualquier orientación.
+El objetivo no impone una dirección final: el plan puede llegar con una orientación
+que mantenga el marcador visible. Perder realmente la detección sigue pausando
+el movimiento y conserva el recorrido para recalcular al recuperarla.
+
+Un valor de separación positivo conserva el perfil circular anterior con el margen
+elegido y su reserva de seguimiento. La configuración actual permanece en **0 mm**.
+La huella y su procedencia están en `simulation/webcam/robot_footprint.py` y en
 [la revisión geométrica](activos_revision_geometrica.md).
-
-La misma envolvente se utiliza al planificar, comprobar cada tramo durante el
-movimiento y mostrar las distancias. Permite comprobar también los giros sin
-reducir al robot a un punto. Con el margen en 0 se conserva solamente ese radio:
-también se desactivan los 40 mm adicionales de seguimiento. Un valor positivo
-conserva el perfil con reserva de seguimiento; por ejemplo, 30 mm más 40 mm de
-reserva calculan el camino del centro a 186,1 mm del obstáculo.
-
-La búsqueda A* explora una cuadrícula de 5–10 mm alrededor de los obstáculos.
-Conecta la posición actual con una celda libre mediante un segmento comprobado,
-busca el rodeo y elimina quiebres innecesarios cuando hay visibilidad directa.
-Después verifica geométricamente todos los segmentos completos. Estar cerca de
-un objeto no descarta el recorrido si esa envolvente cabe y hay conexión hasta
-el destino. Pasillos que solo admitan una orientación concreta pueden necesitar
-un planificador de maniobras orientadas; esta versión conserva espacio para
-girar en cualquier dirección.
-
-El borde de la imagen se comprueba por separado: no es un obstáculo físico.
-Allí se reserva espacio para mantener completo el marcador, incluyendo su
-desplazamiento respecto al centro del robot y media diagonal del patrón.
-Con separación 0 no se añaden los 20 mm extra de visibilidad ni los 40 mm de
-seguimiento. Con un margen positivo se recuperan esas reservas.
-El tamaño completo del robot y el margen elegido siguen aplicándose a los
-obstáculos dibujados. Los avisos distinguen entre un obstáculo cercano y el
-borde de la imagen, e indican la distancia estimada y la requerida.
 
 Los obstáculos y el camino se proyectan al plano del marcador mediante la
 calibración existente. Las separaciones son **estimaciones del modelo**, no
@@ -174,26 +168,24 @@ robot con sus accesorios.
 Marca la huella que ocupa cada objeto sobre el suelo y deja holgura adicional
 para objetos altos o con piezas que sobresalgan.
 
-Con obstáculos, el servicio comprueba el siguiente tramo y adapta la velocidad
-según el espacio libre y la distancia de frenado estimada. Evalúa por separado
-la holgura frente al objeto y el espacio para conservar el marcador en cámara.
-En el perfil de 0 mm tampoco se añaden los 15 mm de reserva del regulador,
-pero se mantiene el cálculo de frenado. Cuando el espacio exige moverse por
-debajo de 50 mm/s puede solicitar velocidades menores, sin forzar un mínimo
-que invalide ese cálculo. El cero de parada y los botones de detención no cambian.
-Al perder el marcador
-envía cero y espera una imagen estable; conserva el destino y recalcula el
-camino desde la posición recuperada. La ventana de continuación sin marcador
-descrita más abajo se aplica únicamente cuando no hay obstáculos.
+Durante la marcha, el servicio vuelve a comprobar la maniobra restante con la
+posición y la orientación observadas. Una proximidad lateral no fuerza velocidad
+cero: se comprueba si la forma del robot cabe al avanzar, retroceder o girar.
+La rampa y el control local por encoders siguen aplicándose a las velocidades
+firmadas de ambas ruedas. Tras cada maniobra se confirma la parada antes de
+cambiar de sentido; un giro no se cuenta como llegada a un destino.
 
-Si la envolvente de un destino o del inicio invade un obstáculo, o no existe un
-pasillo suficiente, el inicio queda bloqueado.
-Antes de buscar desvíos revisa todos los destinos e identifica el número del
-punto que no cabe. El margen 0 no convierte al robot en un punto ni permite
-colocar su centro dentro de un obstáculo.
-No utiliza una línea directa como alternativa. Cambiar la cámara o su resolución
-invalida el mapa; mover físicamente la cámara requiere recalibrar y dibujarlo
-de nuevo, aunque la resolución sea la misma.
+Si cambia la posición o hay contacto inesperado, se detiene el mando de ese tramo
+y se calcula una maniobra nueva desde la postura actual. También se vuelve a
+intentar sin exigir un desplazamiento manual de 10 mm. Una pared que cierre
+completamente el paso todavía puede impedir llegar: el programa no sustituye
+una búsqueda fallida por una orden de atravesarla.
+
+Al perder el marcador envía cero y espera una imagen estable; conserva el destino
+y recalcula el camino desde la posición recuperada. La ventana de continuación
+sin marcador descrita más abajo se aplica únicamente cuando no hay obstáculos.
+Cambiar la cámara o su resolución invalida el mapa; mover físicamente la cámara
+requiere recalibrar y dibujarlo de nuevo, aunque la resolución sea la misma.
 
 El mapa es manual y estático: solo representa lo que dibujaste. No detecta ni
 añade automáticamente objetos que aparezcan después. La implementación funciona
@@ -412,9 +404,13 @@ El estado incluye `obstacles_px`, `obstacle_settings`, `planned_path_px`,
 `target_px` conserva el destino elegido por el usuario. Los puntos de desvío no
 incrementan el contador de destinos completados. Un mapa guardado que no pueda
 validarse bloquea el inicio hasta borrarlo o sustituirlo.
-`clearance_info` separa la distancia al obstáculo de la distancia al borde
-visible y sus límites de ejecución; la planificación añade la reserva de
-seguimiento a ambos límites. Una distancia al obstáculo vacía significa que
+`collision_model` identifica el modelo de colisión y `robot_footprint_px` contiene
+el contorno proyectado. `maneuver` informa el paso actual y su dirección de avance
+o retroceso. `clearance_info.footprint_gap_mm` muestra la holgura entre el contorno
+y el obstáculo; los valores negativos representan contacto estimado. Con margen
+cero, las distancias requeridas de centro a obstáculo y centro a borde son cero:
+la aceptación depende del contorno y del movimiento, no de esos radios.
+Una distancia al obstáculo vacía significa que
 no hay obstáculos dibujados, no una lectura anterior ni un valor infinito.
 
 El estado de navegación expone `left_target_mm_s` y `right_target_mm_s` para las
@@ -474,6 +470,12 @@ la captura de imagen hasta la aplicación de una consigna.
   y comprueba cada tramo. También se ensayan rotaciones, desplazamientos del
   marcador y posiciones que realmente colisionan. Son pruebas del modelo,
   no una medición física.
+- Las pruebas de maniobras cubren el inicio a 100 mm de un obstáculo con una
+  postura que cabe, la salida de un contacto inicial de 3,15 mm, la llegada a
+  un objetivo a 80 mm del borde con el marcador visible y una pared que cierra
+  todo el paso. Se verifican las velocidades firmadas, el barrido orientado y
+  el arco diferencial de las correcciones, además de Stop, D48 y recuperación
+  de visión sin perder los destinos.
 - Se comprobó visualmente el dibujo de cuatro esquinas y el camino calculado
   en un navegador con captura sintética y movimiento deshabilitado.
 - Catorce pruebas C++ del controlador real, compilado sin Arduino, cubren fricción
