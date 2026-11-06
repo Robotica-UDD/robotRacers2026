@@ -25,6 +25,7 @@ MIN_GRID_M = .005
 MAX_GRID_M = .010
 MAX_PLANNING_SECONDS = 3.
 _EPS = 1e-9
+_DISTANCE_TOLERANCE_M = 2e-6
 
 
 def _finite(value, label):
@@ -135,12 +136,37 @@ class _PlaneMap:
         if not isinstance(calibration, Calibration):
             raise ValueError("Calibra el robot antes de calcular el camino.")
         values = validate_obstacles(obstacles, calibration.width, calibration.height)
-        forward, backward, reference = _homographies(corners, calibration.marker_size_m,
-                                                     calibration.width, calibration.height)
+        raw_forward, _, reference = _homographies(corners, calibration.marker_size_m,
+                                                  calibration.width, calibration.height)
+        # El marco del AprilTag gira y se traslada con el robot. Una cuadrícula
+        # fijada a ese marco puede resolver un empate A* por el lado opuesto al
+        # girar el marcador, aunque la cámara y los obstáculos no cambien.
+        # Fijar origen y ejes al borde superior de la imagen conserva las
+        # distancias métricas mediante una transformación rígida/reflexión.
+        image_frame = ((0., 0.), (calibration.width - 1., 0.),
+                       (calibration.width - 1., calibration.height - 1.),
+                       (0., calibration.height - 1.))
+        raw_frame = np.array([_project(raw_forward, np.asarray(point), reference)
+                              for point in image_frame])
+        origin = raw_frame[0]
+        x_axis = raw_frame[1] - origin
+        edge_length = float(np.linalg.norm(x_axis))
+        if not math.isfinite(edge_length) or edge_length < 1e-8:
+            raise ValueError("El plano visible no permite fijar los ejes de la cámara.")
+        x_axis /= edge_length
+        y_axis = np.array([-x_axis[1], x_axis[0]])
+        if float(y_axis @ (raw_frame[3] - origin)) < 0:
+            y_axis *= -1.
+        rigid = np.array([[x_axis[0], x_axis[1], -float(x_axis @ origin)],
+                          [y_axis[0], y_axis[1], -float(y_axis @ origin)],
+                          [0., 0., 1.]])
+        forward = rigid @ raw_forward
+        backward = np.linalg.inv(forward)
         def project(point):
-            return _project(forward, np.asarray(point, dtype=float), reference)
-        frame = np.array([project(point) for point in ((0., 0.), (calibration.width - 1., 0.),
-                         (calibration.width - 1., calibration.height - 1.), (0., calibration.height - 1.))])
+            # La precisión geométrica del visor es muy inferior a un micrómetro;
+            # estabilizar ese ruido numérico evita cambiar celdas por redondeo.
+            return np.round(_project(forward, np.asarray(point, dtype=float), reference), 6)
+        frame = np.array([project(point) for point in image_frame])
         span = np.ptp(frame, axis=0)
         if np.any(span <= 1e-6) or np.any(span > 10.) or not np.all(np.isfinite(span)):
             raise ValueError("El plano visible es demasiado grande o está muy inclinado. Ajusta la cámara cenital.")
@@ -153,7 +179,7 @@ class _PlaneMap:
 
     def world(self, point):
         value = _point(point, self.width, self.height, "El punto")
-        return _project(self.image_to_plane, np.asarray(value), self.reference)
+        return np.round(_project(self.image_to_plane, np.asarray(value), self.reference), 6)
 
     def image(self, point):
         value = _project(self.plane_to_image, np.asarray(point), np.zeros(2))
@@ -170,13 +196,14 @@ class _PlaneMap:
         for i, c in enumerate(self.frame):
             d = self.frame[(i + 1) % 4]
             length = float(np.linalg.norm(d - c))
-            if any(direction * _cross(c, d, point) / length <= clearance + _EPS for point in (a, b)):
+            if any(direction * _cross(c, d, point) / length <= clearance + _DISTANCE_TOLERANCE_M
+                   for point in (a, b)):
                 return False
         for polygon in self.obstacles:
             if _inside_polygon(a, polygon) or _inside_polygon(b, polygon):
                 return False
             if any(_segment_distance(a, b, polygon[i], polygon[(i + 1) % len(polygon)])
-                   <= clearance + _EPS for i in range(len(polygon))):
+                   <= clearance + _DISTANCE_TOLERANCE_M for i in range(len(polygon))):
                 return False
         return True
 

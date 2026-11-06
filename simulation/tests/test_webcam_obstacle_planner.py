@@ -183,3 +183,49 @@ def test_planning_time_budget_rejects_work_without_a_direct_fallback(monkeypatch
     monkeypatch.setattr(obstacle_planner, 'MAX_PLANNING_SECONDS', -1.)
     with pytest.raises(ValueError, match='cálculo'):
         plan_path(corners, calibration, project((-.65, 0)), project((.65, 0)), obstacles)
+
+
+def marker_image_corners(center, angle_deg, side_px=24.):
+    angle = math.radians(angle_deg)
+    rotation = np.array([[math.cos(angle), -math.sin(angle)],
+                         [math.sin(angle), math.cos(angle)]])
+    offsets = np.array([[-1, -1], [1, -1], [1, 1], [-1, 1]], dtype=float) * side_px / 2
+    return (offsets @ rotation.T + np.asarray(center)).tolist()
+
+
+@pytest.mark.parametrize('angle', [-45., 0., 45., 90.])
+@pytest.mark.parametrize('center', [(472., 480.), (808., 600.), (640., 250.)])
+def test_fixed_camera_route_does_not_change_side_when_marker_rotates_or_moves(angle, center):
+    _, calibration, _ = scene()
+    obstacles = [[[592., 384.], [688., 384.], [688., 576.], [592., 576.]]]
+    start, goal = [250., 480.], [1030., 480.]
+    baseline_corners = marker_image_corners((472., 480.), 0.)
+    changed_corners = marker_image_corners(center, angle)
+    baseline = plan_path(baseline_corners, calibration, start, goal, obstacles)
+    changed = plan_path(changed_corners, calibration, start, goal, obstacles)
+    # El mapa sigue unido a la cámara; solo giró/cambió de sitio el marcador.
+    assert np.mean(np.array(changed['path_px'])[1:-1, 1] - 480.) * np.mean(
+        np.array(baseline['path_px'])[1:-1, 1] - 480.) > 0
+    assert len(changed['path_px']) == len(baseline['path_px'])
+    assert np.max(np.linalg.norm(np.array(changed['path_px']) - baseline['path_px'], axis=1)) / 600. < .01
+    assert changed['path_length_m'] == pytest.approx(baseline['path_length_m'], abs=.01)
+    assert_safe(changed, changed_corners, calibration, obstacles)
+
+
+def test_perspective_camera_keeps_route_side_for_different_marker_poses():
+    _, calibration, project = scene(perspective=True)
+    obstacles = [rectangle(project, -.08, -.16, .08, .16)]
+    start, goal = project((-.65, 0)), project((.65, 0))
+    results = []
+    for center, angle_deg in [((-.3, 0.), 0.), ((.2, .15), 45.), ((0., -.25), 90.)]:
+        angle = math.radians(angle_deg)
+        rotation = np.array([[math.cos(angle), -math.sin(angle)],
+                             [math.sin(angle), math.cos(angle)]])
+        corners = [project(np.array(center) + rotation @ np.array(point))
+                   for point in [(-.02, .02), (.02, .02), (.02, -.02), (-.02, -.02)]]
+        result = plan_path(corners, calibration, start, goal, obstacles)
+        assert_safe(result, corners, calibration, obstacles)
+        results.append(result)
+    for result in results[1:]:
+        assert len(result['path_px']) == len(results[0]['path_px'])
+        assert np.max(np.linalg.norm(np.array(result['path_px']) - results[0]['path_px'], axis=1)) < 6.
