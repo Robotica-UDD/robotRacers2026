@@ -142,6 +142,14 @@ Con el margen inicial, la ruta del centro se calcula a 220 mm del obstáculo.
 Esto puede descartar pasillos estrechos que requerirían maniobras con una
 envolvente rectangular y medidas físicas más precisas.
 
+El borde de la imagen se comprueba por separado: no es un obstáculo físico.
+Allí se reserva espacio para mantener completo el marcador, incluyendo su
+desplazamiento respecto al centro del robot, media diagonal del patrón y 20 mm
+adicionales de visibilidad. El plan añade otros 40 mm para el seguimiento.
+El tamaño completo del robot y el margen elegido siguen aplicándose a los
+obstáculos dibujados. Los avisos distinguen entre un obstáculo cercano y el
+borde de la imagen, e indican la distancia estimada y la requerida.
+
 Los obstáculos y el camino se proyectan al plano del marcador mediante la
 calibración existente. Las separaciones son **estimaciones del modelo**, no
 distancias medidas sobre el suelo. El paralaje, la inclinación de la cámara y
@@ -151,7 +159,9 @@ Marca la huella que ocupa cada objeto sobre el suelo y deja holgura adicional
 para objetos altos o con piezas que sobresalgan.
 
 Con obstáculos, el servicio comprueba el siguiente tramo y adapta la velocidad
-según el espacio libre y la distancia de frenado estimada. Al perder el marcador
+según el espacio libre y la distancia de frenado estimada. Evalúa por separado
+la holgura frente al objeto y el espacio para conservar el marcador en cámara.
+Al perder el marcador
 envía cero y espera una imagen estable; conserva el destino y recalcula el
 camino desde la posición recuperada. La ventana de continuación sin marcador
 descrita más abajo se aplica únicamente cuando no hay obstáculos.
@@ -379,6 +389,10 @@ El estado incluye `obstacles_px`, `obstacle_settings`, `planned_path_px`,
 `target_px` conserva el destino elegido por el usuario. Los puntos de desvío no
 incrementan el contador de destinos completados. Un mapa guardado que no pueda
 validarse bloquea el inicio hasta borrarlo o sustituirlo.
+`clearance_info` separa la distancia al obstáculo de la distancia al borde
+visible y sus límites de ejecución; la planificación añade la reserva de
+seguimiento a ambos límites. Una distancia al obstáculo vacía significa que
+no hay obstáculos dibujados, no una lectura anterior ni un valor infinito.
 
 El estado de navegación expone `left_target_mm_s` y `right_target_mm_s` para las
 consignas enviadas. Los campos anteriores `last_left` y `last_right` se mantienen
@@ -416,7 +430,7 @@ la captura de imagen hasta la aplicación de una consigna.
 - Un recorrido virtual de cuatro puntos con giros se completó en orden dentro
   de una misma sesión. Se verificaron la continuación desde un punto intermedio,
   el borrado durante el movimiento y el rechazo de solicitudes atrasadas después
-  de borrar o detener. La suite completa pasó **606 pruebas**, incluyendo ruido de orientación,
+  de borrar o detener. La suite completa pasó **628 pruebas**, incluyendo ruido de orientación,
   correcciones suaves, continuidad breve sin obstáculos, dibujo y persistencia de mapas,
   caminos bloqueados y desvíos por varios destinos.
 - Las pruebas automatizadas cubren geometría, sentido de los giros, correcciones,

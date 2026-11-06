@@ -364,3 +364,76 @@ def test_closed_loop_detours_through_subpoints_without_entering_physical_clearan
         assert math.hypot(robot.x - .56, robot.y) <= .04
     finally:
         nav.close()
+
+
+def near_border_scene():
+    camera, robot = FakeCamera(), FakeRobot()
+    camera.update(frame_height=720, running=True, opening=False)
+    # Patrón de40 mm a60 píxeles; el centro del robot está55,48 mm a la
+    # izquierda del marcador. El borde visible queda a159 mm del centro.
+    camera.pose(x=238.5 + 55.48 * 1.5, y=359., scale=1500.)
+    nav = Navigation(camera, robot)
+    nav.CONTROL_INTERVAL = .01
+    nav.calibrate([238.5, 359.], [298.5, 359.], 1280, 720, "usb-camera")
+    nav.set_obstacle_settings(20, nav.state()["route_revision"])
+    return camera, robot, nav
+
+
+def far_border_obstacle(nav):
+    quad = [[[850., 200.], [1025., 200.], [1025., 500.], [850., 500.]]]
+    return nav.set_obstacles(quad, 1280, 720, "usb-camera", nav.state()["route_revision"])
+
+
+def test_camera_border_is_not_treated_as_a_solid_robot_radius_obstacle():
+    _, robot, nav = near_border_scene()
+    try:
+        nav.select_target(450., 359., 1280, 720, "usb-camera")
+        state = far_border_obstacle(nav)
+        info = state["clearance_info"]
+        assert state["planning_status"] == "ready", state["planning_message"]
+        assert info["view_mm"] == pytest.approx(159., abs=.2)
+        assert info["view_required_mm"] == pytest.approx(103.76, abs=.2)
+        assert info["obstacle_mm"] > 390 and info["obstacle_required_mm"] == 170
+        # La antigua resta del radio físico al borde habría detenido el robot.
+        assert nav._obstacle_speed_limit(info["view_mm"], info["obstacle_required_mm"]) == 0.
+        assert nav._obstacle_speed_limit(info["view_mm"], info["view_required_mm"]) > 100.
+        nav.start()
+        wait_for(lambda: nav.state()["phase"] == "advancing")
+        time.sleep(.2)
+        assert nav.state()["active"] is True and nav.state()["phase"] == "advancing"
+        assert any(left > 50 and right > 50 for left, right in robot.drives)
+    finally:
+        nav.close()
+
+
+def test_visible_marker_margin_and_real_obstacle_report_different_blocking_reasons():
+    _, robot, nav = near_border_scene()
+    try:
+        nav.select_target(200., 359., 1280, 720, "usb-camera")
+        state = far_border_obstacle(nav)
+        assert state["planning_status"] == "blocked"
+        assert "El destino" in state["planning_message"] and "borde" in state["planning_message"]
+        assert "210 mm" not in state["planning_message"]  # El borde usa143,8 mm, no el radio físico.
+        with pytest.raises(NavigationError):
+            nav.start()
+        assert robot.starts == 0
+        nav.select_target(900., 359., 1280, 720, "usb-camera")
+        state = nav.state()
+        assert state["planning_status"] == "blocked"
+        assert "obstáculo" in state["planning_message"] and "210 mm" in state["planning_message"]
+        with pytest.raises(NavigationError):
+            nav.start()
+        assert robot.starts == 0
+    finally:
+        nav.close()
+
+
+def test_clearance_diagnostics_never_expose_infinity_in_json():
+    _, _, nav = near_border_scene()
+    try:
+        state = nav.state()
+        assert state["clearance_info"]["obstacle_mm"] is None
+        assert state["clearance_info"]["view_mm"] > 0
+        json.dumps(state, allow_nan=False)
+    finally:
+        nav.close()

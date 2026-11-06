@@ -9,7 +9,8 @@ import pytest
 
 from simulation.webcam.navigation_geometry import Calibration
 from simulation.webcam.obstacle_planner import (plan_path, segment_is_clear, validate_obstacles,
-                                               point_clearance_mm)
+                                               point_clearance_mm, point_clearances_mm,
+                                               camera_visibility_margin_mm)
 
 
 def scene(scale=600., perspective=False):
@@ -229,3 +230,110 @@ def test_perspective_camera_keeps_route_side_for_different_marker_poses():
     for result in results[1:]:
         assert len(result['path_px']) == len(results[0]['path_px'])
         assert np.max(np.linalg.norm(np.array(result['path_px']) - results[0]['path_px'], axis=1)) < 6.
+
+
+def test_reported_live_scene_is_clear_of_obstacle_but_near_the_camera_border():
+    corners = [[234.193, 325.179], [178.574, 299.417],
+               [208.61, 248.28], [263.85, 273.21]]
+    calibration = Calibration((.05536, 0.), 0., 'reported-camera', 1280, 720)
+    obstacles = [[[850., 188.], [1025., 188.], [1025., 374.], [850., 374.]]]
+    start, goal = [258., 359.], [450., 359.]
+    distances = point_clearances_mm(corners, calibration, start, obstacles)
+    assert distances['obstacle_mm'] == pytest.approx(354.56, abs=.05)
+    assert distances['camera_mm'] == pytest.approx(161.92, abs=.05)
+    assert distances['obstacle_mm'] > 210 > distances['camera_mm']
+    with pytest.raises(ValueError, match=r'El robot.*borde de la imagen.*162 mm.*210 mm'):
+        plan_path(corners, calibration, start, goal, obstacles, safety_margin_mm=20)
+    camera_margin = camera_visibility_margin_mm(calibration, tracking_margin_mm=40)
+    assert camera_margin == pytest.approx(143.64, abs=.05)
+    result = plan_path(corners, calibration, start, goal, obstacles, safety_margin_mm=20,
+                       camera_clearance_mm=camera_margin)
+    assert result['clearance_mm'] == pytest.approx(210.)
+    assert result['camera_clearance_mm'] == pytest.approx(camera_margin)
+    for a, b in zip(result['path_px'], result['path_px'][1:]):
+        assert segment_is_clear(corners, calibration, a, b, obstacles, clearance_mm=210,
+                                camera_clearance_mm=camera_margin)
+    # El margen de obstáculos sigue bloqueando un destino que queda a206 mm.
+    with pytest.raises(ValueError, match=r'El destino.*obstáculo.*206 mm.*210 mm'):
+        plan_path(corners, calibration, start, [500., 359.], obstacles, safety_margin_mm=20,
+                   camera_clearance_mm=camera_margin)
+
+
+@pytest.mark.parametrize('angle_deg', [0., 45., 90., -135.])
+@pytest.mark.parametrize('tracking', [0., 40.])
+def test_visibility_margin_uses_offset_norm_and_marker_semidiagonal(angle_deg, tracking):
+    theta = math.radians(angle_deg)
+    offset = (.05 * math.cos(theta), .05 * math.sin(theta))
+    calibration = Calibration(offset, theta, 'camera', 1280, 960, .04)
+    value = camera_visibility_margin_mm(calibration, tracking_margin_mm=tracking)
+    assert value == pytest.approx(50. + math.sqrt(2.) * 20. + 20. + tracking)
+    assert camera_visibility_margin_mm(Calibration((0., 0.), theta, 'camera', 1280, 960)) == pytest.approx(
+        math.sqrt(2.) * 20. + 20.)
+
+
+def test_reduced_camera_margin_preserves_legacy_none_and_obstacle_radius():
+    corners, calibration, project = scene()
+    start, goal = project((-.95, 0)), project((-.5, 0))
+    with pytest.raises(ValueError, match='borde de la imagen'):
+        plan_path(corners, calibration, start, goal, [])
+    assert not segment_is_clear(corners, calibration, start, goal, [], clearance_mm=220)
+    result = plan_path(corners, calibration, start, goal, [], camera_clearance_mm=60)
+    assert result['clearance_mm'] == 220 and result['camera_clearance_mm'] == 60
+    assert segment_is_clear(corners, calibration, start, goal, [], clearance_mm=220,
+                            camera_clearance_mm=60)
+
+
+def test_smaller_camera_margin_does_not_open_a_narrow_obstacle_corridor():
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.1, -.79, .1, -.10),
+                 rectangle(project, -.1, .10, .1, .79)]
+    with pytest.raises(ValueError, match='camino libre'):
+        plan_path(corners, calibration, project((-.65, 0)), project((.65, 0)), obstacles,
+                   camera_clearance_mm=60)
+
+
+def test_astar_uses_separate_camera_margin_and_still_clears_every_obstacle():
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.08, -.4, .08, .4)]
+    start, goal = project((-.65, 0)), project((.65, 0))
+    with pytest.raises(ValueError, match='camino libre'):
+        plan_path(corners, calibration, start, goal, obstacles)
+    result = plan_path(corners, calibration, start, goal, obstacles, camera_clearance_mm=60)
+    assert result['path_length_m'] > 1.3
+    for a, b in zip(result['path_px'], result['path_px'][1:]):
+        assert segment_is_clear(corners, calibration, a, b, obstacles, clearance_mm=220,
+                                camera_clearance_mm=60)
+
+
+def test_point_distances_remain_separate_for_braking_and_legacy_minimum():
+    corners, calibration, project = scene()
+    point = project((-.95, 0))
+    distances = point_clearances_mm(corners, calibration, point, [])
+    assert distances['obstacle_mm'] == math.inf
+    assert distances['camera_mm'] == pytest.approx(116.6667, abs=.001)
+    assert point_clearance_mm(corners, calibration, point, []) == distances['camera_mm']
+    obstacles = [rectangle(project, -.1, -.1, .1, .1)]
+    occupied = point_clearances_mm(corners, calibration, project((0., 0)), obstacles)
+    assert occupied['obstacle_mm'] == 0 and occupied['camera_mm'] > 700
+    assert point_clearance_mm(corners, calibration, project((0., 0)), obstacles) == 0
+    assert point_clearances_mm(corners, calibration, [-1., 480.], [])['camera_mm'] == 0
+
+
+def test_destination_at_visibility_edge_names_camera_instead_of_obstacle():
+    corners, calibration, project = scene()
+    with pytest.raises(ValueError, match=r'El destino.*borde de la imagen.*47 mm.*60 mm'):
+        plan_path(corners, calibration, project((-.65, 0)), project((-1.02, 0)), [],
+                   camera_clearance_mm=60)
+
+
+@pytest.mark.parametrize('bad', [True, -1., float('nan'), float('inf'), '60'])
+def test_invalid_separate_camera_margin_is_rejected(bad):
+    corners, calibration, project = scene()
+    with pytest.raises(ValueError):
+        plan_path(corners, calibration, project((-.65, 0)), project((.65, 0)), [],
+                   camera_clearance_mm=bad)
+    with pytest.raises(ValueError):
+        segment_is_clear(corners, calibration, project((-.65, 0)), project((.65, 0)), [],
+                         camera_clearance_mm=bad)
+    with pytest.raises(ValueError):
+        camera_visibility_margin_mm(calibration, bad)

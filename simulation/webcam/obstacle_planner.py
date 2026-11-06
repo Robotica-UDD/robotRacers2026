@@ -187,16 +187,34 @@ class _PlaneMap:
         return [float(np.clip(value[0], 0., self.width - 1.)),
                 float(np.clip(value[1], 0., self.height - 1.))]
 
-    def segment_clear(self, a, b, clearance):
+    def point_clearances(self, point):
+        """Distancias independientes, sin restar los márgenes del consumidor."""
+        signed_area = sum(self.frame[i, 0] * self.frame[(i + 1) % 4, 1]
+                          - self.frame[i, 1] * self.frame[(i + 1) % 4, 0] for i in range(4))
+        direction = 1. if signed_area > 0 else -1.
+        camera = min(direction * _cross(a, self.frame[(i + 1) % 4], point)
+                     / float(np.linalg.norm(self.frame[(i + 1) % 4] - a))
+                     for i, a in enumerate(self.frame))
+        obstacle = math.inf
+        for polygon in self.obstacles:
+            if _inside_polygon(point, polygon):
+                obstacle = 0.
+                break
+            obstacle = min(obstacle, *(_point_segment_distance(point, polygon[i], polygon[(i + 1) % len(polygon)])
+                                       for i in range(len(polygon))))
+        return max(0., camera), obstacle
+
+    def segment_clear(self, a, b, clearance, camera_clearance=None):
         # La imagen proyectada es convexa: comprobar sus semiplanos en ambos
         # extremos también comprueba todo el segmento intermedio.
         signed_area = sum(self.frame[i, 0] * self.frame[(i + 1) % 4, 1]
                           - self.frame[i, 1] * self.frame[(i + 1) % 4, 0] for i in range(4))
         direction = 1. if signed_area > 0 else -1.
+        view_margin = clearance if camera_clearance is None else camera_clearance
         for i, c in enumerate(self.frame):
             d = self.frame[(i + 1) % 4]
             length = float(np.linalg.norm(d - c))
-            if any(direction * _cross(c, d, point) / length <= clearance + _DISTANCE_TOLERANCE_M
+            if any(direction * _cross(c, d, point) / length <= view_margin + _DISTANCE_TOLERANCE_M
                    for point in (a, b)):
                 return False
         for polygon in self.obstacles:
@@ -215,33 +233,57 @@ def _clearance(value, label):
     return value / 1000.
 
 
-def segment_is_clear(corners, calibration, start_px, end_px, obstacles_px, clearance_mm=180):
+def camera_visibility_margin_mm(calibration, tracking_margin_mm=0):
+    """Radio que mantiene el marcador visible al girar alrededor del eje real.
+
+    Incluye el desplazamiento del AprilTag respecto al centro, su semidiagonal
+    y 20 mm extra para la imagen. La planificación puede añadir su reserva de
+    seguimiento; no es el radio físico usado alrededor de obstáculos.
+    """
+    if not isinstance(calibration, Calibration):
+        raise ValueError("Calibra el robot antes de calcular el margen visible.")
+    reserve = _clearance(tracking_margin_mm, "La reserva de seguimiento") * 1000.
+    offset = math.hypot(*calibration.center_tag_m) * 1000.
+    marker_radius = calibration.marker_size_m * math.sqrt(2.) / 2. * 1000.
+    return offset + marker_radius + 20. + reserve
+
+
+def segment_is_clear(corners, calibration, start_px, end_px, obstacles_px, clearance_mm=180,
+                     camera_clearance_mm=None):
     """Comprueba un segmento o un centro (inicio=fin) sin búsqueda ni IO.
 
-    Incluye el borde visible de la cámara. La tangencia exacta al margen se
-    considera ocupada para no depender de redondeos de la proyección.
+    El margen de cámara es independiente del margen de obstáculos. None mantiene
+    el comportamiento anterior: aplicar el mismo margen a ambos. La tangencia
+    exacta se considera ocupada para no depender de redondeos de la proyección.
     """
     clearance = _clearance(clearance_mm, "La distancia de separación")
+    view = clearance if camera_clearance_mm is None else _clearance(camera_clearance_mm, "El margen visible")
     plane = _PlaneMap.build(corners, calibration, obstacles_px)
-    return plane.segment_clear(plane.world(start_px), plane.world(end_px), clearance)
+    return plane.segment_clear(plane.world(start_px), plane.world(end_px), clearance, view)
 
 
-def point_clearance_mm(corners, calibration, point_px, obstacles_px):
-    """Distancia del centro al obstáculo/borde más próximo, sin restar el robot."""
+def point_clearances_mm(corners, calibration, point_px, obstacles_px):
+    """Devuelve obstacle_mm y camera_mm, sin restar robot ni márgenes.
+
+    Sin obstáculos obstacle_mm es infinito; camera_mm siempre corresponde al
+    borde visible. Fuera de la imagen la distancia visible es cero.
+    """
     plane = _PlaneMap.build(corners, calibration, obstacles_px)
     if (not isinstance(point_px, (list, tuple, np.ndarray))
             or isinstance(point_px, np.ndarray) and point_px.ndim != 1 or len(point_px) != 2):
         raise ValueError("El punto necesita dos coordenadas.")
     image_point = [_finite(item, "El punto") for item in point_px]
     if not (0 <= image_point[0] < plane.width and 0 <= image_point[1] < plane.height):
-        return 0.
+        return {"obstacle_mm": 0. if plane.obstacles else math.inf, "camera_mm": 0.}
     point = plane.world(image_point)
-    if any(_inside_polygon(point, polygon) for polygon in plane.obstacles):
-        return 0.
-    polygons = [plane.frame, *plane.obstacles]
-    distance = min(_point_segment_distance(point, polygon[i], polygon[(i + 1) % len(polygon)])
-                   for polygon in polygons for i in range(len(polygon)))
-    return max(0., distance * 1000.)
+    camera, obstacle = plane.point_clearances(point)
+    return {"obstacle_mm": obstacle * 1000., "camera_mm": camera * 1000.}
+
+
+def point_clearance_mm(corners, calibration, point_px, obstacles_px):
+    """Compatibilidad: menor distancia al obstáculo o al borde visible."""
+    values = point_clearances_mm(corners, calibration, point_px, obstacles_px)
+    return min(values["obstacle_mm"], values["camera_mm"])
 
 
 def _check_deadline(deadline):
@@ -249,7 +291,7 @@ def _check_deadline(deadline):
         raise ValueError("El mapa requiere demasiado cálculo. Reduce los obstáculos o el área visible.")
 
 
-def _grid(plane, clearance, deadline):
+def _grid(plane, clearance, deadline, camera_clearance=None):
     minimum = np.min(plane.frame, axis=0)
     maximum = np.max(plane.frame, axis=0)
     span = maximum - minimum
@@ -284,11 +326,12 @@ def _grid(plane, clearance, deadline):
     area = sum(plane.frame[i, 0] * plane.frame[(i + 1) % 4, 1]
                - plane.frame[i, 1] * plane.frame[(i + 1) % 4, 0] for i in range(4))
     direction = 1. if area > 0 else -1.
+    view_margin = clearance if camera_clearance is None else camera_clearance
     for i, a in enumerate(plane.frame):
         b = plane.frame[(i + 1) % 4]
         dx, dy = b - a
         signed = direction * (dx * (y - a[1]) - dy * (x - a[0])) / math.hypot(dx, dy)
-        blocked |= signed <= clearance + pad
+        blocked |= signed <= view_margin + pad
     contours, _ = cv2.findContours(obstacle_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     outlines = []
     for contour in contours:
@@ -298,7 +341,7 @@ def _grid(plane, clearance, deadline):
     return blocked, minimum, step, outlines
 
 
-def _grid_anchor(point, blocked, minimum, step, plane, clearance):
+def _grid_anchor(point, blocked, minimum, step, plane, clearance, camera_clearance=None):
     rows, columns = blocked.shape
     column, row = np.rint((point - minimum) / step).astype(int)
     candidates = []
@@ -308,7 +351,7 @@ def _grid_anchor(point, blocked, minimum, step, plane, clearance):
                 world = minimum + np.array([c, r]) * step
                 candidates.append((float(np.linalg.norm(world - point)), r, c, world))
     for _, row, column, world in sorted(candidates, key=lambda item: item[:3]):
-        if plane.segment_clear(point, world, clearance):
+        if plane.segment_clear(point, world, clearance, camera_clearance):
             return row * columns + column
     raise ValueError("El punto está demasiado cerca del margen de un obstáculo o del borde visible.")
 
@@ -358,17 +401,17 @@ def _astar(blocked, start, goal, step, deadline):
     raise ValueError("No hay un camino libre con el margen de seguridad actual.")
 
 
-def _simplify(points, plane, clearance, deadline):
+def _simplify(points, plane, clearance, deadline, camera_clearance=None):
     result = [points[0]]
     i = 0
     while i < len(points) - 1:
         _check_deadline(deadline)
         j = len(points) - 1
-        while j > i + 1 and not plane.segment_clear(points[i], points[j], clearance):
+        while j > i + 1 and not plane.segment_clear(points[i], points[j], clearance, camera_clearance):
             j -= 1
             if j % 32 == 0:
                 _check_deadline(deadline)
-        if not plane.segment_clear(points[i], points[j], clearance):
+        if not plane.segment_clear(points[i], points[j], clearance, camera_clearance):
             raise ValueError("El camino calculado no conserva la distancia de seguridad.")
         result.append(points[j])
         i = j
@@ -376,7 +419,8 @@ def _simplify(points, plane, clearance, deadline):
 
 
 def plan_path(corners, calibration, start_px, goal_px, obstacles_px, robot_radius_mm=150,
-              safety_margin_mm=30, tracking_margin_mm=40, max_segment_m=.45):
+              safety_margin_mm=30, tracking_margin_mm=40, max_segment_m=.45,
+              camera_clearance_mm=None):
     """Calcula un camino de centros y reserva espacio para el robot completo.
 
     No modifica los polígonos ni el objetivo. Un fallo lanza ValueError; nunca
@@ -385,26 +429,31 @@ def plan_path(corners, calibration, start_px, goal_px, obstacles_px, robot_radiu
     clearance = sum(_clearance(value, label) for value, label in
                     ((robot_radius_mm, "El radio del robot"), (safety_margin_mm, "El margen de seguridad"),
                      (tracking_margin_mm, "La reserva de seguimiento")))
+    view = clearance if camera_clearance_mm is None else _clearance(camera_clearance_mm, "El margen visible")
     segment_length = _finite(max_segment_m, "La longitud de tramo")
     if not .005 <= segment_length <= 1.:
         raise ValueError("La longitud de tramo debe estar entre 5 mm y 1 m.")
     plane = _PlaneMap.build(corners, calibration, obstacles_px)
     deadline = time.monotonic() + MAX_PLANNING_SECONDS
     start, goal = plane.world(start_px), plane.world(goal_px)
-    if not plane.segment_clear(start, start, clearance):
-        raise ValueError("El robot está dentro del margen de un obstáculo o demasiado cerca del borde visible.")
-    if not plane.segment_clear(goal, goal, clearance):
-        raise ValueError("El destino está dentro del margen de un obstáculo o demasiado cerca del borde visible.")
-    blocked, minimum, step, outlines = _grid(plane, clearance, deadline)
-    if plane.segment_clear(start, goal, clearance):
+    for label, point in (("El robot", start), ("El destino", goal)):
+        camera_distance, obstacle_distance = plane.point_clearances(point)
+        if obstacle_distance <= clearance + _DISTANCE_TOLERANCE_M:
+            raise ValueError(f"{label} está dentro del margen de un obstáculo: distancia estimada "
+                             f"{obstacle_distance * 1000.:.0f} mm; se necesitan {clearance * 1000.:.0f} mm.")
+        if camera_distance <= view + _DISTANCE_TOLERANCE_M:
+            raise ValueError(f"{label} está demasiado cerca del borde de la imagen: distancia estimada "
+                             f"{camera_distance * 1000.:.0f} mm; se necesitan {view * 1000.:.0f} mm.")
+    blocked, minimum, step, outlines = _grid(plane, clearance, deadline, view)
+    if plane.segment_clear(start, goal, clearance, view):
         path = [start, goal]
     else:
-        first = _grid_anchor(start, blocked, minimum, step, plane, clearance)
-        last = _grid_anchor(goal, blocked, minimum, step, plane, clearance)
+        first = _grid_anchor(start, blocked, minimum, step, plane, clearance, view)
+        last = _grid_anchor(goal, blocked, minimum, step, plane, clearance, view)
         indices = _astar(blocked, first, last, step, deadline)
         columns = blocked.shape[1]
         points = [start] + [minimum + np.array([node % columns, node // columns]) * step for node in indices] + [goal]
-        path = _simplify(points, plane, clearance, deadline)
+        path = _simplify(points, plane, clearance, deadline, view)
     subdivided = [path[0]]
     length = 0.
     for a, b in zip(path, path[1:]):
@@ -415,8 +464,9 @@ def plan_path(corners, calibration, start_px, goal_px, obstacles_px, robot_radiu
             subdivided.append(a + (b - a) * (index / parts))
     if len(subdivided) > 4096:
         raise ValueError("El camino requiere demasiados tramos. Reduce el área visible.")
-    if any(not plane.segment_clear(a, b, clearance) for a, b in zip(subdivided, subdivided[1:])):
+    if any(not plane.segment_clear(a, b, clearance, view) for a, b in zip(subdivided, subdivided[1:])):
         raise ValueError("El camino calculado no conserva la distancia de seguridad.")
     return {"path_px": [plane.image(point) for point in subdivided],
             "inflated_obstacles_px": outlines, "path_length_m": length,
-            "clearance_mm": clearance * 1000., "grid_step_mm": step * 1000.}
+            "clearance_mm": clearance * 1000., "camera_clearance_mm": view * 1000.,
+            "grid_step_mm": step * 1000.}

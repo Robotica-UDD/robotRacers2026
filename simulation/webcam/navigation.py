@@ -20,8 +20,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot
 from .straight_control import StraightControl
-from .obstacle_planner import (plan_path, segment_is_clear, point_clearance_mm,
-                               validate_obstacles)
+from .obstacle_planner import (plan_path, segment_is_clear, point_clearances_mm,
+                               camera_visibility_margin_mm, validate_obstacles)
 
 INT32_MAX = 2_147_483_647
 MAX_TURN_DEG_S = math.floor(INT32_MAX * 180. / (95. * math.pi))
@@ -129,6 +129,7 @@ class Navigation:
         self._planning_message = "Añade puntos al recorrido."
         self._plan_key = None
         self._plan_center = None
+        self._clearance_info = None
         self._load_calibration()
         self._load_speeds()
         self._load_obstacles()
@@ -201,6 +202,20 @@ class Navigation:
         self._planning_status = "waiting" if self._waypoints else "empty"
         self._planning_message = "Esperando posición para calcular el recorrido." if self._waypoints else "Añade puntos al recorrido."
         self._plan_key = self._plan_center = None
+        self._clearance_info = None
+
+    def _clearance_diagnostics(self, frame, calibration, obstacles, safety_margin):
+        if calibration is None or not self._same_source(frame, calibration) or not self._vision(frame):
+            return None
+        try:
+            center = observe_robot(frame["marker_corners"], calibration)["center_px"]
+            values = point_clearances_mm(frame["marker_corners"], calibration, center, obstacles)
+            return {"obstacle_mm": values["obstacle_mm"] if math.isfinite(values["obstacle_mm"]) else None,
+                    "view_mm": values["camera_mm"] if math.isfinite(values["camera_mm"]) else None,
+                    "view_required_mm": camera_visibility_margin_mm(calibration),
+                    "obstacle_required_mm": 150 + safety_margin}
+        except (ValueError, KeyError, TypeError):
+            return None
 
     def _check_route_revision(self, expected):
         if type(expected) is not int or expected < 0:
@@ -287,7 +302,9 @@ class Navigation:
                         return {"status": "waiting", "message": "El recorrido cambió durante el cálculo.",
                                 "path": [], "inflated": [], "legs": [], "center": center}
                 result = plan_path(frame["marker_corners"], calibration, start, goal, obstacles,
-                                   **settings, max_segment_m=.45)
+                                   **settings, max_segment_m=.45,
+                                   camera_clearance_mm=camera_visibility_margin_mm(
+                                       calibration, settings["tracking_margin_mm"]))
                 inflated = result["inflated_obstacles_px"]
                 leg = [list(point) for point in result["path_px"][1:]] or [list(goal)]
                 if goals:
@@ -714,6 +731,12 @@ class Navigation:
         self._check_source(frame)
         self._refresh_plan(frame)
         with self._lock:
+            diag_calibration, diag_margin = self._calibration, self._safety_margin_mm
+            diag_obstacles, diag_revision = self._obstacles, self._route_generation
+        info = self._clearance_diagnostics(frame, diag_calibration, diag_obstacles, diag_margin)
+        with self._lock:
+            if diag_revision == self._route_generation:
+                self._clearance_info = info
             calibration = self._calibration
             target = None if self._target is None else list(self._target)
             observation = self._observe(frame, calibration, target)
@@ -730,6 +753,7 @@ class Navigation:
                     "last_arrival_mm": self._last_arrival_mm,
                     "obstacles_px": self._obstacles if map_visible else [],
                     "obstacle_settings": self._obstacle_settings(),
+                    "clearance_info": self._clearance_info,
                     "planned_path_px": self._planned_path if planning_visible else [],
                     "inflated_obstacles_px": self._inflated_obstacles if planning_visible else [],
                     "planning_status": self._planning_status if planning_visible else "waiting",
@@ -1320,6 +1344,7 @@ class Navigation:
                     with self._lock:
                         obstacles = self._obstacles
                         physical_clearance = 150 + self._safety_margin_mm
+                    view_clearance = camera_visibility_margin_mm(calibration)
                     center = observation["center_px"]
                     if needs_plan:
                         moved = (blocked_center is None or observe_robot(
@@ -1345,27 +1370,34 @@ class Navigation:
                         center = observation["center_px"]
                     try:
                         clear = (segment_is_clear(frame["marker_corners"], calibration, center, center,
-                                                  obstacles, clearance_mm=physical_clearance)
+                                                  obstacles, clearance_mm=physical_clearance,
+                                                  camera_clearance_mm=view_clearance)
                                  and segment_is_clear(frame["marker_corners"], calibration, center, target,
-                                                      obstacles, clearance_mm=physical_clearance))
-                        clearance = point_clearance_mm(frame["marker_corners"], calibration, center, obstacles)
+                                                      obstacles, clearance_mm=physical_clearance,
+                                                      camera_clearance_mm=view_clearance))
+                        distances = point_clearances_mm(frame["marker_corners"], calibration, center, obstacles)
                     except ValueError:
-                        clear, clearance = False, 0.
+                        clear, distances = False, {"obstacle_mm": 0., "camera_mm": 0.}
                     if not clear:
                         self._zero_drive()
                         needs_plan, blocked_center = True, None
                         straight.reset()
                         self._cancel.wait(self.CONTROL_INTERVAL)
                         continue
-                    safe_speed = self._obstacle_speed_limit(clearance, physical_clearance)
+                    obstacle_speed = self._obstacle_speed_limit(distances["obstacle_mm"], physical_clearance)
+                    view_speed = self._obstacle_speed_limit(distances["camera_mm"], view_clearance)
+                    safe_speed = min(obstacle_speed, view_speed)
                     about_to_stop = (observation["distance_m"] <= .015)
                     will_advance = (mode == "advancing" or (mode is None and abs(observation["bearing_rad"]) <= math.radians(3)))
                     if safe_speed < 50. and will_advance and not about_to_stop:
                         self._zero_drive()
-                        self._set_phase("paused_obstacle", "Falta espacio para avanzar y frenar con seguridad.")
+                        message = ("El marcador está demasiado cerca del borde visible para avanzar y frenar."
+                                   if view_speed < obstacle_speed else
+                                   "Falta separación del obstáculo para avanzar y frenar con seguridad.")
+                        self._set_phase("paused_obstacle", message)
                         with self._lock:
                             self._planning_status = "blocked"
-                            self._planning_message = "Falta espacio para avanzar y frenar con seguridad."
+                            self._planning_message = message
                         needs_plan, blocked_center = True, center
                         self._cancel.wait(self.CONTROL_INTERVAL)
                         continue
