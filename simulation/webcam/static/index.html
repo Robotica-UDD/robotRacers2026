@@ -92,7 +92,7 @@
             </div>
             <div class="obstacle-margin-row">
               <label for="navigation-obstacle-margin">Margen de seguridad</label>
-              <span class="obstacle-margin-value"><input id="navigation-obstacle-margin" type="number" min="10" max="200" step="1" value="30" inputmode="numeric" aria-label="Margen de seguridad, en milímetros" title="Espacio adicional al tamaño del robot" disabled><small>mm</small></span>
+              <span class="obstacle-margin-value"><input id="navigation-obstacle-margin" type="number" min="0" max="200" step="1" value="0" inputmode="numeric" aria-label="Margen de seguridad, en milímetros" title="Espacio extra alrededor del robot; 0 desactiva la separación adicional" disabled><small>mm</small></span>
             </div>
             <p id="navigation-planning-status" class="planning-status" role="status"></p>
             <button id="navigation-obstacle-clear" class="button secondary" type="button" disabled>Borrar obstáculos</button>
@@ -668,9 +668,9 @@
       if (!obstacleMarginEditing) return;
       obstacleMarginEditing = false;
       const margin = Number(input.value);
-      const confirmed = navigationState?.obstacle_settings?.safety_margin_mm ?? 30;
-      if (!input.value.trim() || !Number.isInteger(margin) || margin < 10 || margin > 200) {
-        input.value = confirmed; setNavigationError('El margen debe ser un entero entre 10 y 200 mm.'); updateNavigationUI(); return;
+      const confirmed = navigationState?.obstacle_settings?.safety_margin_mm ?? 0;
+      if (!input.value.trim() || !Number.isInteger(margin) || margin < 0 || margin > 200) {
+        input.value = confirmed; setNavigationError('El margen debe ser un entero entre 0 y 200 mm.'); updateNavigationUI(); return;
       }
       if (margin === confirmed) { updateNavigationUI(); return; }
       if (!canEditObstacles() || navigationRouteRevision() === null) { input.value = confirmed; updateNavigationUI(); return; }
@@ -698,7 +698,7 @@
       $('navigation-obstacle-clear').textContent = navigationBusy === 'clear-obstacles' ? 'Borrando obstáculos…' : 'Borrar obstáculos';
       const input = $('navigation-obstacle-margin');
       input.disabled = !editable || obstacleMarginPending;
-      if (!obstacleMarginEditing && !obstacleMarginPending) input.value = navigationState?.obstacle_settings?.safety_margin_mm ?? 30;
+      if (!obstacleMarginEditing && !obstacleMarginPending) input.value = navigationState?.obstacle_settings?.safety_margin_mm ?? 0;
       const plan = $('navigation-planning-status');
       plan.dataset.mode = navigationState?.planning_status || 'empty';
       plan.textContent = count || mapBlocked ? navigationState?.planning_message || (navigationState?.planning_status === 'ready' ? 'Camino disponible.' : 'Esperando la posición del robot para calcular el camino.') : '';

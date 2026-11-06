@@ -124,8 +124,8 @@ La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegaci�
    cancelar un dibujo incompleto o pulsar Escape.
 3. Repite para los demás obstáculos. Los polígonos rojos representan los objetos;
    la zona amarilla representa el espacio reservado para rodearlos.
-4. Ajusta el **Margen de seguridad** si necesitas más separación. Inicialmente
-   es de 30 mm adicionales al tamaño reservado para el robot.
+4. El **Margen de seguridad** admite de **0 a 200 mm**. Actualmente empieza en
+   **0 mm**, sin separación adicional; puedes aumentar el valor para recuperarla.
 5. Marca tus destinos y revisa el camino verde antes de pulsar
    **Iniciar recorrido**. El planificador introduce puntos intermedios para
    rodear los obstáculos y mantiene el orden de tus destinos numerados.
@@ -137,15 +137,18 @@ El planificador utiliza una envolvente circular de **150 mm de radio**, centrada
 entre las ruedas. Es una aproximación conservadora del modelo disponible: sus
 límites de X=−52,85..83,15 mm e Y=±115 mm caben en un radio de unos 142 mm.
 La envolvente permite comprobar los giros sin asumir que el robot es un punto.
-Al margen elegido se añaden 40 mm para tolerar el seguimiento de la trayectoria.
-Con el margen inicial, la ruta del centro se calcula a 220 mm del obstáculo.
+Con el margen en 0 se conserva solamente esa envolvente de 150 mm: también se
+desactivan los 40 mm adicionales de seguimiento. Un valor positivo conserva
+el perfil con reserva de seguimiento; por ejemplo, 30 mm más 40 mm de reserva
+calculan el camino del centro a 220 mm del obstáculo.
 Esto puede descartar pasillos estrechos que requerirían maniobras con una
 envolvente rectangular y medidas físicas más precisas.
 
 El borde de la imagen se comprueba por separado: no es un obstáculo físico.
 Allí se reserva espacio para mantener completo el marcador, incluyendo su
-desplazamiento respecto al centro del robot, media diagonal del patrón y 20 mm
-adicionales de visibilidad. El plan añade otros 40 mm para el seguimiento.
+desplazamiento respecto al centro del robot y media diagonal del patrón.
+Con separación 0 no se añaden los 20 mm extra de visibilidad ni los 40 mm de
+seguimiento. Con un margen positivo se recuperan esas reservas.
 El tamaño completo del robot y el margen elegido siguen aplicándose a los
 obstáculos dibujados. Los avisos distinguen entre un obstáculo cercano y el
 borde de la imagen, e indican la distancia estimada y la requerida.
@@ -153,14 +156,18 @@ borde de la imagen, e indican la distancia estimada y la requerida.
 Los obstáculos y el camino se proyectan al plano del marcador mediante la
 calibración existente. Las separaciones son **estimaciones del modelo**, no
 distancias medidas sobre el suelo. El paralaje, la inclinación de la cámara y
-el montaje del marcador afectan su exactitud. Mantén un margen amplio en las
-primeras pruebas y comprueba el tamaño real del robot con sus accesorios.
+el montaje del marcador afectan su exactitud. Comprueba el tamaño real del
+robot con sus accesorios.
 Marca la huella que ocupa cada objeto sobre el suelo y deja holgura adicional
 para objetos altos o con piezas que sobresalgan.
 
 Con obstáculos, el servicio comprueba el siguiente tramo y adapta la velocidad
 según el espacio libre y la distancia de frenado estimada. Evalúa por separado
 la holgura frente al objeto y el espacio para conservar el marcador en cámara.
+En el perfil de 0 mm tampoco se añaden los 15 mm de reserva del regulador,
+pero se mantiene el cálculo de frenado. Cuando el espacio exige moverse por
+debajo de 50 mm/s puede solicitar velocidades menores, sin forzar un mínimo
+que invalide ese cálculo. El cero de parada y los botones de detención no cambian.
 Al perder el marcador
 envía cero y espera una imagen estable; conserva el destino y recalcula el
 camino desde la posición recuperada. La ventana de continuación sin marcador
@@ -168,6 +175,9 @@ descrita más abajo se aplica únicamente cuando no hay obstáculos.
 
 Si un destino está dentro de la zona reservada, el robot empieza demasiado cerca
 de un obstáculo o no existe un pasillo suficiente, el inicio queda bloqueado.
+Antes de buscar desvíos revisa todos los destinos e identifica el número del
+punto que no cabe. El margen 0 no convierte al robot en un punto ni permite
+colocar su centro dentro de un obstáculo.
 No utiliza una línea directa como alternativa. Cambiar la cámara o su resolución
 invalida el mapa; mover físicamente la cámara requiere recalibrar y dibujarlo
 de nuevo, aunque la resolución sea la misma.
@@ -430,7 +440,7 @@ la captura de imagen hasta la aplicación de una consigna.
 - Un recorrido virtual de cuatro puntos con giros se completó en orden dentro
   de una misma sesión. Se verificaron la continuación desde un punto intermedio,
   el borrado durante el movimiento y el rechazo de solicitudes atrasadas después
-  de borrar o detener. La suite completa pasó **628 pruebas**, incluyendo ruido de orientación,
+  de borrar o detener. La suite completa pasó **642 pruebas**, incluyendo ruido de orientación,
   correcciones suaves, continuidad breve sin obstáculos, dibujo y persistencia de mapas,
   caminos bloqueados y desvíos por varios destinos.
 - Las pruebas automatizadas cubren geometría, sentido de los giros, correcciones,
@@ -442,7 +452,7 @@ la captura de imagen hasta la aplicación de una consigna.
 - El planificador tiene pruebas de cuadriláteros cóncavos y convexos, pasillos
   bloqueados, tangencias, perspectiva y límites de cálculo. Con cámara fija,
   rotar o trasladar el marcador conserva el lado elegido para el desvío.
-- Una prueba cinemática de ida y vuelta completó dos destinos alrededor del
+- Una prueba cinemática con margen de 30 mm completó ida y vuelta entre dos destinos alrededor del
   mismo obstáculo, respetando una separación de centro superior a 180 mm en
   toda la traza. Esta cifra pertenece al modelo ideal, no a una medición física.
 - Se comprobó visualmente el dibujo de cuatro esquinas y el camino calculado

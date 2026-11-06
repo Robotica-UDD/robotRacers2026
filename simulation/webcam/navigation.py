@@ -118,7 +118,7 @@ class Navigation:
         self._obstacles = []
         self._obstacle_load_error = None
         self._obstacle_source = None
-        self._safety_margin_mm = 30
+        self._safety_margin_mm = 0
         self._planned_path = []
         self._inflated_obstacles = []
         self._planned_legs = []
@@ -136,7 +136,13 @@ class Navigation:
 
     def _obstacle_settings(self):
         return {"robot_radius_mm": 150, "safety_margin_mm": self._safety_margin_mm,
-                "tracking_margin_mm": 40}
+                "tracking_margin_mm": 0 if self._safety_margin_mm == 0 else 40}
+
+    @staticmethod
+    def _camera_view_margin(calibration, safety_margin, *, planning=False):
+        return camera_visibility_margin_mm(calibration,
+            tracking_margin_mm=40 if planning and safety_margin > 0 else 0,
+            extra_margin_mm=0 if safety_margin == 0 else 20)
 
     def _load_obstacles(self):
         if self._obstacles_path is None or not self._obstacles_path.exists():
@@ -147,7 +153,7 @@ class Navigation:
             value = json.loads(self._obstacles_path.read_text(encoding="utf-8"))
             if not isinstance(value, dict) or set(value) != {"version", "source", "polygons_px", "safety_margin_mm"}:
                 raise ValueError()
-            if type(value["version"]) is not int or value["version"] != 1 or type(value["safety_margin_mm"]) is not int or not 10 <= value["safety_margin_mm"] <= 200:
+            if type(value["version"]) is not int or value["version"] != 1 or type(value["safety_margin_mm"]) is not int or not 0 <= value["safety_margin_mm"] <= 200:
                 raise ValueError()
             source = value["source"]
             if source is None:
@@ -212,7 +218,7 @@ class Navigation:
             values = point_clearances_mm(frame["marker_corners"], calibration, center, obstacles)
             return {"obstacle_mm": values["obstacle_mm"] if math.isfinite(values["obstacle_mm"]) else None,
                     "view_mm": values["camera_mm"] if math.isfinite(values["camera_mm"]) else None,
-                    "view_required_mm": camera_visibility_margin_mm(calibration),
+                    "view_required_mm": self._camera_view_margin(calibration, safety_margin),
                     "obstacle_required_mm": 150 + safety_margin}
         except (ValueError, KeyError, TypeError):
             return None
@@ -244,8 +250,8 @@ class Navigation:
         return self.state()
 
     def set_obstacle_settings(self, safety_margin_mm, expected_route_revision):
-        if type(safety_margin_mm) is not int or not 10 <= safety_margin_mm <= 200:
-            raise NavigationError("El margen de seguridad debe ser un entero entre 10 y 200 mm.", 422)
+        if type(safety_margin_mm) is not int or not 0 <= safety_margin_mm <= 200:
+            raise NavigationError("El margen de seguridad debe ser un entero entre 0 y 200 mm.", 422)
         with self._lock:
             self._editable()
             self._check_route_revision(expected_route_revision)
@@ -295,16 +301,27 @@ class Navigation:
             return {"status": "ready" if goals else "empty", "message": "Recorrido preparado." if goals else "Añade puntos al recorrido.",
                     "path": [center] + goals if goals else [], "inflated": [], "legs": [], "center": center}
         path, legs, inflated, start = [center], [], [], center
+        number = index + 1
         try:
-            for goal in goals or [center]:
+            planning_clearance = sum(settings.values())
+            view_clearance = self._camera_view_margin(calibration, settings["safety_margin_mm"], planning=True)
+            # Validar todos los destinos antes de buscar rutas a los anteriores.
+            for number, goal in enumerate(goals, index + 1):
+                distances = point_clearances_mm(frame["marker_corners"], calibration, goal, obstacles)
+                if distances["obstacle_mm"] <= planning_clearance:
+                    return {"status": "blocked", "message": f"Punto {number}: destino a {distances['obstacle_mm']:.0f} mm de un obstáculo; la envolvente del robot requiere {planning_clearance:.0f} mm.",
+                            "path": [], "inflated": [], "legs": [], "center": center}
+                if distances["camera_mm"] <= view_clearance:
+                    return {"status": "blocked", "message": f"Punto {number}: el destino está cerca del borde de la imagen ({distances['camera_mm']:.0f} mm); el marcador requiere {view_clearance:.0f} mm visibles.",
+                            "path": [], "inflated": [], "legs": [], "center": center}
+            for number, goal in enumerate(goals or [center], index + 1):
                 with self._lock:
                     if generation != self._route_generation or (self._active and self._cancel.is_set()):
                         return {"status": "waiting", "message": "El recorrido cambió durante el cálculo.",
                                 "path": [], "inflated": [], "legs": [], "center": center}
                 result = plan_path(frame["marker_corners"], calibration, start, goal, obstacles,
                                    **settings, max_segment_m=.45,
-                                   camera_clearance_mm=camera_visibility_margin_mm(
-                                       calibration, settings["tracking_margin_mm"]))
+                                   camera_clearance_mm=view_clearance)
                 inflated = result["inflated_obstacles_px"]
                 leg = [list(point) for point in result["path_px"][1:]] or [list(goal)]
                 if goals:
@@ -312,7 +329,7 @@ class Navigation:
                     legs.append(leg)
                 start = goal
         except ValueError as exc:
-            return {"status": "blocked" if goals else "empty", "message": str(exc),
+            return {"status": "blocked" if goals else "empty", "message": f"Punto {number}: {exc}",
                     "path": [], "inflated": inflated, "legs": [], "center": center}
         return {"status": "ready" if goals else "empty", "message": "Recorrido preparado." if goals else "Añade puntos al recorrido.",
                 "path": path if goals else [], "inflated": inflated, "legs": legs, "center": center}
@@ -387,8 +404,8 @@ class Navigation:
             return (list(self._steering_target) if self._steering_target else None), result["center"]
 
     @staticmethod
-    def _obstacle_speed_limit(clearance_mm, physical_clearance_mm):
-        extra = max(0., clearance_mm - physical_clearance_mm - 15.)
+    def _obstacle_speed_limit(clearance_mm, physical_clearance_mm, *, reserve_mm=15.):
+        extra = max(0., clearance_mm - physical_clearance_mm - reserve_mm)
         return max(0., -45. + math.sqrt(45. ** 2 + 2. * 450. * extra))
 
     @staticmethod
@@ -1343,8 +1360,9 @@ class Navigation:
                 if avoiding:
                     with self._lock:
                         obstacles = self._obstacles
-                        physical_clearance = 150 + self._safety_margin_mm
-                    view_clearance = camera_visibility_margin_mm(calibration)
+                        safety_margin = self._safety_margin_mm
+                        physical_clearance = 150 + safety_margin
+                    view_clearance = self._camera_view_margin(calibration, safety_margin)
                     center = observation["center_px"]
                     if needs_plan:
                         moved = (blocked_center is None or observe_robot(
@@ -1384,12 +1402,14 @@ class Navigation:
                         straight.reset()
                         self._cancel.wait(self.CONTROL_INTERVAL)
                         continue
-                    obstacle_speed = self._obstacle_speed_limit(distances["obstacle_mm"], physical_clearance)
-                    view_speed = self._obstacle_speed_limit(distances["camera_mm"], view_clearance)
+                    reserve = 0. if safety_margin == 0 else 15.
+                    obstacle_speed = self._obstacle_speed_limit(distances["obstacle_mm"], physical_clearance, reserve_mm=reserve)
+                    view_speed = self._obstacle_speed_limit(distances["camera_mm"], view_clearance, reserve_mm=reserve)
                     safe_speed = min(obstacle_speed, view_speed)
                     about_to_stop = (observation["distance_m"] <= .015)
                     will_advance = (mode == "advancing" or (mode is None and abs(observation["bearing_rad"]) <= math.radians(3)))
-                    if safe_speed < 50. and will_advance and not about_to_stop:
+                    minimum_speed = 1. if safety_margin == 0 else 50.
+                    if safe_speed < minimum_speed and will_advance and not about_to_stop:
                         self._zero_drive()
                         message = ("El marcador está demasiado cerca del borde visible para avanzar y frenar."
                                    if view_speed < obstacle_speed else
@@ -1401,7 +1421,7 @@ class Navigation:
                         needs_plan, blocked_center = True, center
                         self._cancel.wait(self.CONTROL_INTERVAL)
                         continue
-                    if safe_speed >= 50.:
+                    if safe_speed >= minimum_speed:
                         speeds = {**speeds, "forward_mm_s": min(speeds["forward_mm_s"], math.floor(safe_speed))}
                     with self._lock:
                         self._planned_path = [list(center)] + self._avoidance_points[self._avoidance_index:] + [
@@ -1525,7 +1545,7 @@ class Navigation:
                         left = right = 0
                     else:
                         steering = (straight.update(bearing, tick - frame["frame_age_ms"] / 1000.,
-                                     frame_sequence, self._advance_speed(distance, speeds["forward_mm_s"]), distance)
+                                     frame_sequence, min(speeds["forward_mm_s"], self._advance_speed(distance, speeds["forward_mm_s"])), distance)
                                     if mode == "advancing" else None)
                         left, right = self._wheel_commands(mode, bearing, distance, active_seconds - mode_started,
                                                            **speeds, steering_rate=steering)

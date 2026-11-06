@@ -337,3 +337,19 @@ def test_invalid_separate_camera_margin_is_rejected(bad):
                          camera_clearance_mm=bad)
     with pytest.raises(ValueError):
         camera_visibility_margin_mm(calibration, bad)
+
+
+def test_visibility_extra_zero_preserves_only_marker_and_offset_geometry():
+    calibration = Calibration((.03, .04), .7, 'camera', 1280, 960, .04)
+    geometric = 50. + math.sqrt(2.) * 20.
+    assert camera_visibility_margin_mm(calibration, extra_margin_mm=0) == pytest.approx(geometric)
+    assert camera_visibility_margin_mm(calibration, 40, extra_margin_mm=0) == pytest.approx(geometric + 40.)
+    assert camera_visibility_margin_mm(calibration) == pytest.approx(geometric + 20.)
+    assert camera_visibility_margin_mm(calibration, extra_margin_mm=1000) == pytest.approx(geometric + 1000.)
+
+
+@pytest.mark.parametrize('bad', [-1., float('nan'), float('inf'), True, False, '0', 1001.])
+def test_invalid_visibility_extra_margin_is_rejected(bad):
+    calibration = Calibration((0., 0.), 0., 'camera', 1280, 960)
+    with pytest.raises(ValueError, match='visibilidad'):
+        camera_visibility_margin_mm(calibration, extra_margin_mm=bad)

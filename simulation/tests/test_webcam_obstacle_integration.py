@@ -30,6 +30,7 @@ def prepare(tmp_path=None, closed_loop=False):
     nav.SPEED_FALL_MM_S2 = 9000.
     nav.TURN_CONFIRM_SECONDS = .025
     nav.calibrate([472.,480.], [532.,480.], 1280,960,'usb-camera')
+    nav.set_obstacle_settings(30, nav.state()['route_revision'])
     nav.select_target(808.,480.,1280,960,'usb-camera')
     return camera, robot, nav
 

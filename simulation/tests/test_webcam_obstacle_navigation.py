@@ -50,6 +50,7 @@ def scene():
     nav.SETTLE_SECONDS = .03
     nav.WAYPOINT_SETTLE_SECONDS = .01
     calibration(nav)
+    nav.set_obstacle_settings(30, nav.state()["route_revision"])
     try:
         yield camera, robot, nav
     finally:
@@ -274,7 +275,7 @@ def test_obstacle_settings_api_cas_validation_and_active_clear(scene):
         assert response.status_code == 200
         assert client.post("/api/navigation/obstacles", json={**payload, "extra": 1}, headers=headers).status_code == 422
         assert client.post("/api/navigation/obstacles", json=payload, headers=headers).status_code == 409
-        for value in (True, None, 9, 201, 30.):
+        for value in (True, None, -1, 201, 30.):
             assert client.post("/api/navigation/obstacle-settings", json={"safety_margin_mm": value,
                 "expected_route_revision": nav.state()["route_revision"]}, headers=headers).status_code == 422
         nav.start()
@@ -351,6 +352,7 @@ def test_closed_loop_detours_through_subpoints_without_entering_physical_clearan
     nav.TURN_CONFIRM_SECONDS = .25 / 20
     try:
         calibration(nav)
+        nav.set_obstacle_settings(30, nav.state()["route_revision"])
         goal(nav)
         state = obstacles(nav)
         assert len(state["planned_path_px"]) >= 4
@@ -412,7 +414,7 @@ def test_visible_marker_margin_and_real_obstacle_report_different_blocking_reaso
         nav.select_target(200., 359., 1280, 720, "usb-camera")
         state = far_border_obstacle(nav)
         assert state["planning_status"] == "blocked"
-        assert "El destino" in state["planning_message"] and "borde" in state["planning_message"]
+        assert "destino" in state["planning_message"] and "borde" in state["planning_message"]
         assert "210 mm" not in state["planning_message"]  # El borde usa143,8 mm, no el radio físico.
         with pytest.raises(NavigationError):
             nav.start()
@@ -437,3 +439,130 @@ def test_clearance_diagnostics_never_expose_infinity_in_json():
         json.dumps(state, allow_nan=False)
     finally:
         nav.close()
+
+
+def test_zero_mode_defaults_and_json_persistence_remove_all_optional_reserves(tmp_path):
+    camera, robot = FakeCamera(), FakeRobot()
+    camera.pose(x=472., y=480., scale=600.)
+    path = tmp_path / "navigation-state.json"
+    nav = Navigation(camera, robot, path)
+    assert nav.state()["obstacle_settings"] == {
+        "robot_radius_mm": 150, "safety_margin_mm": 0, "tracking_margin_mm": 0}
+    calibration(nav)
+    goal(nav)
+    obstacles(nav)
+    app = FastAPI()
+    app.include_router(navigation_module.make_navigation_router(nav))
+    headers = {"X-Requested-With": "XMLHttpRequest"}
+    with TestClient(app) as client:
+        for value in (False, 0.0):
+            assert client.post("/api/navigation/obstacle-settings", json={
+                "safety_margin_mm": value, "expected_route_revision": nav.state()["route_revision"]},
+                headers=headers).status_code == 422
+        positive = nav.set_obstacle_settings(20, nav.state()["route_revision"])
+        assert positive["obstacle_settings"]["tracking_margin_mm"] == 40
+        result = client.post("/api/navigation/obstacle-settings", json={
+            "safety_margin_mm": 0, "expected_route_revision": nav.state()["route_revision"]}, headers=headers)
+        assert result.status_code == 200
+        assert result.json()["obstacle_settings"]["tracking_margin_mm"] == 0
+    base = math.hypot(*nav._calibration.center_tag_m) * 1000 + 20 * math.sqrt(2)
+    assert nav._camera_view_margin(nav._calibration, 0) == pytest.approx(base)
+    assert nav._camera_view_margin(nav._calibration, 0, planning=True) == pytest.approx(base)
+    assert nav._camera_view_margin(nav._calibration, 20) == pytest.approx(base + 20)
+    assert nav._camera_view_margin(nav._calibration, 20, planning=True) == pytest.approx(base + 60)
+    assert json.loads(path.with_name("navigation-obstacles.json").read_text())["safety_margin_mm"] == 0
+    restored = Navigation(camera, robot, path)
+    try:
+        assert restored.state()["obstacle_settings"] == nav.state()["obstacle_settings"]
+        assert restored.state()["obstacles_px"] == QUAD
+        assert robot.starts == robot.stops == 0 and robot.drives == []
+    finally:
+        nav.close()
+        restored.close()
+
+
+def corridor(upper, lower):
+    return [[[600., 0.], [700., 0.], [700., upper], [600., upper]],
+            [[600., lower], [700., lower], [700., 959.], [600., 959.]]]
+
+
+def test_zero_margin_fits_a_real_360mm_corridor_while_positive_margin_blocks(scene):
+    _, robot, nav = scene
+    goal(nav)
+    state = obstacles(nav, corridor(372., 588.))  # 216px / 0.6px/mm =360mm.
+    assert state["planning_status"] == "blocked"
+    zero = nav.set_obstacle_settings(0, nav.state()["route_revision"])
+    assert zero["planning_status"] == "ready", zero["planning_message"]
+    assert zero["obstacle_settings"] == {"robot_radius_mm": 150, "safety_margin_mm": 0, "tracking_margin_mm": 0}
+    assert robot.starts == 0 and robot.drives == []
+
+
+def test_zero_margin_adaptive_budget_can_command_below_50_without_forcing_the_floor(scene):
+    camera, robot, nav = scene
+    nav.set_obstacle_settings(0, nav.state()["route_revision"])
+    goal(nav)
+    state = obstacles(nav, corridor(387., 573.))  #310mm, solo5mm libres por lado al centro.
+    assert state["planning_status"] == "ready", state["planning_message"]
+    limit = nav._obstacle_speed_limit(155., 150., reserve_mm=0)
+    assert 1 < limit < 50
+    assert nav._obstacle_speed_limit(155., 150.) == 0  # El perfil positivo conserva reserva15.
+    nav.start()
+    camera.pose(x=640., y=480., scale=600.)
+    wait_for(lambda: nav._avoidance_index == 1, timeout=2.)
+    wait_for(lambda: nav.state()["phase"] == "advancing", timeout=2.)
+    first = len(robot.drives)
+    time.sleep(.2)
+    commands = [command for command in robot.drives[first:] if command != (0, 0)]
+    assert commands and all(0 < left <= math.floor(limit) and 0 < right <= math.floor(limit)
+                            for left, right in commands)
+    assert nav.state()["active"] is True and nav.state()["phase"] == "advancing"
+
+
+def test_all_goals_are_prevalidated_and_occupied_point_two_is_reported_before_astar(scene, monkeypatch):
+    _, robot, nav = scene
+    nav.set_obstacle_settings(0, nav.state()["route_revision"])
+    goal(nav)
+    nav.append_target(640., 480., 1280, 960, "usb-camera", nav.state()["route_revision"])
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("No se debe ejecutar A* antes de revisar todos los destinos.")
+
+    monkeypatch.setattr(navigation_module, "plan_path", forbidden)
+    state = obstacles(nav)
+    assert state["planning_status"] == "blocked"
+    assert state["planning_message"].startswith("Punto 2:")
+    assert "envolvente del robot" in state["planning_message"] and "150 mm" in state["planning_message"]
+    assert state["waypoints_px"] == [[808., 480.], [640., 480.]]
+    with pytest.raises(NavigationError):
+        nav.start()
+    assert robot.starts == 0 and robot.drives == []
+
+
+def test_first_blocked_leg_is_labelled_one_even_with_two_valid_goals(scene, monkeypatch):
+    _, _, nav = scene
+    nav.set_obstacle_settings(0, nav.state()["route_revision"])
+    goal(nav)
+    nav.append_target(808., 600., 1280, 960, "usb-camera", nav.state()["route_revision"])
+
+    def blocked(*args, **kwargs):
+        raise ValueError("No hay paso entre los objetos.")
+
+    monkeypatch.setattr(navigation_module, "plan_path", blocked)
+    state = obstacles(nav)
+    assert state["planning_message"].startswith("Punto 1:")
+
+
+def test_preflight_geometry_valueerror_is_blocked_not_a_server_error(scene, monkeypatch):
+    _, robot, nav = scene
+    goal(nav)
+
+    def invalid(*args, **kwargs):
+        raise ValueError("La proyección de la imagen no es válida.")
+
+    monkeypatch.setattr(navigation_module, "point_clearances_mm", invalid)
+    state = obstacles(nav)
+    assert state["planning_status"] == "blocked" and state["planning_message"].startswith("Punto 1:")
+    assert state["clearance_info"] is None
+    with pytest.raises(NavigationError):
+        nav.start()
+    assert robot.starts == 0 and robot.drives == []

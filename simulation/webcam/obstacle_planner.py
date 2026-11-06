@@ -233,19 +233,20 @@ def _clearance(value, label):
     return value / 1000.
 
 
-def camera_visibility_margin_mm(calibration, tracking_margin_mm=0):
+def camera_visibility_margin_mm(calibration, tracking_margin_mm=0, extra_margin_mm=20):
     """Radio que mantiene el marcador visible al girar alrededor del eje real.
 
     Incluye el desplazamiento del AprilTag respecto al centro, su semidiagonal
-    y 20 mm extra para la imagen. La planificación puede añadir su reserva de
+    y, por defecto, 20 mm extra para la imagen. La planificación puede añadir su reserva de
     seguimiento; no es el radio físico usado alrededor de obstáculos.
     """
     if not isinstance(calibration, Calibration):
         raise ValueError("Calibra el robot antes de calcular el margen visible.")
     reserve = _clearance(tracking_margin_mm, "La reserva de seguimiento") * 1000.
+    extra = _clearance(extra_margin_mm, "El margen extra de visibilidad") * 1000.
     offset = math.hypot(*calibration.center_tag_m) * 1000.
     marker_radius = calibration.marker_size_m * math.sqrt(2.) / 2. * 1000.
-    return offset + marker_radius + 20. + reserve
+    return offset + marker_radius + extra + reserve
 
 
 def segment_is_clear(corners, calibration, start_px, end_px, obstacles_px, clearance_mm=180,
