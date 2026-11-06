@@ -25,8 +25,16 @@ def rectangle(project, x1, y1, x2, y2):
 
 def validate_steps(corners, calibration, start, heading, obstacles, result):
     previous, yaw = start, heading
+    reverse_distance = 0.
+    normal_started = False
     for step in result['steps']:
         assert step['kind'] in {'drive', 'turn', 'escape'} and step['direction'] in (-1, 1)
+        if step['kind'] == 'drive':
+            assert step['direction'] == 1
+            normal_started = True
+        if step['direction'] < 0:
+            assert step['kind'] == 'escape' and not normal_started
+            reverse_distance += np.linalg.norm(np.array(step['target_px']) - previous) / 600.
         if step['kind'] == 'turn':
             assert step['target_px'] == pytest.approx(previous, abs=.01)
         else:
@@ -36,6 +44,7 @@ def validate_steps(corners, calibration, start, heading, obstacles, result):
                                     allow_start_overlap=step.get('escaping', False))
         assert report['clear'], (step, report)
         previous, yaw = step['target_px'], step['heading_rad']
+    assert reverse_distance <= .080001
     return previous
 
 
@@ -68,11 +77,17 @@ def test_direct_drive_is_merged_and_no_motors_are_needed():
     assert validate_steps(corners, cal, start, 0., [], result) == pytest.approx(goal, abs=.01)
 
 
-def test_reverse_reaches_goal_without_unnecessary_half_turn():
+def test_goal_behind_requires_validated_half_turn_then_forward_on_same_centerline():
     corners, cal, p = scene()
     start, goal = p(0., 0.), p(-.25, 0.)
     result = plan_pose_path(corners, cal, start, goal, [], start_heading_rad=0.)
-    assert all(step['kind'] == 'drive' and step['direction'] == -1 for step in result['steps'])
+    assert [step['kind'] for step in result['steps']] == ['turn', 'turn', 'drive']
+    assert all(step['direction'] == 1 for step in result['steps'])
+    assert result['steps'][0]['target_px'] == pytest.approx(start, abs=.01)
+    assert result['steps'][1]['target_px'] == pytest.approx(start, abs=.01)
+    assert abs(result['steps'][0]['heading_rad']) == pytest.approx(math.pi / 2., abs=1e-6)
+    assert abs(result['steps'][1]['heading_rad']) == pytest.approx(math.pi, abs=1e-6)
+    assert np.asarray(result['path_px']) == pytest.approx(np.asarray([start, goal]), abs=.01)
     validate_steps(corners, cal, start, 0., [], result)
 
 
@@ -85,6 +100,7 @@ def test_rectangle_detour_is_fast_and_all_sweeps_are_valid():
     assert time.monotonic() - began < 3.
     assert result['path_length_m'] > .666
     assert len(result['steps']) < 15
+    assert all(step['direction'] == 1 for step in result['steps'] if step['kind'] == 'drive')
     validate_steps(corners, cal, start, 0., obstacle, result)
 
 
@@ -103,7 +119,8 @@ def test_goal_80mm_from_border_can_be_reached_with_a_valid_final_heading():
     start, goal = [250., 480.], [48., 480.]
     result = plan_pose_path(corners, cal, start, goal, [], start_heading_rad=0.)
     validate_steps(corners, cal, start, 0., [], result)
-    assert result['steps'][-1]['direction'] == -1
+    assert result['steps'][-1]['direction'] == 1
+    assert all(step['direction'] == 1 for step in result['steps'] if step['kind'] == 'drive')
 
 
 def test_real_calibrated_52mm_marker_carrier_is_part_of_collision_hull():
@@ -205,14 +222,23 @@ def test_head_on_close_wall_uses_short_reverse_before_detouring_in_under_one_sec
     result = plan_pose_path(corners, cal, start, goal, obstacle)
     assert time.monotonic() - began < 1.
     assert result['steps'][0]['direction'] == -1
-    assert result['steps'][0]['kind'] == ('escape' if initial['penetration_mm'] > 0 else 'drive')
+    assert result['steps'][0]['kind'] == 'escape'  # Contacto o espacio insuficiente para girar.
     assert result['steps'][0]['target_px'][1] > start[1]
     previous, heading = start, math.pi / 2.
+    reverse_distance = 0.
+    normal_motion_seen = False
     for step in result['steps']:
+        if step['kind'] == 'drive':
+            normal_motion_seen = True
+            assert step['direction'] == 1
+        if step['direction'] < 0:
+            assert not normal_motion_seen and step['kind'] == 'escape'
+            reverse_distance += np.linalg.norm(np.array(step['target_px']) - previous) / scale
         checked = check_swept_motion(corners, cal, previous, heading, step['target_px'],
                                      step['heading_rad'], obstacle,
                                      allow_start_overlap=step.get('escaping', False))
         assert checked['clear'], checked
         previous, heading = step['target_px'], step['heading_rad']
+    assert reverse_distance <= .080001
     assert previous == pytest.approx(goal, abs=.01)
     assert check_pose(corners, cal, previous, heading, obstacle)['clear']

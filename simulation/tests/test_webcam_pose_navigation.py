@@ -145,6 +145,18 @@ def select(nav, point=(-.400, .300)):
     return nav.select_target(*pixel(point), FRAME_WIDTH, FRAME_HEIGHT, CAMERA_ID)
 
 
+def assert_forward_route(steps):
+    """Solo el prefijo de liberación puede retroceder antes del recorrido."""
+    normal_drive_seen = False
+    for step in steps:
+        if step["kind"] == "drive":
+            assert step["direction"] == 1, step
+            normal_drive_seen = True
+        if step["direction"] < 0:
+            assert step["kind"] == "escape", step
+            assert not normal_drive_seen, step
+
+
 def test_zero_margin_preview_accepts_oriented_start_rejected_by_a_circle_without_arming():
     with synthetic_scene() as (camera, robot, nav):
         state = select(nav)
@@ -160,6 +172,7 @@ def test_zero_margin_preview_accepts_oriented_start_rejected_by_a_circle_without
         assert state["planned_path_px"][0] == pytest.approx(state["center_px"], abs=.01)
         assert state["planned_path_px"][-1] == pytest.approx(pixel((-.4, .3)), abs=.01)
         assert state["maneuver"]["kind"] in {"drive", "turn", "escape"}
+        assert_forward_route(nav._pose_steps)
         assert robot.starts == robot.stops == 0 and robot.drives == []
 
 
@@ -215,13 +228,30 @@ def test_signed_wheel_feedback_completes_detour_and_shallow_contact_escape(obsta
         initial_depth = penetration_mm(robot.x, robot.y, robot.yaw, polygons)
         state = select(nav)
         assert state["planning_status"] == "ready", state["planning_message"]
+        assert_forward_route(nav._pose_steps)
         nav.start()
         wait_for(lambda: not nav.state()["active"], timeout=12.0)
         result = nav.state()
         assert result["phase"] == "arrived", (result["phase"], result["planning_message"], result["message"])
         assert result["waypoint_index"] == result["waypoint_count"] == 1
         assert math.hypot(robot.x + .4, robot.y - .3) <= nav.SETTLED_M
-        assert any(row["left"] < 0 and row["right"] < 0 for row in robot.trace)
+        backwards = [row for row in robot.trace if row["left"] + row["right"] < 0]
+        if initial_depth > .002:
+            assert backwards
+        else:
+            # Puede liberar un giro bloqueado sin que exista contacto en la
+            # orientación inicial: a cero grados, la rueda invadiría la barrera.
+            assert penetration_mm(0.0, 0.0, 0.0, polygons) > 0.0
+        assert all(row["kind"] == "escape" and row["step"]["direction"] < 0
+                   for row in backwards)
+        normal_drive_seen = False
+        for row in robot.trace:
+            if row["kind"] == "drive" and row["left"] + row["right"] > 0:
+                normal_drive_seen = True
+            if row["left"] + row["right"] < 0:
+                assert not normal_drive_seen, row
+        assert all(row["step"]["direction"] == 1 and row["left"] + row["right"] >= 0
+                   for row in robot.trace if row["kind"] == "drive")
         assert any(row["left"] * row["right"] < 0 for row in robot.trace)
         assert robot.starts == 1 and robot.stops == 1
         previous = initial_depth
@@ -238,6 +268,26 @@ def test_signed_wheel_feedback_completes_detour_and_shallow_contact_escape(obsta
                 assert depth <= .002, json.dumps(row)
             previous = depth
         assert robot.trace[-1]["penetration_mm"] <= .002
+
+
+def test_destination_behind_robot_turns_around_then_drives_forward():
+    far_obstacle = [[(.3, .2), (.4, .2), (.4, .3), (.3, .3)]]
+    with synthetic_scene(start=(0.0, 0.0, 0.0), polygons=far_obstacle, plant=True) as (_, robot, nav):
+        selected = select(nav, (-.2, 0.0))
+        assert selected["planning_status"] == "ready", selected["planning_message"]
+        steps = list(nav._pose_steps)
+        assert_forward_route(steps)
+        first_drive = next(index for index, step in enumerate(steps) if step["kind"] == "drive")
+        assert any(step["kind"] == "turn" for step in steps[:first_drive])
+        assert math.cos(steps[first_drive]["heading_rad"]) < -.99
+        assert all(step["kind"] != "escape" for step in steps)
+        nav.start()
+        wait_for(lambda: not nav.state()["active"], timeout=6.0)
+        result = nav.state()
+        assert result["phase"] == "arrived", (result["phase"], result["planning_message"], result["message"])
+        assert math.hypot(robot.x + .2, robot.y) <= nav.SETTLED_M
+        assert all(row["left"] + row["right"] >= 0 for row in robot.trace)
+        assert any(row["left"] * row["right"] < 0 for row in robot.trace)
 
 
 @pytest.mark.parametrize("stop_kind", ["interface", "D48"])

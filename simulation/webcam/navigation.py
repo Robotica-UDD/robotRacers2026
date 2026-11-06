@@ -336,6 +336,8 @@ class Navigation:
                     # count as arrival rather than endlessly asking for another plan.
                     steps = result["steps"] or [{"target_px": list(goal), "heading_rad": heading,
                                                 "direction": 1, "kind": "drive"}]
+                    if any(step["kind"] == "drive" and step["direction"] != 1 for step in steps):
+                        raise ValueError("La ruta necesita recalcularse para avanzar de frente.")
                     pose_legs.append(steps)
                     legs.append([list(step["target_px"]) for step in steps] or [list(goal)])
                     start = goal
@@ -1470,6 +1472,13 @@ class Navigation:
                         pose_finishing = False
                         self._cancel.wait(self.CONTROL_INTERVAL)
                         continue
+                    if step["kind"] == "drive" and step["direction"] != 1:
+                        self._zero_drive()
+                        needs_plan, pose_finishing = True, False
+                        pose_follower.reset()
+                        self._set_phase("planning", "Recalculando el recorrido para avanzar de frente…")
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
                     current_heading = math.radians(observation["heading_deg"])
                     escaping = step["kind"] == "escape" or step.get("escaping", False)
                     # Validate the remaining oriented motion, including every intermediate
@@ -1602,6 +1611,12 @@ class Navigation:
                         applied = [self._ramp_value(value, desired, ramp_dt,
                             self.SPEED_RISE_MM_S2, self.SPEED_FALL_MM_S2)
                             for value, desired in zip(ramp_values, (left, right))]
+                        if step["kind"] == "drive" and sum(applied) < 0:
+                            self._zero_drive()
+                            needs_plan, pose_finishing = True, False
+                            pose_follower.reset()
+                            self._cancel.wait(self.CONTROL_INTERVAL)
+                            continue
                         with self._lock:
                             self._ramp_values, self._ramp_stamp = applied, time.monotonic()
                         self._drive(*[_velocity_mm_s(value) for value in applied])

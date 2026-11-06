@@ -75,6 +75,7 @@ def test_two_user_destinations_keep_their_order_while_both_legs_avoid_the_obstac
         assert min(value['obstacle_mm'] for value in clearances)>ROBOT_RADIUS_MM + 30
         assert min(value['camera_mm'] for value in clearances)>nav._camera_view_margin(nav._calibration,30)
         assert max(abs(y) for _,y,_,_,_ in robot.trace)>(ROBOT_RADIUS_MM + 30) / 1000.
+        assert all(left + right >= 0 for _, _, _, left, right in robot.trace)
     finally:
         nav.close()
 
@@ -91,12 +92,14 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
     camera = FakeCamera()
     camera.update(frame_height=720, camera_id="recorded-camera", running=True,
                   opening=False, marker_corners=CORNERS)
-    plans, sweeps = [], []
+    plans, sweeps, planned_steps = [], [], []
     original_plan, original_sweep = navigation_module.plan_pose_path, navigation_module.check_swept_motion
 
     def recorded_plan(*args, **kwargs):
         plans.append(1)
-        return original_plan(*args, **kwargs)
+        result = original_plan(*args, **kwargs)
+        planned_steps.extend(result["steps"])
+        return result
 
     def recorded_sweep(*args, **kwargs):
         result = original_sweep(*args, **kwargs)
@@ -117,9 +120,13 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
             self.center = np.array(cal.center_tag_m)
             self.heading = cal.front_angle_rad
             self.trace = []
+            self.motion_steps = []
 
         def drive_velocity_navigation(self, left, right):
             super().drive_velocity_navigation(left, right)
+            step_index = nav._pose_step_index
+            step = nav._pose_steps[step_index] if step_index < len(nav._pose_steps) else {}
+            self.motion_steps.append((left, right, dict(step)))
             dt, speed, angular = .02, (left + right) / 2000., (right - left) / 190.
             delta = angular * dt
             if abs(angular) > 1e-9:
@@ -164,6 +171,15 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
         assert state["waypoint_index"] == state["waypoint_count"] == 1
         assert robot.starts == 1 and robot.drives[-1] == (0, 0)
         assert plans and sweeps and all(sweeps)
+        assert all(step["direction"] == 1 for step in planned_steps if step["kind"] == "drive")
+        assert all(left + right >= 0 or step.get("kind") == "escape"
+                   for left, right, step in robot.motion_steps)
+        normal_drive_seen = False
+        for left, right, step in robot.motion_steps:
+            if step.get("kind") == "drive" and left + right > 0:
+                normal_drive_seen = True
+            if left + right < 0:
+                assert not normal_drive_seen, step
         assert all(values["clear"] for _, values in robot.trace)
         final = observe_robot(camera.state()["marker_corners"], cal, GOAL)
         assert final["distance_m"] <= nav.SETTLED_M

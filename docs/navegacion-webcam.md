@@ -140,7 +140,13 @@ mínima a los obstáculos. Ese círculo cubría todas las orientaciones a la vez
 podía bloquear una postura que sí cabía. El contorno visible en verdeazul permite
 comprobar qué forma está usando el programa.
 
-El plan contempla avances, retrocesos y giros en el sitio. Comprueba el barrido
+El recorrido normal se realiza **siempre de frente**. Antes de cada tramo,
+el robot gira hasta orientar su frente hacia el siguiente punto. La reversa
+solo se admite como una salida inicial corta cuando está en contacto o no hay
+espacio para girar; después se detiene, se orienta y continúa hacia delante.
+No se elige la reversa para ahorrar un giro o hacer un rodeo completo.
+
+El plan contempla esas maniobras de liberación y giros en el sitio. Comprueba el barrido
 de la huella durante cada movimiento, no solo sus extremos. Prefiere recorridos
 con más espacio cuando hay alternativas, sin convertir esa preferencia en una
 franja prohibida adicional. Si el robot está junto a un obstáculo, puede retroceder

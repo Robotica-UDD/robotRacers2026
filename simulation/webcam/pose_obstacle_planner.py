@@ -1,4 +1,4 @@
-"""Rutas de poses con la huella orientada, avance, retroceso y giro local.
+"""Rutas de poses con la huella orientada, avance de frente y giro local.
 
 La colisión utiliza el polígono del ensamblaje, nunca su círculo envolvente.
 La cámara limita el centro y las cuatro esquinas reales del marcador; no añade
@@ -24,6 +24,7 @@ POSITION_CELL_M = .0125
 DRIVE_PRIMITIVE_M = .025
 ANGLE_PRIMITIVE_RAD = math.radians(15.)
 MAX_ESCAPE_TRAVEL_M = .20
+MAX_REVERSE_ESCAPE_M = .080
 MAX_OUTPUT_SEGMENT_M = .45
 _DISTANCE_EPS_M = 1e-7
 
@@ -388,6 +389,7 @@ class _Node:
     direction: int
     escaping: bool
     escape_travel: float = 0.
+    reverse_travel: float = 0.
 
 
 def _actions_cost(scene, start, moves):
@@ -413,7 +415,9 @@ def _connector(scene, start, goal, tolerance, deadline, all_options=False):
         return [(0., [])] if all_options else []
     bearing = math.atan2(float(delta[1]), float(delta[0]))
     candidates = []
-    for direction in (1, -1):
+    # Política de la aplicación: toda traslación ordinaria es hacia delante.
+    # Para un objetivo detrás se valida primero el giro, sin cambiar la línea.
+    for direction in (1,):
         if time.monotonic() > deadline:
             break
         yaw = _wrap(bearing + (math.pi if direction < 0 else 0.))
@@ -477,6 +481,22 @@ def _template_routes(scene, start, goal, tolerance, deadline):
     return best[1] if best else None
 
 
+def _needs_initial_reverse(scene, start, goal, tolerance, deadline):
+    bearing = math.atan2(float(goal[1] - start.y), float(goal[0] - start.x))
+    desired = _Pose(start.x, start.y, bearing)
+    required_turn, _ = scene.swept(start, desired, tolerance=tolerance)
+    if not required_turn:
+        return True
+    quarters = []
+    for sign in (1, -1):
+        if time.monotonic() > deadline:
+            return False
+        free, _ = scene.swept(start, _Pose(start.x, start.y, start.yaw + sign * math.pi / 2.),
+                              tolerance=tolerance)
+        quarters.append(free)
+    return not any(quarters)
+
+
 def _guided_routes(scene, start, goal, tolerance, escaping, initial_penetration, deadline):
     """Usa el A* planar como generador; solo la huella barrida acepta maniobras.
 
@@ -487,9 +507,12 @@ def _guided_routes(scene, start, goal, tolerance, escaping, initial_penetration,
     """
     if not scene.plane.obstacles:
         return None
-    prefixes = [(start, [])] if not escaping else []
-    for direction in (-1, 1):
-        for length in (.005, .010, .020, .025, .050, .075, .100):
+    prefixes = [(start, [], False)] if not escaping else []
+    allow_reverse = escaping or _needs_initial_reverse(scene, start, goal, tolerance, deadline)
+    for direction in (1, -1):
+        if direction < 0 and not allow_reverse:
+            continue
+        for length in (.005, .010, .020, .025, .050, .075, MAX_REVERSE_ESCAPE_M):
             if time.monotonic() > deadline:
                 return None
             point = start.point + direction * length * np.array([math.cos(start.yaw), math.sin(start.yaw)])
@@ -498,42 +521,47 @@ def _guided_routes(scene, start, goal, tolerance, escaping, initial_penetration,
                                    max_penetration=initial_penetration if escaping else None,
                                    tolerance=tolerance)
             if valid and float(np.max(scene.evaluate(pose)[0], initial=0.)) <= tolerance + _DISTANCE_EPS_M:
-                prefixes.append((pose, [(pose, 'escape' if escaping else 'drive', direction, escaping)]))
+                recovery = escaping or direction < 0
+                prefixes.append((pose, [(pose, 'escape' if recovery else 'drive', direction, recovery)], direction < 0))
     # El radio grande suele dejar espacio para girar; los menores son solo
     # propuestas adicionales, sin sustituir jamás la colisión orientada.
-    for radius in (math.ceil(scene.radius * 10000.) / 10000., scene.radius * .6, 0.):
-        for pose, prefix in prefixes:
-            if time.monotonic() > deadline:
-                return None
-            if (not scene.plane.segment_clear(pose.point, pose.point, radius, 0.)
-                    or not scene.plane.segment_clear(goal, goal, radius, 0.)):
-                continue
-            try:
-                blocked, minimum, cell, _ = _grid(scene.plane, radius, deadline, 0.)
-                first = _grid_anchor(pose.point, blocked, minimum, cell, scene.plane, radius, 0.)
-                last = _grid_anchor(goal, blocked, minimum, cell, scene.plane, radius, 0.)
-                indices = _astar(blocked, first, last, cell, deadline)
-                columns = blocked.shape[1]
-                points = [pose.point] + [minimum + np.array([node % columns, node // columns]) * cell
-                                        for node in indices] + [goal]
-                guide = _simplify(points, scene.plane, radius, deadline, 0.)
-            except ValueError:
-                continue
-            beam = [(0., pose, prefix)]
-            for waypoint in guide[1:]:
-                following = []
-                for cost, current, moves in beam:
-                    for extra, tail in _connector(scene, current, waypoint, tolerance, deadline, all_options=True):
-                        following.append((cost + extra, tail[-1][0] if tail else current, moves + tail))
-                if not following:
-                    beam = []
-                    break
-                following.sort(key=lambda value: value[0])
-                beam = following[:2]
-            if beam:
-                return min(beam, key=lambda value: _actions_cost(scene, start, value[2]))[2]
+    # Agotar primero las propuestas sin retroceso, incluso las guías estrechas.
+    # La vuelta inicial hacia atrás solo libera contacto o falta de giro.
+    for reverse_phase in (False, True):
+        for radius in (math.ceil(scene.radius * 10000.) / 10000., scene.radius * .6, 0.):
+            for pose, prefix, is_reverse in prefixes:
+                if is_reverse != reverse_phase:
+                    continue
+                if time.monotonic() > deadline:
+                    return None
+                if (not scene.plane.segment_clear(pose.point, pose.point, radius, 0.)
+                        or not scene.plane.segment_clear(goal, goal, radius, 0.)):
+                    continue
+                try:
+                    blocked, minimum, cell, _ = _grid(scene.plane, radius, deadline, 0.)
+                    first = _grid_anchor(pose.point, blocked, minimum, cell, scene.plane, radius, 0.)
+                    last = _grid_anchor(goal, blocked, minimum, cell, scene.plane, radius, 0.)
+                    indices = _astar(blocked, first, last, cell, deadline)
+                    columns = blocked.shape[1]
+                    points = [pose.point] + [minimum + np.array([node % columns, node // columns]) * cell
+                                            for node in indices] + [goal]
+                    guide = _simplify(points, scene.plane, radius, deadline, 0.)
+                except ValueError:
+                    continue
+                beam = [(0., pose, prefix)]
+                for waypoint in guide[1:]:
+                    following = []
+                    for cost, current, moves in beam:
+                        for extra, tail in _connector(scene, current, waypoint, tolerance, deadline, all_options=True):
+                            following.append((cost + extra, tail[-1][0] if tail else current, moves + tail))
+                    if not following:
+                        beam = []
+                        break
+                    following.sort(key=lambda value: value[0])
+                    beam = following[:2]
+                if beam:
+                    return min(beam, key=lambda value: _actions_cost(scene, start, value[2]))[2]
     return None
-
 
 def _output(scene, start, actions, initial_penetration, planning_started):
     merged = []
@@ -592,11 +620,12 @@ def _output(scene, start, actions, initial_penetration, planning_started):
 def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, start_heading_rad=None,
                    footprint_mm=ROBOT_FOOTPRINT_MM, max_seconds=3., allow_start_overlap=True,
                    contact_tolerance_mm=0., require_marker_visible=True):
-    """Búsqueda híbrida de poses; admite retroceso y contacto inicial acotado.
+    """Búsqueda híbrida de poses con avance ordinario siempre hacia delante.
 
     ``heading_rad`` de cada paso está en la imagen, positivo hacia arriba.
     ``escaping`` indica un paso que libera un contacto inicial sin aumentarlo.
     No permite atravesar otro obstáculo ni añadir penetración durante el escape.
+    El retroceso se limita al prefijo de liberación inicial, con hasta80mm.
     """
     seconds = _finite(max_seconds, 'El tiempo de cálculo')
     if not .05 <= seconds <= 5.:
@@ -638,7 +667,7 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
     if not escaping:
         # Una pequeña maniobra previa resuelve puntos pegados a una esquina sin
         # obligar a mover primero 25 mm ni a atravesar el objeto.
-        for direction in (-1, 1):
+        for direction in (1,):
             for travel in (.005, .010, .020):
                 point = start.point + direction * travel * np.array([math.cos(start.yaw), math.sin(start.yaw)])
                 pose = _Pose(float(point[0]), float(point[1]), start.yaw)
@@ -689,7 +718,7 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
                 actions.reverse(); actions.extend(tail)
                 return _output(scene, start, actions, initial_penetration, started)
         primitives = []
-        for direction in (1, -1):
+        for direction in ((1, -1) if node.escaping else (1,)):
             lengths = ((.005, DRIVE_PRIMITIVE_M) if node.escaping
                        or math.hypot(node.pose.x - start.x, node.pose.y - start.y) < .05
                        else (DRIVE_PRIMITIVE_M,))
@@ -704,7 +733,10 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
             if time.monotonic() > deadline:
                 break
             escape_travel = node.escape_travel + travel if node.escaping else 0.
+            reverse_travel = node.reverse_travel + (travel if direction < 0 and motion != 'turn' else 0.)
             if node.escaping and escape_travel > MAX_ESCAPE_TRAVEL_M:
+                continue
+            if reverse_travel > MAX_REVERSE_ESCAPE_M + 1e-9:
                 continue
             valid, _ = scene.swept(node.pose, pose, allow_overlap=node.escaping,
                                    max_penetration=initial_penetration if node.escaping else None,
@@ -720,7 +752,7 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
             if cost + 1e-9 >= best.get(state_key, math.inf):
                 continue
             best[state_key] = cost
-            nodes.append(_Node(pose, cost, index, motion, direction, still_escaping, escape_travel))
+            nodes.append(_Node(pose, cost, index, motion, direction, still_escaping, escape_travel, reverse_travel))
             serial += 1
             heuristic = float(np.linalg.norm(goal - pose.point))
             heapq.heappush(heap, (cost + 1.2 * heuristic, serial, len(nodes) - 1))
