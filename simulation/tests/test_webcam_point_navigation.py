@@ -424,15 +424,24 @@ def test_start_requires_calibration_target_fresh_image_and_ready_robot(rig):
 
 
 @pytest.mark.parametrize("x,y", [(-1, 480), (1280, 480), (640, -1), (640, 960),
-                                  (30, 480), (640, 20), (float("nan"), 480),
+                                  (float("nan"), 480),
                                   (True, 480), ("900", 480)])
-def test_invalid_or_border_target_is_rejected_without_motion(rig, x, y):
+def test_invalid_or_outside_target_is_rejected_without_motion(rig, x, y):
     _, robot, nav = rig
     calibrate(nav)
     with pytest.raises(NavigationError):
         target(nav, x, y)
     assert nav.state()["target_px"] is None
     assert robot.starts == 0 and robot.drives == []
+
+
+@pytest.mark.parametrize("x,y", [(1, 480), (30, 480), (640, 20)])
+def test_zero_margin_selection_does_not_add_an_invisible_camera_border(rig, x, y):
+    _, robot, nav = rig
+    calibrate(nav)
+    selected = target(nav, x, y)
+    assert selected["target_px"] == [x, y]
+    assert robot.starts == robot.stops == 0 and robot.drives == []
 
 
 def test_far_target_is_rejected_and_request_source_must_match(rig):

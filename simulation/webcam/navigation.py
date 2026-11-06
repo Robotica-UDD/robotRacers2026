@@ -20,6 +20,9 @@ from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot
 from .robot_footprint import ROBOT_RADIUS_MM
+from .pose_follower import PoseFollower
+from .pose_obstacle_planner import (plan_pose_path, check_pose, check_swept_motion,
+                                    heading_error_rad, check_wheel_motion)
 from .straight_control import StraightControl
 from .obstacle_planner import (plan_path, segment_is_clear, point_clearances_mm,
                                camera_visibility_margin_mm, validate_obstacles)
@@ -130,6 +133,10 @@ class Navigation:
         self._planning_message = "Añade puntos al recorrido."
         self._plan_key = None
         self._plan_center = None
+        self._plan_heading = None
+        self._pose_legs = []
+        self._pose_steps = []
+        self._pose_step_index = 0
         self._clearance_info = None
         self._load_calibration()
         self._load_speeds()
@@ -139,8 +146,13 @@ class Navigation:
         return {"robot_radius_mm": ROBOT_RADIUS_MM, "safety_margin_mm": self._safety_margin_mm,
                 "tracking_margin_mm": 0 if self._safety_margin_mm == 0 else 40}
 
+    def _uses_oriented_footprint(self):
+        return bool(self._obstacles) and self._safety_margin_mm == 0
+
     @staticmethod
     def _camera_view_margin(calibration, safety_margin, *, planning=False):
+        if safety_margin == 0:
+            return 0.  # La pose comprueba el contorno real del marcador, no un círculo.
         return camera_visibility_margin_mm(calibration,
             tracking_margin_mm=40 if planning and safety_margin > 0 else 0,
             extra_margin_mm=0 if safety_margin == 0 else 20)
@@ -208,7 +220,8 @@ class Navigation:
         self._steering_target = None
         self._planning_status = "waiting" if self._waypoints else "empty"
         self._planning_message = "Esperando posición para calcular el recorrido." if self._waypoints else "Añade puntos al recorrido."
-        self._plan_key = self._plan_center = None
+        self._plan_key = self._plan_center = self._plan_heading = None
+        self._pose_legs, self._pose_steps, self._pose_step_index = [], [], 0
         self._clearance_info = None
 
     def _clearance_diagnostics(self, frame, calibration, obstacles, safety_margin):
@@ -217,10 +230,14 @@ class Navigation:
         try:
             center = observe_robot(frame["marker_corners"], calibration)["center_px"]
             values = point_clearances_mm(frame["marker_corners"], calibration, center, obstacles)
-            return {"obstacle_mm": values["obstacle_mm"] if math.isfinite(values["obstacle_mm"]) else None,
+            pose = (check_pose(frame["marker_corners"], calibration, center,
+                               math.radians(observe_robot(frame["marker_corners"], calibration)["heading_deg"]),
+                               obstacles) if safety_margin == 0 and obstacles else None)
+            return {"footprint_gap_mm": pose["clearance_mm"] if pose else None,
+                    "obstacle_mm": values["obstacle_mm"] if math.isfinite(values["obstacle_mm"]) else None,
                     "view_mm": values["camera_mm"] if math.isfinite(values["camera_mm"]) else None,
                     "view_required_mm": self._camera_view_margin(calibration, safety_margin),
-                    "obstacle_required_mm": ROBOT_RADIUS_MM + safety_margin}
+                    "obstacle_required_mm": 0. if pose else ROBOT_RADIUS_MM + safety_margin}
         except (ValueError, KeyError, TypeError):
             return None
 
@@ -301,6 +318,35 @@ class Navigation:
         if not obstacles:
             return {"status": "ready" if goals else "empty", "message": "Recorrido preparado." if goals else "Añade puntos al recorrido.",
                     "path": [center] + goals if goals else [], "inflated": [], "legs": [], "center": center}
+        if settings["safety_margin_mm"] == 0:
+            path, legs, pose_legs = [center], [], []
+            heading = math.radians(observe_robot(frame["marker_corners"], calibration)["heading_deg"])
+            first_heading = heading
+            start = center
+            try:
+                for number, goal in enumerate(goals, index + 1):
+                    with self._lock:
+                        if generation != self._route_generation or self._cancel.is_set() and self._active:
+                            return {"status": "waiting", "message": "El recorrido cambió durante el cálculo.",
+                                    "path": [], "inflated": [], "legs": [], "center": center}
+                    result = plan_pose_path(frame["marker_corners"], calibration, start, goal, obstacles,
+                                            start_heading_rad=heading, allow_start_overlap=True)
+                    path.extend(result["path_px"][1:])
+                    # A coincident, free destination is a zero-speed step. It must
+                    # count as arrival rather than endlessly asking for another plan.
+                    steps = result["steps"] or [{"target_px": list(goal), "heading_rad": heading,
+                                                "direction": 1, "kind": "drive"}]
+                    pose_legs.append(steps)
+                    legs.append([list(step["target_px"]) for step in steps] or [list(goal)])
+                    start = goal
+                    if steps:
+                        heading = steps[-1]["heading_rad"]
+            except ValueError as exc:
+                return {"status": "blocked", "message": f"Punto {number}: {exc}",
+                        "path": [], "inflated": [], "legs": [], "center": center}
+            return {"status": "ready", "message": "Recorrido con maniobras preparado.",
+                    "path": path, "inflated": [], "legs": legs, "pose_legs": pose_legs,
+                    "center": center, "heading": first_heading}
         path, legs, inflated, start = [center], [], [], center
         number = index + 1
         try:
@@ -354,7 +400,11 @@ class Navigation:
                 cached_key, cached_center = self._plan_key, self._plan_center
             if not force and cached_key == key and cached_center is not None and self._vision(frame):
                 try:
-                    if observe_robot(frame["marker_corners"], calibration, cached_center)["distance_m"] < .01:
+                    cached_observation = observe_robot(frame["marker_corners"], calibration, cached_center)
+                    same_heading = (settings["safety_margin_mm"] != 0 or not obstacles or
+                                    self._plan_heading is not None and abs(heading_error_rad(
+                                        frame["marker_corners"], calibration, self._plan_heading)) < math.radians(3))
+                    if cached_observation["distance_m"] < .01 and same_heading:
                         return None
                 except (ValueError, TypeError):
                     pass
@@ -370,6 +420,15 @@ class Navigation:
                 self._planned_path, self._inflated_obstacles = result["path"], result["inflated"]
                 self._planned_legs = result["legs"]
                 self._plan_key, self._plan_center = key, result["center"]
+                self._plan_heading = result.get("heading")
+                if self._plan_heading is None and calibration is not None and self._vision(frame):
+                    try:
+                        self._plan_heading = math.radians(observe_robot(frame["marker_corners"], calibration)["heading_deg"])
+                    except (ValueError, TypeError, KeyError):
+                        pass
+                self._pose_legs = result.get("pose_legs", [])
+                self._pose_steps = self._pose_legs[0] if self._pose_legs else []
+                self._pose_step_index = 0
                 if obstacles and result["legs"]:
                     self._avoidance_points, self._avoidance_index = result["legs"][0], 0
                     self._steering_target = list(self._avoidance_points[0])
@@ -400,7 +459,8 @@ class Navigation:
             moved = self._observe(fresh, calibration, result["center"], required=True)
         except NavigationError:
             return None, None
-        if moved["distance_m"] > .01:
+        if (moved["distance_m"] > .01 or result.get("heading") is not None and
+                abs(heading_error_rad(fresh["marker_corners"], calibration, result["heading"])) > math.radians(3)):
             return None, None
         with self._lock:
             return (list(self._steering_target) if self._steering_target else None), result["center"]
@@ -679,7 +739,7 @@ class Navigation:
             corners = frame["marker_corners"]
             edge = sum(math.hypot(corners[(i + 1) % 4][0] - corners[i][0],
                                   corners[(i + 1) % 4][1] - corners[i][1]) for i in range(4)) / 4
-            margin = max(20., edge * .6)
+            margin = 0. if self._safety_margin_mm == 0 else max(20., edge * .6)
             if not (margin <= target[0] < frame_width - margin
                     and margin <= target[1] < frame_height - margin):
                 raise NavigationError("El destino debe quedar más alejado del borde de la imagen.", 422)
@@ -763,6 +823,13 @@ class Navigation:
                 frame.get(field) == self._obstacle_source.get(field)
                 for field in ("camera_id", "frame_width", "frame_height")))
             planning_visible = not self._obstacles or (map_visible and self._vision(frame))
+            footprint = []
+            if observation and self._uses_oriented_footprint():
+                try:
+                    footprint = check_pose(frame["marker_corners"], calibration, observation["center_px"],
+                        math.radians(observation["heading_deg"]), self._obstacles)["footprint_px"]
+                except (ValueError, TypeError, KeyError):
+                    pass
             return {"phase": self._phase, "active": self._active,
                     "calibrated": calibration is not None and self._same_source(frame, calibration),
                     "message": self._message, "target_px": target,
@@ -773,6 +840,10 @@ class Navigation:
                     "obstacles_px": self._obstacles if map_visible else [],
                     "obstacle_settings": self._obstacle_settings(),
                     "clearance_info": self._clearance_info,
+                    "collision_model": "oriented_footprint" if self._uses_oriented_footprint() else "circle",
+                    "robot_footprint_px": footprint,
+                    "maneuver": (self._pose_steps[self._pose_step_index] if self._pose_steps and
+                                 self._pose_step_index < len(self._pose_steps) else None),
                     "planned_path_px": self._planned_path if planning_visible else [],
                     "inflated_obstacles_px": self._inflated_obstacles if planning_visible else [],
                     "planning_status": self._planning_status if planning_visible else "waiting",
@@ -850,7 +921,8 @@ class Navigation:
                 if planned is None or planned["status"] != "ready":
                     raise NavigationError(self._planning_message or "No existe un camino libre para esta ruta.")
                 current = self._observe(fresh, calibration, planned["center"], required=True)
-                if current["distance_m"] > .01:
+                if (current["distance_m"] > .01 or planned.get("heading") is not None and
+                        abs(heading_error_rad(fresh["marker_corners"], calibration, planned["heading"])) > math.radians(3)):
                     raise NavigationError("El robot se movió durante el cálculo. Vuelve a iniciar.")
             if observation["distance_m"] > self.MAX_DISTANCE_M:
                 raise NavigationError("El destino quedó a más de 600 mm. Vuelve a seleccionarlo.")
@@ -947,8 +1019,10 @@ class Navigation:
                 self._vision_gap_ms = 0.
 
     def _drive(self, left, right):
-        self.robot.drive_velocity_navigation(left, right)
         with self._lock:
+            if (left or right) and (self._cancel.is_set() or self._closed):
+                return
+            self.robot.drive_velocity_navigation(left, right)
             self._last_left, self._last_right = left, right
 
     def _zero_drive(self):
@@ -1144,6 +1218,9 @@ class Navigation:
         camera_sequence, camera_capture = None, None
         large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
         straight = StraightControl()
+        pose_follower = PoseFollower()
+        pose_finishing = False
+        pose_replan_at = 0.
         with self._lock:
             avoiding = bool(self._obstacles)
             if avoiding and self._steering_target is not None:
@@ -1278,8 +1355,9 @@ class Navigation:
                     if (connected and stable and not arming and tick >= next_arm
                             and not remote.get("moving") and not remote.get("navigation_active")):
                         if avoiding and needs_plan:
-                            if blocked_center is not None and observation is not None and observe_robot(
-                                    frame["marker_corners"], calibration, blocked_center)["distance_m"] < .01:
+                            if (not self._uses_oriented_footprint() and blocked_center is not None
+                                    and observation is not None and observe_robot(
+                                    frame["marker_corners"], calibration, blocked_center)["distance_m"] < .01):
                                 self._cancel.wait(self.CONTROL_INTERVAL)
                                 continue
                             target, blocked_center = self._runtime_plan(frame, calibration)
@@ -1287,6 +1365,10 @@ class Navigation:
                                 self._cancel.wait(self.CONTROL_INTERVAL)
                                 continue
                             needs_plan = False
+                            if self._uses_oriented_footprint():
+                                pose_follower.reset()
+                                pose_finishing = False
+                                best_distance = best_angle = math.inf
                         self._launch_rearm(required_velocity)  # HTTP en otro trabajador, sin bloquear el control.
                         next_arm = tick + self.RESUME_RETRY_SECONDS
                     self._cancel.wait(self.CONTROL_INTERVAL)
@@ -1359,6 +1441,178 @@ class Navigation:
                     retry_until = None
                     no_progress_seconds = 0.
                     best_distance, best_angle = math.inf, math.inf
+                if avoiding and self._uses_oriented_footprint():
+                    if needs_plan or not self._pose_steps:
+                        self._zero_drive()
+                        if tick >= pose_replan_at:
+                            next_target, blocked_center = self._runtime_plan(frame, calibration)
+                            pose_replan_at = time.monotonic() + .5
+                            if next_target is not None:
+                                target, needs_plan = next_target, False
+                                pose_follower.reset()
+                                pose_finishing = False
+                                no_progress_seconds = 0.
+                                best_distance = best_angle = math.inf
+                            else:
+                                needs_plan = True
+                                self._set_phase("paused_obstacle", self._planning_message)
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    with self._lock:
+                        step = self._pose_steps[self._pose_step_index]
+                        target = list(step["target_px"])
+                        self._steering_target = target
+                        obstacles = self._obstacles
+                    observation = self._observe(frame, calibration, target)
+                    if observation is None:
+                        self._zero_drive()
+                        waiting_vision, needs_plan = True, True
+                        pose_finishing = False
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    current_heading = math.radians(observation["heading_deg"])
+                    escaping = step["kind"] == "escape" or step.get("escaping", False)
+                    # Validate the remaining oriented motion, including every intermediate
+                    # footprint. An escape may only reduce existing contact, never cross it.
+                    try:
+                        swept = check_swept_motion(frame["marker_corners"], calibration,
+                            observation["center_px"], current_heading, target, step["heading_rad"],
+                            obstacles, allow_start_overlap=escaping)
+                    except (ValueError, KeyError, TypeError):
+                        swept = {"clear": False}
+                    if not swept["clear"]:
+                        self._zero_drive()
+                        needs_plan, blocked_center, pose_finishing = True, None, False
+                        pose_follower.reset()
+                        self._set_phase("planning", "Buscando una maniobra para alejarse del obstáculo…")
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    error = heading_error_rad(frame["marker_corners"], calibration, step["heading_rad"])
+                    observation["sequence"] = frame_sequence
+                    if step["kind"] == "turn":
+                        if abs(error) < best_angle - math.radians(2):
+                            best_angle, no_progress_seconds = abs(error), 0.
+                    elif observation["distance_m"] < best_distance - .003:
+                        best_distance, no_progress_seconds = observation["distance_m"], 0.
+                    output = pose_follower.update(step, observation, error, tick, speeds)
+                    if output["replan"]:
+                        self._zero_drive()
+                        needs_plan, blocked_center, pose_finishing = True, None, False
+                        pose_follower.reset()
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    pose_finishing = pose_finishing or output["done"]
+                    left, right = (0, 0) if pose_finishing else (output["left"], output["right"])
+                    self._set_phase(output["phase"], output["message"])
+                    # The actual wheel correction traces an arc, not the straight
+                    # interpolation used to describe a planned translation.
+                    # Check the next ramp output and the command it approaches.
+                    with self._lock:
+                        ramp_dt = (self.CONTROL_INTERVAL if self._ramp_stamp is None else
+                                   max(0., min(.1, tick - self._ramp_stamp)))
+                        ramp_values = tuple(self._ramp_values)
+                    horizon = max(.12, min(.25, self.CONTROL_INTERVAL + frame["frame_age_ms"] / 1000. + .05))
+                    def command_is_clear(command):
+                        preview = [self._ramp_value(value, desired, ramp_dt,
+                            self.SPEED_RISE_MM_S2, self.SPEED_FALL_MM_S2)
+                            for value, desired in zip(ramp_values, command)]
+                        try:
+                            return all(check_wheel_motion(frame["marker_corners"], calibration,
+                                a, b, duration_s=horizon, obstacles_px=obstacles,
+                                allow_start_overlap=escaping)["clear"]
+                                for a, b in (preview, command))
+                        except (ValueError, TypeError, KeyError):
+                            return False
+                    command_clear = command_is_clear((left, right))
+                    if not command_clear and not pose_finishing and step["kind"] != "turn":
+                        # A small alignment correction can be free in place even
+                        # when the curved advancing correction would clip a corner.
+                        # Test it, and slower alternatives, against the actual hull.
+                        drive_error = math.atan2(math.sin(observation["bearing_rad"] -
+                            (math.pi if step["direction"] < 0 else 0.)),
+                            math.cos(observation["bearing_rad"] -
+                            (math.pi if step["direction"] < 0 else 0.)))
+                        candidates = []
+                        if abs(drive_error) > math.radians(.5):
+                            sign = 1 if drive_error > 0 else -1
+                            candidates.append((-sign * 20, sign * 20))
+                        candidates.extend(((left * .5, right * .5), (left * .25, right * .25)))
+                        for alternative in candidates:
+                            if command_is_clear(alternative):
+                                left, right = alternative
+                                command_clear = True
+                                break
+                    if not command_clear:
+                        self._zero_drive()
+                        needs_plan, pose_finishing = True, False
+                        pose_follower.reset()
+                        self._set_phase("planning", "Buscando una maniobra con espacio para corregir…")
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    if pose_finishing and self._last_left == self._last_right == 0:
+                        # Check the stopped pose as well: braking can move the robot
+                        # beyond a short step or carry a turn past its endpoint.
+                        if (observation["distance_m"] > .020 or step["kind"] == "turn" and
+                                abs(error) > math.radians(6)):
+                            self._zero_drive()
+                            needs_plan, pose_finishing = True, False
+                            pose_follower.reset()
+                            self._cancel.wait(self.CONTROL_INTERVAL)
+                            continue
+                        # Never count a rotation as arrival at a user's destination.
+                        with self._lock:
+                            next_step = self._pose_step_index + 1
+                            if next_step < len(self._pose_steps):
+                                self._pose_step_index = next_step
+                                target = list(self._pose_steps[next_step]["target_px"])
+                                self._steering_target = target
+                            else:
+                                remaining = observe_robot(frame["marker_corners"], calibration,
+                                                          self._waypoints[self._waypoint_index])["distance_m"]
+                                if remaining > self.SETTLED_M:
+                                    needs_plan = True
+                                else:
+                                    self._last_arrival_mm = round(remaining * 1000, 1)
+                                    self._waypoint_index += 1
+                                    self._sync_target_locked()
+                                    if self._target is None:
+                                        self._pending_mission = False
+                                        final_phase, final_message = "arrived", "Ruta completada. Robot detenido."
+                                    else:
+                                        target = list(self._target)
+                                        needs_plan = True
+                        self._save_calibration()
+                        if self._target is None:
+                            break
+                        pose_follower.reset()
+                        pose_finishing = False
+                        no_progress_seconds = 0.
+                        best_distance = best_angle = math.inf
+                    if no_progress_seconds >= self.NO_PROGRESS_SECONDS:
+                        self._zero_drive()
+                        needs_plan, blocked_center = True, None
+                        pose_finishing = False
+                        pose_follower.reset()
+                        no_progress_seconds = 0.
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    try:
+                        # Apply exactly the ramp sample whose arc was checked;
+                        # geometry work must not silently increase its elapsed time.
+                        applied = [self._ramp_value(value, desired, ramp_dt,
+                            self.SPEED_RISE_MM_S2, self.SPEED_FALL_MM_S2)
+                            for value, desired in zip(ramp_values, (left, right))]
+                        with self._lock:
+                            self._ramp_values, self._ramp_stamp = applied, time.monotonic()
+                        self._drive(*[_velocity_mm_s(value) for value in applied])
+                        was_controlling = True
+                    except Exception:
+                        self._abandon()
+                        session, session_seen = None, False
+                        waiting_vision, needs_plan = True, True
+                        pose_finishing = False
+                    self._cancel.wait(max(0., self.CONTROL_INTERVAL - (time.monotonic() - tick)))
+                    continue
                 if avoiding:
                     with self._lock:
                         obstacles = self._obstacles

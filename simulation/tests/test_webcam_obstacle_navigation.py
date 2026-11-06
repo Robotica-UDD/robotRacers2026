@@ -471,8 +471,8 @@ def test_zero_mode_defaults_and_json_persistence_remove_all_optional_reserves(tm
         assert result.status_code == 200
         assert result.json()["obstacle_settings"]["tracking_margin_mm"] == 0
     base = math.hypot(*nav._calibration.center_tag_m) * 1000 + 20 * math.sqrt(2)
-    assert nav._camera_view_margin(nav._calibration, 0) == pytest.approx(base)
-    assert nav._camera_view_margin(nav._calibration, 0, planning=True) == pytest.approx(base)
+    assert nav._camera_view_margin(nav._calibration, 0) == 0
+    assert nav._camera_view_margin(nav._calibration, 0, planning=True) == 0
     assert nav._camera_view_margin(nav._calibration, 20) == pytest.approx(base + 20)
     assert nav._camera_view_margin(nav._calibration, 20, planning=True) == pytest.approx(base + 60)
     assert json.loads(path.with_name("navigation-obstacles.json").read_text())["safety_margin_mm"] == 0
@@ -502,43 +502,30 @@ def test_zero_margin_fits_a_real_360mm_corridor_while_positive_margin_blocks(sce
     assert robot.starts == 0 and robot.drives == []
 
 
-def test_zero_margin_adaptive_budget_can_command_below_50_without_forcing_the_floor(scene):
-    camera, robot, nav = scene
+def test_zero_margin_uses_oriented_maneuvers_without_a_hidden_circular_speed_budget(scene):
+    _, robot, nav = scene
     nav.set_obstacle_settings(0, nav.state()["route_revision"])
     goal(nav)
     half_gap_px = (ROBOT_RADIUS_MM + 5.) * .6
     state = obstacles(nav, corridor(480. - half_gap_px, 480. + half_gap_px))  # Solo5mm libres por lado.
     assert state["planning_status"] == "ready", state["planning_message"]
-    limit = nav._obstacle_speed_limit(ROBOT_RADIUS_MM + 5., ROBOT_RADIUS_MM, reserve_mm=0)
-    assert 1 < limit < 50
-    assert nav._obstacle_speed_limit(ROBOT_RADIUS_MM + 5., ROBOT_RADIUS_MM) == 0  # El perfil positivo conserva reserva15.
-    nav.start()
-    camera.pose(x=640., y=480., scale=600.)
-    wait_for(lambda: nav._avoidance_index == 1, timeout=2.)
-    wait_for(lambda: nav.state()["phase"] == "advancing", timeout=2.)
-    first = len(robot.drives)
-    time.sleep(.2)
-    commands = [command for command in robot.drives[first:] if command != (0, 0)]
-    assert commands and all(0 < left <= math.floor(limit) and 0 < right <= math.floor(limit)
-                            for left, right in commands)
-    assert nav.state()["active"] is True and nav.state()["phase"] == "advancing"
+    assert state["clearance_info"]["obstacle_required_mm"] == 0
+    assert state["clearance_info"]["view_required_mm"] == 0
+    assert state["maneuver"] is not None and nav._pose_steps
+    assert robot.starts == 0 and robot.drives == []
 
 
-def test_all_goals_are_prevalidated_and_occupied_point_two_is_reported_before_astar(scene, monkeypatch):
+def test_oriented_planning_reports_occupied_point_two_before_arming(scene):
     _, robot, nav = scene
     nav.set_obstacle_settings(0, nav.state()["route_revision"])
-    goal(nav)
+    goal(nav, 510., 480.)  # Primer tramo directo; esta prueba verifica el segundo destino.
     nav.append_target(640., 480., 1280, 960, "usb-camera", nav.state()["route_revision"])
 
-    def forbidden(*args, **kwargs):
-        raise AssertionError("No se debe ejecutar A* antes de revisar todos los destinos.")
-
-    monkeypatch.setattr(navigation_module, "plan_path", forbidden)
     state = obstacles(nav)
     assert state["planning_status"] == "blocked"
     assert state["planning_message"].startswith("Punto 2:")
-    assert "envolvente del robot" in state["planning_message"] and f"{ROBOT_RADIUS_MM:.0f} mm" in state["planning_message"]
-    assert state["waypoints_px"] == [[808., 480.], [640., 480.]]
+    assert "destino" in state["planning_message"].lower() or "obstáculo" in state["planning_message"].lower()
+    assert state["waypoints_px"] == [[510., 480.], [640., 480.]]
     with pytest.raises(NavigationError):
         nav.start()
     assert robot.starts == 0 and robot.drives == []
@@ -553,7 +540,7 @@ def test_first_blocked_leg_is_labelled_one_even_with_two_valid_goals(scene, monk
     def blocked(*args, **kwargs):
         raise ValueError("No hay paso entre los objetos.")
 
-    monkeypatch.setattr(navigation_module, "plan_path", blocked)
+    monkeypatch.setattr(navigation_module, "plan_pose_path", blocked)
     state = obstacles(nav)
     assert state["planning_message"].startswith("Punto 1:")
 

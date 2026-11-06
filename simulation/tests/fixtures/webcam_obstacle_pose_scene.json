@@ -1,0 +1,69 @@
+{
+  "description": "Instantánea anónima de la cámara fija; la pose de borde se deriva trasladando el robot en el mismo plano proyectivo, sin cambiar su orientación. No contiene red ni identidad real de cámara.",
+  "frame_width": 1280,
+  "frame_height": 720,
+  "calibration": {
+    "center_tag_m": [-0.044136176834403615, 0.03362232769425596],
+    "front_angle_rad": -0.04239146511652292,
+    "camera_id": "recorded-camera",
+    "width": 1280,
+    "height": 720,
+    "marker_size_m": 0.04
+  },
+  "obstacles_px": [
+    [
+      [904.1478439425051, 128.3778234086242],
+      [908.0903490759753, 312.3613963039014],
+      [1053.9630390143736, 293.9630390143737],
+      [1005.3388090349075, 91.58110882956878]
+    ]
+  ],
+  "recorded_pose": {
+    "marker_corners": [
+      [673.2891235351562, 131.17173767089844],
+      [692.9378662109375, 85.14582061767578],
+      [741.425537109375, 102.83381652832031],
+      [722.6148071289062, 148.61598205566406]
+    ],
+    "center_px": [643.9640824980565, 153.56717197669832],
+    "front_px": [655.2189544063925, 130.3819410711363]
+  },
+  "visible_pose_at_camera_edge_80_mm": {
+    "marker_corners": [
+      [672.9977083253759, 76.17195048521167],
+      [692.4716000847906, 31.27627225098925],
+      [740.5276448320743, 49.34939367573951],
+      [721.8767356189761, 94.02010876643325]
+    ],
+    "center_px": [643.942436722573, 97.72263317326089],
+    "front_px": [655.0933442184006, 75.1317245226889],
+    "expected_center_to_camera_edge_mm": 80.0,
+    "expected_minimum_marker_border_px": 31.27627225098925,
+    "all_angle_visibility_circle_mm": 83.76817003925264,
+    "expectation": "La pose debe aceptarse con reserva de cámara cero: las cuatro esquinas del marcador están dentro de la imagen aunque su centro esté a menos de 83,77 mm del borde. Las maniobras posteriores comprueban su propia proyección."
+  },
+  "synthetic_cases_in_mm": {
+    "oriented_near_obstacle": {
+      "start": [0.0, 0.0, 90.0],
+      "goal": [-400.0, 300.0],
+      "obstacles": [[[-180.0, 100.0], [180.0, 100.0], [180.0, 250.0], [-180.0, 250.0]]],
+      "expected_start_circle_clearance_mm": 100.0,
+      "expected_start_front_clearance_mm": 16.85,
+      "expectation": "El círculo de 116,1 mm rechaza el inicio, pero la huella orientada no toca. Debe encontrar un rodeo y puede retroceder antes de girar."
+    },
+    "shallow_initial_overlap": {
+      "start": [0.0, 0.0, 90.0],
+      "goal": [-400.0, 300.0],
+      "obstacles": [[[-180.0, 80.0], [180.0, 80.0], [180.0, 250.0], [-180.0, 250.0]]],
+      "expected_initial_front_overlap_mm": 3.15,
+      "expectation": "Admitir un prefijo de escape que reduzca monótonamente la intersección existente, sin crear otras colisiones; después todos los movimientos deben estar libres."
+    },
+    "full_wall": {
+      "frame_bounds": [[-640.0, -360.0], [640.0, 360.0]],
+      "start": [-300.0, 0.0, 0.0],
+      "goal": [300.0, 0.0],
+      "obstacles": [[[-20.0, -360.0], [20.0, -360.0], [20.0, 360.0], [-20.0, 360.0]]],
+      "expectation": "Sin ruta: no atravesar la pared ni buscar una salida fuera del área visible."
+    }
+  }
+}

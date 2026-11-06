@@ -9,6 +9,7 @@ import simulation.webcam.navigation as navigation_module
 from simulation.webcam.navigation import Navigation, INT32_MAX
 from simulation.webcam.navigation_geometry import _homographies, _project, observe_robot
 from simulation.webcam.obstacle_planner import point_clearances_mm
+from simulation.webcam.pose_obstacle_planner import check_pose
 from simulation.webcam.robot_footprint import ROBOT_RADIUS_MM
 from simulation.webcam.straight_control import StraightControl
 from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, ClosedLoopRobot, wait_for
@@ -79,30 +80,31 @@ def test_two_user_destinations_keep_their_order_while_both_legs_avoid_the_obstac
 
 
 @pytest.mark.parametrize("speeds", [(100, 32), (200, 400)])
-def test_recorded_scene_uses_the_same_audited_footprint_for_plan_runtime_and_arrival(monkeypatch, speeds):
+def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(monkeypatch, speeds):
     """La cámara fija grabada alimenta una planta ideal; ningún IO real.
 
-    El inicio queda a unos145 mm del obstáculo. La envolvente auditada cabe y
-    conserva sus116,1 mm durante el rodeo, sin excepciones al control de colisión.
+    El inicio queda a unos145 mm del obstáculo. Se comprueba la huella orientada
+    durante todo el recorrido, sin imponer un círculo como segundo filtro.
     """
     cal = calibration()
     _, projection, _ = _homographies(CORNERS, .04, 1280, 720)
     camera = FakeCamera()
     camera.update(frame_height=720, camera_id="recorded-camera", running=True,
                   opening=False, marker_corners=CORNERS)
-    plans, segments = [], []
-    original_plan, original_segment = navigation_module.plan_path, navigation_module.segment_is_clear
+    plans, sweeps = [], []
+    original_plan, original_sweep = navigation_module.plan_pose_path, navigation_module.check_swept_motion
 
     def recorded_plan(*args, **kwargs):
-        plans.append(kwargs["robot_radius_mm"])
+        plans.append(1)
         return original_plan(*args, **kwargs)
 
-    def recorded_segment(*args, **kwargs):
-        segments.append(kwargs["clearance_mm"])
-        return original_segment(*args, **kwargs)
+    def recorded_sweep(*args, **kwargs):
+        result = original_sweep(*args, **kwargs)
+        sweeps.append(result["clear"])
+        return result
 
-    monkeypatch.setattr(navigation_module, "plan_path", recorded_plan)
-    monkeypatch.setattr(navigation_module, "segment_is_clear", recorded_segment)
+    monkeypatch.setattr(navigation_module, "plan_pose_path", recorded_plan)
+    monkeypatch.setattr(navigation_module, "check_swept_motion", recorded_sweep)
     # El paso de la planta es20 ms; el ensayo acelera veinte veces el reloj.
     monkeypatch.setattr(StraightControl, "BEARING_FILTER_SECONDS", .12 / 20)
     monkeypatch.setattr(StraightControl, "DERIVATIVE_FILTER_SECONDS", .15 / 20)
@@ -134,7 +136,8 @@ def test_recorded_scene_uses_the_same_audited_footprint_for_plan_runtime_and_arr
             corners = [_project(projection, origin + rotation @ np.array(point), np.zeros(2)).tolist()
                        for point in [(-.02, .02), (.02, .02), (.02, -.02), (-.02, -.02)]]
             center_px = _project(projection, self.center, np.zeros(2)).tolist()
-            self.trace.append((center_px, point_clearances_mm(CORNERS, cal, center_px, OBSTACLES)))
+            heading_image = math.radians(observe_robot(corners, cal)["heading_deg"])
+            self.trace.append((center_px, check_pose(CORNERS, cal, center_px, heading_image, OBSTACLES)))
             camera.update(marker_corners=corners)
 
     robot = RecordedSceneRobot()
@@ -151,18 +154,17 @@ def test_recorded_scene_uses_the_same_audited_footprint_for_plan_runtime_and_arr
         state = nav.set_obstacles(OBSTACLES, 1280, 720, "recorded-camera", nav.state()["route_revision"])
         assert state["planning_status"] == "ready", state["planning_message"]
         assert state["obstacle_settings"]["robot_radius_mm"] == ROBOT_RADIUS_MM
-        assert state["clearance_info"]["obstacle_required_mm"] == ROBOT_RADIUS_MM
-        assert state["planned_path_px"][1][0] < CENTER[0] - 20  # Rodeo a la izquierda.
+        assert state["clearance_info"]["obstacle_required_mm"] == 0
+        assert state["clearance_info"]["view_required_mm"] == 0
+        assert nav._pose_steps
         nav.start(state["route_revision"])
         wait_for(lambda: not nav.state()["active"], timeout=10.)
         state = nav.state()
         assert state["phase"] == "arrived", (state["phase"], state["planning_message"], state["message"])
         assert state["waypoint_index"] == state["waypoint_count"] == 1
         assert robot.starts == 1 and robot.drives[-1] == (0, 0)
-        assert plans and set(plans) == {ROBOT_RADIUS_MM}
-        assert segments and set(segments) == {ROBOT_RADIUS_MM}
-        assert min(values["obstacle_mm"] for _, values in robot.trace) > ROBOT_RADIUS_MM
-        assert min(values["camera_mm"] for _, values in robot.trace) > nav._camera_view_margin(cal, 0)
+        assert plans and sweeps and all(sweeps)
+        assert all(values["clear"] for _, values in robot.trace)
         final = observe_robot(camera.state()["marker_corners"], cal, GOAL)
         assert final["distance_m"] <= nav.SETTLED_M
     finally:
