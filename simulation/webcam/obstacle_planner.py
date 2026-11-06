@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 
 from .navigation_geometry import Calibration, _homographies, _project
+from .robot_footprint import ROBOT_RADIUS_MM
 
 MAX_OBSTACLES = 32
 MAX_GRID_NODES = 300_000
@@ -249,7 +250,7 @@ def camera_visibility_margin_mm(calibration, tracking_margin_mm=0, extra_margin_
     return offset + marker_radius + extra + reserve
 
 
-def segment_is_clear(corners, calibration, start_px, end_px, obstacles_px, clearance_mm=180,
+def segment_is_clear(corners, calibration, start_px, end_px, obstacles_px, clearance_mm=ROBOT_RADIUS_MM + 30.,
                      camera_clearance_mm=None):
     """Comprueba un segmento o un centro (inicio=fin) sin búsqueda ni IO.
 
@@ -419,7 +420,7 @@ def _simplify(points, plane, clearance, deadline, camera_clearance=None):
     return result
 
 
-def plan_path(corners, calibration, start_px, goal_px, obstacles_px, robot_radius_mm=150,
+def plan_path(corners, calibration, start_px, goal_px, obstacles_px, robot_radius_mm=ROBOT_RADIUS_MM,
               safety_margin_mm=30, tracking_margin_mm=40, max_segment_m=.45,
               camera_clearance_mm=None):
     """Calcula un camino de centros y reserva espacio para el robot completo.
