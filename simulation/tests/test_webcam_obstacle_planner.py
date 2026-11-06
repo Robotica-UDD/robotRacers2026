@@ -1,0 +1,185 @@
+"""Planificador geométrico sobre imágenes sintéticas, sin cámara ni robot."""
+from __future__ import annotations
+
+import math
+import time
+
+import numpy as np
+import pytest
+
+from simulation.webcam.navigation_geometry import Calibration
+from simulation.webcam.obstacle_planner import (plan_path, segment_is_clear, validate_obstacles,
+                                               point_clearance_mm)
+
+
+def scene(scale=600., perspective=False):
+    matrix = np.array([[scale, 0., 640.], [0., -scale, 480.], [0., 0., 1.]])
+    if perspective:
+        matrix[2, :2] = [.12, -.10]
+    def project(point):
+        value = matrix @ np.array([*point, 1.])
+        return (value[:2] / value[2]).tolist()
+    corners = [project(point) for point in [(-.02, .02), (.02, .02), (.02, -.02), (-.02, -.02)]]
+    return corners, Calibration((0., 0.), 0., 'camera', 1280, 960), project
+
+
+def rectangle(project, x1, y1, x2, y2):
+    return [project(point) for point in [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]]
+
+
+def assert_safe(result, corners, calibration, obstacles, clearance=220.):
+    assert len(result['path_px']) >= 2
+    for a, b in zip(result['path_px'], result['path_px'][1:]):
+        assert segment_is_clear(corners, calibration, a, b, obstacles, clearance_mm=clearance)
+
+
+def test_direct_path_and_maximum_segment_length():
+    corners, calibration, project = scene()
+    start, goal = project((-.65, 0)), project((.65, 0))
+    result = plan_path(corners, calibration, start, goal, [], max_segment_m=.3)
+    assert result['path_px'][0] == pytest.approx(start)
+    assert result['path_px'][-1] == pytest.approx(goal)
+    assert result['path_length_m'] == pytest.approx(1.3, abs=1e-6)
+    assert result['clearance_mm'] == pytest.approx(220.)
+    for a, b in zip(result['path_px'], result['path_px'][1:]):
+        assert np.linalg.norm(np.array(a) - b) / 600. <= .300001
+    assert_safe(result, corners, calibration, [])
+
+
+@pytest.mark.parametrize('perspective', [False, True])
+def test_routes_around_rectangle_with_continuous_clearance(perspective):
+    corners, calibration, project = scene(perspective=perspective)
+    obstacles = [rectangle(project, -.08, -.16, .08, .16)]
+    start, goal = project((-.65, 0)), project((.65, 0))
+    assert not segment_is_clear(corners, calibration, start, goal, obstacles, clearance_mm=220)
+    result = plan_path(corners, calibration, start, goal, obstacles)
+    assert result['path_length_m'] > 1.3
+    assert any(abs(point[1] - 480.) > 100 for point in result['path_px'])
+    assert result['inflated_obstacles_px'] and len(result['inflated_obstacles_px'][0]) > 4
+    assert_safe(result, corners, calibration, obstacles)
+
+
+def test_multiple_obstacles_and_a_concave_quadrilateral():
+    corners, calibration, project = scene(scale=500.)
+    concave = [project(p) for p in [(-.3, -.1), (-.1, .1), (-.28, .02), (-.4, .15)]]
+    obstacles = [concave, rectangle(project, .2, -.3, .3, -.1)]
+    result = plan_path(corners, calibration, project((-.85, -.1)), project((.85, .1)), obstacles)
+    assert_safe(result, corners, calibration, obstacles)
+    assert len(validate_obstacles(obstacles, 1280, 960)) == 2
+
+
+def test_safety_margin_forbids_corridor_too_narrow():
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.1, -.79, .1, -.10), rectangle(project, -.1, .10, .1, .79)]
+    with pytest.raises(ValueError, match='camino libre'):
+        plan_path(corners, calibration, project((-.65, 0)), project((.65, 0)), obstacles)
+
+
+@pytest.mark.parametrize('which', ['start', 'goal'])
+def test_occupied_start_or_goal_never_returns_direct_fallback(which):
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.1, -.1, .1, .1)]
+    start, goal = project((-.65, 0)), project((.65, 0))
+    if which == 'start':
+        start = project((-.2, 0))
+    else:
+        goal = project((.2, 0))
+    with pytest.raises(ValueError, match='margen'):
+        plan_path(corners, calibration, start, goal, obstacles)
+
+
+def test_tangency_is_blocked_but_clearance_just_above_it_is_free():
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.1, -.1, .1, .1)]
+    assert not segment_is_clear(corners, calibration, project((-.5, .32)), project((.5, .32)),
+                                obstacles, clearance_mm=220)
+    assert segment_is_clear(corners, calibration, project((-.5, .321)), project((.5, .321)),
+                            obstacles, clearance_mm=220)
+
+
+def test_diagonal_cannot_cut_corner_of_two_obstacles():
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.30, -.1, -.01, .20), rectangle(project, .01, -.20, .30, .1)]
+    start, goal = project((-.6, -.4)), project((.6, .4))
+    result = plan_path(corners, calibration, start, goal, obstacles, robot_radius_mm=40,
+                       safety_margin_mm=15, tracking_margin_mm=10)
+    assert_safe(result, corners, calibration, obstacles, clearance=65)
+    assert result['path_length_m'] > math.hypot(1.2, .8)
+
+
+@pytest.mark.parametrize('scale', [400., 800., 1200.])
+def test_same_metric_route_length_at_different_image_scales(scale):
+    corners, calibration, project = scene(scale=scale)
+    result = plan_path(corners, calibration, project((-.18, .0)), project((.18, .0)), [],
+                       robot_radius_mm=40, safety_margin_mm=15, tracking_margin_mm=10)
+    assert result['path_length_m'] == pytest.approx(.36, abs=1e-6)
+    assert_safe(result, corners, calibration, [], clearance=65)
+
+
+@pytest.mark.parametrize('bad', [None, {}, [[[1, 1], [2, 2], [3, 3]]],
+    [[[20, 20], [80, 80], [80, 20], [20, 80]]],
+    [[[20, 20], [20, 20], [80, 80], [20, 80]]],
+    [[[20, 20], [40, 20], [80, 20], [20, 80]]],
+    [[[20, 20], [80, 20], [80, 80], [-1, 80]]],
+    [[[True, 20], [80, 20], [80, 80], [20, 80]]],
+    [[[float('nan'), 20], [80, 20], [80, 80], [20, 80]]],
+    [[[20, 20], [80, 20], [80, 80], [20, 80]]] * 33])
+def test_invalid_polygons_are_rejected(bad):
+    with pytest.raises(ValueError):
+        validate_obstacles(bad, 1280, 960)
+
+
+def test_clockwise_and_counterclockwise_polygons_are_equivalent():
+    corners, calibration, project = scene()
+    polygon = rectangle(project, -.08, -.16, .08, .16)
+    first = plan_path(corners, calibration, project((-.65, 0)), project((.65, 0)), [polygon])
+    second = plan_path(corners, calibration, project((-.65, 0)), project((.65, 0)), [polygon[::-1]])
+    assert first['path_px'] == second['path_px']
+
+
+def test_planning_is_deterministic_and_does_not_mutate_inputs():
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.08, -.16, .08, .16)]
+    original = [[point[:] for point in poly] for poly in obstacles]
+    args = (corners, calibration, project((-.65, 0)), project((.65, 0)), obstacles)
+    assert plan_path(*args)['path_px'] == plan_path(*args)['path_px']
+    assert obstacles == original
+
+
+def test_invalid_projection_horizon_is_rejected_without_allocating_unbounded_grid():
+    corners, calibration, _ = scene()
+    # Muy pocos píxeles por marcador implican un plano visible enorme.
+    tiny = [[636., 476.], [644., 476.], [644., 484.], [636., 484.]]
+    started = time.monotonic()
+    with pytest.raises(ValueError, match='grande'):
+        plan_path(tiny, calibration, [500, 480], [800, 480], [])
+    assert time.monotonic() - started < 1.
+
+
+def test_point_clearance_obstacle_border_and_occupied_position():
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.1, -.1, .1, .1)]
+    assert point_clearance_mm(corners, calibration, project((.3, 0)), obstacles) == pytest.approx(200., abs=.001)
+    assert point_clearance_mm(corners, calibration, project((0., 0)), obstacles) == 0
+    assert point_clearance_mm(corners, calibration, [60, 480], []) == pytest.approx(100., abs=.001)
+    assert point_clearance_mm(corners, calibration, [-1, 480], []) == 0
+
+
+def test_horizon_crossing_the_image_is_rejected():
+    matrix = np.array([[600., 0., 640.], [0., -600., 480.], [2., 0., 1.]])
+    def project(point):
+        value = matrix @ np.array([*point, 1.])
+        return (value[:2] / value[2]).tolist()
+    corners = [project(p) for p in [(-.02, .02), (.02, .02), (.02, -.02), (-.02, -.02)]]
+    calibration = Calibration((0., 0.), 0., 'camera', 1280, 960)
+    with pytest.raises(ValueError, match='proyección'):
+        plan_path(corners, calibration, [500, 480], [800, 480], [])
+
+
+def test_planning_time_budget_rejects_work_without_a_direct_fallback(monkeypatch):
+    from simulation.webcam import obstacle_planner
+    corners, calibration, project = scene()
+    obstacles = [rectangle(project, -.08, -.16, .08, .16)]
+    monkeypatch.setattr(obstacle_planner, 'MAX_PLANNING_SECONDS', -1.)
+    with pytest.raises(ValueError, match='cálculo'):
+        plan_path(corners, calibration, project((-.65, 0)), project((.65, 0)), obstacles)
