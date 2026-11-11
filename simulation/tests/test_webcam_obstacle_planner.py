@@ -147,14 +147,37 @@ def test_planning_is_deterministic_and_does_not_mutate_inputs():
     assert obstacles == original
 
 
-def test_invalid_projection_horizon_is_rejected_without_allocating_unbounded_grid():
+def test_small_marker_supports_large_finite_field_with_bounded_grid():
     corners, calibration, _ = scene()
-    # Muy pocos píxeles por marcador implican un plano visible enorme.
+    # El marcador de 8 px representa un campo de unos 6,4 x 4,8 m. La
+    # resolución se adapta en vez de rechazar el recorrido por su extensión.
     tiny = [[636., 476.], [644., 476.], [644., 484.], [636., 484.]]
     started = time.monotonic()
-    with pytest.raises(ValueError, match='grande'):
-        plan_path(tiny, calibration, [500, 480], [800, 480], [], robot_radius_mm=150)
+    result = plan_path(tiny, calibration, [500, 480], [800, 480], [], robot_radius_mm=150)
+    assert result['path_px'][0] == pytest.approx([500., 480.])
+    assert result['path_px'][-1] == pytest.approx([800., 480.])
+    assert result['grid_step_mm'] > 10.
+    assert result['path_length_m'] == pytest.approx(1.5)
     assert time.monotonic() - started < 1.
+
+
+def test_large_field_grid_allocation_stays_within_node_budget():
+    from simulation.webcam.obstacle_planner import _PlaneMap, _grid, MAX_GRID_NODES
+    corners, calibration, _ = scene(scale=100.)
+    plane = _PlaneMap.build(corners, calibration, [])
+    assert np.max(np.ptp(plane.frame, axis=0)) > 10.
+    blocked, _, step, _ = _grid(plane, .15, time.monotonic() + 1.)
+    assert blocked.size <= MAX_GRID_NODES
+    assert step > .01
+
+
+def test_large_field_detour_still_respects_actual_obstacles():
+    corners, calibration, project = scene(scale=100.)
+    obstacle = rectangle(project, -.3, -.6, .3, .6)
+    result = plan_path(corners, calibration, project((-2., 0.)), project((2., 0.)),
+                       [obstacle], robot_radius_mm=150.)
+    assert result['path_length_m'] > 4.
+    assert_safe(result, corners, calibration, [obstacle])
 
 
 def test_point_clearance_obstacle_border_and_occupied_position():
@@ -166,15 +189,18 @@ def test_point_clearance_obstacle_border_and_occupied_position():
     assert point_clearance_mm(corners, calibration, [-1, 480], []) == 0
 
 
-def test_horizon_crossing_the_image_is_rejected():
+def test_unstable_projective_horizon_uses_finite_shared_projection():
     matrix = np.array([[600., 0., 640.], [0., -600., 480.], [2., 0., 1.]])
     def project(point):
         value = matrix @ np.array([*point, 1.])
         return (value[:2] / value[2]).tolist()
     corners = [project(p) for p in [(-.02, .02), (.02, .02), (.02, -.02), (-.02, -.02)]]
     calibration = Calibration((0., 0.), 0., 'camera', 1280, 960)
-    with pytest.raises(ValueError, match='proyección'):
-        plan_path(corners, calibration, [500, 480], [800, 480], [], robot_radius_mm=150)
+    result = plan_path(corners, calibration, [500, 480], [800, 480], [], robot_radius_mm=150)
+    assert result['path_px'][0] == pytest.approx([500., 480.])
+    assert result['path_px'][-1] == pytest.approx([800., 480.])
+    assert np.isfinite(result['path_length_m'])
+    assert result['path_length_m'] > 0.
 
 
 def test_planning_time_budget_rejects_work_without_a_direct_fallback(monkeypatch):
@@ -215,6 +241,9 @@ def test_fixed_camera_route_does_not_change_side_when_marker_rotates_or_moves(an
 
 def test_perspective_camera_keeps_route_side_for_different_marker_poses():
     _, calibration, project = scene(perspective=True)
+    # Un tag resuelto de unos 72 px conserva la homografía completa. El tag
+    # pequeño utiliza una aproximación cenital y se comprueba por separado.
+    calibration = Calibration((0., 0.), 0., 'camera', 1280, 960, marker_size_m=.12)
     obstacles = [rectangle(project, -.08, -.16, .08, .16)]
     start, goal = project((-.65, 0)), project((.65, 0))
     results = []
@@ -223,13 +252,32 @@ def test_perspective_camera_keeps_route_side_for_different_marker_poses():
         rotation = np.array([[math.cos(angle), -math.sin(angle)],
                              [math.sin(angle), math.cos(angle)]])
         corners = [project(np.array(center) + rotation @ np.array(point))
-                   for point in [(-.02, .02), (.02, .02), (.02, -.02), (-.02, -.02)]]
+                   for point in [(-.06, .06), (.06, .06), (.06, -.06), (-.06, -.06)]]
         result = plan_path(corners, calibration, start, goal, obstacles, robot_radius_mm=150)
         assert_safe(result, corners, calibration, obstacles)
         results.append(result)
     for result in results[1:]:
         assert len(result['path_px']) == len(results[0]['path_px'])
         assert np.max(np.linalg.norm(np.array(result['path_px']) - results[0]['path_px'], axis=1)) < 6.
+
+
+@pytest.mark.parametrize('center,angle_deg', [((-.3, 0.), 0.), ((.2, .15), 45.), ((0., -.25), 90.)])
+def test_small_marker_perspective_approximation_generates_collision_free_route(center, angle_deg):
+    _, calibration, project = scene(perspective=True)
+    obstacles = [rectangle(project, -.08, -.16, .08, .16)]
+    start, goal = project((-.65, 0)), project((.65, 0))
+    angle = math.radians(angle_deg)
+    rotation = np.array([[math.cos(angle), -math.sin(angle)],
+                         [math.sin(angle), math.cos(angle)]])
+    corners = [project(np.array(center) + rotation @ np.array(point))
+               for point in [(-.02, .02), (.02, .02), (.02, -.02), (-.02, -.02)]]
+    result = plan_path(corners, calibration, start, goal, obstacles, robot_radius_mm=150)
+    assert result['path_px'][0] == pytest.approx(start, abs=.001)
+    assert result['path_px'][-1] == pytest.approx(goal, abs=.001)
+    assert math.isfinite(result['path_length_m'])
+    # La escala local es aproximada: dos rodeos libres pueden cambiar de coste
+    # relativo al mover el tag. Cada segmento debe seguir evitando el contorno.
+    assert_safe(result, corners, calibration, obstacles)
 
 
 def test_reported_live_scene_is_clear_of_obstacle_but_near_the_camera_border():

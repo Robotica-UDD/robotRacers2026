@@ -66,6 +66,7 @@ class Navigation:
     RESUME_STABLE_SECONDS = .15
     RESUME_FRAMES = 3
     RESUME_RETRY_SECONDS = 1.
+    PLAN_RETRY_SECONDS = 1.
     SPEED_RISE_MM_S2 = 600.
     SPEED_FALL_MM_S2 = 900.
     RETRY_PAUSE_SECONDS = .5
@@ -131,6 +132,7 @@ class Navigation:
         self._planning_status = "empty"
         self._planning_message = "Añade puntos al recorrido."
         self._plan_key = None
+        self._plan_attempted_at = None
         self._plan_center = None
         self._plan_heading = None
         self._pose_legs = []
@@ -220,6 +222,7 @@ class Navigation:
         self._planning_status = "waiting" if self._waypoints else "empty"
         self._planning_message = "Esperando posición para calcular el recorrido." if self._waypoints else "Añade puntos al recorrido."
         self._plan_key = self._plan_center = self._plan_heading = None
+        self._plan_attempted_at = None
         self._pose_legs, self._pose_steps, self._pose_step_index = [], [], 0
         self._clearance_info = None
 
@@ -399,7 +402,11 @@ class Navigation:
                 settings = self._obstacle_settings()
                 key = (generation, index, calibration)
                 cached_key, cached_center = self._plan_key, self._plan_center
-            if not force and cached_key == key and cached_center is not None and self._vision(frame):
+                cached_status, attempted_at = self._planning_status, self._plan_attempted_at
+            reuse_result = (cached_status == "ready" or attempted_at is not None
+                            and time.monotonic() - attempted_at < self.PLAN_RETRY_SECONDS)
+            if (not force and reuse_result and cached_key == key
+                    and cached_center is not None and self._vision(frame)):
                 try:
                     cached_observation = observe_robot(frame["marker_corners"], calibration, cached_center)
                     same_heading = (settings["safety_margin_mm"] != 0 or not obstacles or
@@ -420,6 +427,7 @@ class Navigation:
                 self._planning_status, self._planning_message = result["status"], result["message"]
                 self._planned_path, self._inflated_obstacles = result["path"], result["inflated"]
                 self._planned_legs = result["legs"]
+                self._plan_attempted_at = time.monotonic()
                 self._plan_key, self._plan_center = key, result["center"]
                 self._plan_heading = result.get("heading")
                 if self._plan_heading is None and calibration is not None and self._vision(frame):

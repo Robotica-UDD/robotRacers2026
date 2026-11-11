@@ -1,6 +1,9 @@
 """Geometría planar del robot a partir del AprilTag y dos clics de calibración.
 
 La homografía utiliza el plano horizontal del marcador, no el plano del suelo.
+Con marcadores pequeños se ajusta un plano afín con las cuatro esquinas:
+su ruido subpíxel no permite calibrar la perspectiva de todo el suelo. Todas las
+mediciones y comprobaciones de ruta comparten esta misma transformación.
 El eje X canónico del tag apunta a su borde derecho y el eje Y a su borde
 superior. Dos clics fijan el centro entre ruedas y el frente real en ese marco.
 El consumidor debe comprobar que cámara y resolución coincidan con Calibration.
@@ -15,6 +18,9 @@ from numbers import Integral, Real
 
 import cv2
 import numpy as np
+
+
+SMALL_MARKER_EDGE_PX = 48.
 
 
 def _number(value, label: str) -> float:
@@ -122,6 +128,19 @@ def _homographies(corners, marker_size_m: float, width: int, height: int):
     # OpenCV: superior izquierda, superior derecha, inferior derecha, inferior izquierda.
     plane = np.float32([[-half, half], [half, half], [half, -half], [-half, -half]])
     try:
+        # Un marcador pequeño no calibra la perspectiva de todo el suelo con
+        # precisión subpíxel. Ajustar las cuatro esquinas por mínimos cuadrados
+        # evita que una diferencia de décimas de píxel coloque un horizonte
+        # artificial dentro de la imagen o agrande el mapa decenas de metros.
+        design = np.column_stack((plane, np.ones(4)))
+        coefficients = np.linalg.lstsq(design, points, rcond=None)[0]
+        affine_inverse = np.eye(3)
+        affine_inverse[:2] = coefficients.T
+        affine_forward = np.linalg.inv(affine_inverse)
+        small_marker = float(np.mean(lengths)) <= SMALL_MARKER_EDGE_PX
+        if small_marker:
+            return affine_forward, affine_inverse, points.mean(axis=0)
+
         image_to_tag = cv2.getPerspectiveTransform(points.astype(np.float32), plane)
         tag_to_image = np.linalg.inv(image_to_tag)
     except (cv2.error, np.linalg.LinAlgError):

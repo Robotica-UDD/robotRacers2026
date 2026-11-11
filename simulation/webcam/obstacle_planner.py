@@ -23,7 +23,6 @@ from .robot_footprint import ROBOT_RADIUS_MM
 MAX_OBSTACLES = 32
 MAX_GRID_NODES = 300_000
 MIN_GRID_M = .005
-MAX_GRID_M = .010
 MAX_PLANNING_SECONDS = 3.
 _EPS = 1e-9
 _DISTANCE_TOLERANCE_M = 2e-6
@@ -169,8 +168,8 @@ class _PlaneMap:
             return np.round(_project(forward, np.asarray(point, dtype=float), reference), 6)
         frame = np.array([project(point) for point in image_frame])
         span = np.ptp(frame, axis=0)
-        if np.any(span <= 1e-6) or np.any(span > 10.) or not np.all(np.isfinite(span)):
-            raise ValueError("El plano visible es demasiado grande o está muy inclinado. Ajusta la cámara cenital.")
+        if np.any(span <= 1e-6) or not np.all(np.isfinite(span)):
+            raise ValueError("No se pudo resolver un plano visible finito y no degenerado.")
         turns = [_cross(frame[i - 1], frame[i], frame[(i + 1) % 4]) for i in range(4)]
         if not (all(value > _EPS for value in turns) or all(value < -_EPS for value in turns)):
             raise ValueError("El plano visible no permite un recorrido seguro. Ajusta la cámara cenital.")
@@ -299,12 +298,15 @@ def _grid(plane, clearance, deadline, camera_clearance=None):
     span = maximum - minimum
     step = MIN_GRID_M
     while True:
+        _check_deadline(deadline)
         columns, rows = (int(math.ceil(float(value) / step)) + 1 for value in span)
         if columns * rows <= MAX_GRID_NODES:
             break
-        if step >= MAX_GRID_M:
-            raise ValueError("El área visible es demasiado grande para planificar. Acerca la cámara.")
-        step = min(MAX_GRID_M, step * 1.1)
+        # El tamaño físico del campo no impone un límite al recorrido. Ajustar
+        # la resolución conserva el presupuesto de memoria, incluso si el tag
+        # ocupa pocos píxeles. Los segmentos se validan después en geometría
+        # continua: aumentar la celda nunca autoriza cruzar un obstáculo.
+        step *= 1.1
     x, y = np.meshgrid(minimum[0] + np.arange(columns) * step,
                        minimum[1] + np.arange(rows) * step)
     obstacle_mask = np.zeros((rows, columns), dtype=bool)

@@ -315,7 +315,16 @@ movimiento desde la posición actual y vuelve a intentarlo. Puede seguir intenta
 hasta llegar o hasta una parada manual, un fallo o un cambio de fuente. Sin
 visión válida sigue esperando con consigna cero.
 
-La geometría se calcula mediante una homografía del cuadrado conocido de 40 mm.
+La geometría usa el cuadrado conocido de 40 mm. Con un marcador pequeño
+(hasta 48 píxeles de lado medio), el programa ajusta las cuatro esquinas mediante
+un modelo afín. Ese modelo aproxima la cámara cenital y evita que
+el ruido de las esquinas deforme todo el mapa. Con una perspectiva bien resuelta
+conserva la homografía. Planificación, huella y control comparten el mismo modelo.
+No se rechaza un campo por superar 10 m: la cuadrícula adapta su resolución para
+mantener acotada la memoria, y cada maniobra sigue comprobándose contra los
+obstáculos. Si falla una vista previa, vuelve a calcularla pasado un segundo;
+un fotograma defectuoso no deja bloqueada permanentemente la ruta.
+
 Su plano de referencia es **el plano del marcador**, que está por encima del
 suelo. Un clic sobre el suelo no está a esa misma altura: la perspectiva y el
 paralaje introducen error en la distancia y en el punto alcanzado. Mantener la
