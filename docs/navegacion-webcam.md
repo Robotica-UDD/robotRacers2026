@@ -81,8 +81,8 @@ ese estado o abrir el panel no envía órdenes al robot.
    imagen. Cada clic añade un punto numerado; la línea muestra el orden del recorrido.
 2. **Marcar puntos nunca mueve el robot.** Revisa el sentido del frente,
    el espacio disponible para girar y la trayectoria completa antes de continuar.
-3. Pulsa **Iniciar recorrido** una sola vez. El robot gira para orientarse, avanza
-   corrigiendo su dirección, se detiene en cada punto y continúa con el siguiente.
+3. Pulsa **Iniciar recorrido** una sola vez. El robot se orienta y sigue la ruta
+   corrigiendo su dirección. Pasa por los puntos en orden y se detiene al terminar.
 4. Usa **Detener recorrido**, **Detener** en la tarjeta Robot o el botón físico
    **D48** para cancelarlo. Esas paradas requieren un nuevo inicio explícito.
 5. **Borrar puntos** detiene el recorrido y vacía la lista. Conserva la calibración
@@ -96,10 +96,11 @@ después de completar una ruta, el siguiente inicio recorre solo los nuevos.
 Un destino se considera alcanzado en cuanto queda **debajo del contorno del
 robot**, sin exigir que coincida con el centro entre ruedas. El contorno nominal
 abarca unos 83 mm delante, 53 mm detrás y hasta 116 mm a cada lado, según su forma
-y la orientación actual. Cuando cubre el punto, frena y conserva esa llegada
-aunque se desplace un poco al detenerse. Después calcula el siguiente tramo
-desde la posición real. Los puntos intermedios necesarios para rodear obstáculos
-mantienen su precisión y no usan esta zona de llegada ampliada.
+y la orientación actual. Cuando cubre un punto intermedio, registra la llegada
+y continúa sin una parada de confirmación. El seguimiento no puede saltar al
+siguiente destino antes de esa cobertura. En el último punto frena y conserva
+la llegada aunque se desplace un poco al detenerse. Los vértices técnicos del
+rodeo describen el camino; no son órdenes de detenerse.
 
 Si la pérdida de detección supera el margen breve o se pierde la conexión Wi-Fi,
 la misión **espera con los motores a cero**, conservando la lista, su progreso y la calibración. Al recuperarse una
@@ -148,8 +149,10 @@ mínima a los obstáculos. Ese círculo cubría todas las orientaciones a la vez
 podía bloquear una postura que sí cabía. El contorno visible en verdeazul permite
 comprobar qué forma está usando el programa.
 
-El recorrido normal se realiza **siempre de frente**. Antes de cada tramo,
-el robot gira hasta orientar su frente hacia el siguiente punto. La reversa
+El centro del robot avanza **siempre de frente** durante el recorrido normal.
+Combina curvas continuas y giros en el sitio según el espacio disponible;
+una rueda interior puede invertir su sentido para cerrar una curva sin que
+el centro del robot retroceda. La reversa
 solo se admite como una salida inicial corta cuando está en contacto o no hay
 espacio para girar; después se detiene, se orienta y continúa hacia delante.
 No se elige la reversa para ahorrar un giro o hacer un rodeo completo.
@@ -187,7 +190,7 @@ El borde de la cámara tampoco lleva un radio reservado. Se comprueba la posici�
 real de las cuatro esquinas del marcador en cada postura prevista, sin los
 84 mm que antes se exigían alrededor del centro para cualquier orientación.
 El objetivo no impone una dirección final: el plan puede llegar con una orientación
-que mantenga el marcador visible. Perder realmente la detección sigue pausando
+que mantenga el marcador visible. Una pérdida prolongada de detección pausa
 el movimiento y conserva el recorrido para recalcular al recuperarla.
 
 Un valor de separación positivo conserva el perfil circular anterior con el margen
@@ -207,8 +210,11 @@ Durante la marcha, el servicio vuelve a comprobar la maniobra restante con la
 posición y la orientación observadas. Una proximidad lateral no fuerza velocidad
 cero: se comprueba si la forma del robot cabe al avanzar, retroceder o girar.
 La rampa y el control local por encoders siguen aplicándose a las velocidades
-firmadas de ambas ruedas. Tras cada maniobra se confirma la parada antes de
-cambiar de sentido; un giro no se cuenta como llegada a un destino.
+firmadas de ambas ruedas. El seguimiento anticipa las curvas y conserva el
+movimiento entre tramos. Solo las maniobras iniciales de liberación confirman
+su posición y parada antes de invertir; un giro no cuenta como llegada a un
+destino. Una liberación corta usa 1,5 mm de tolerancia longitudinal, para no
+confundir un retroceso de pocos milímetros con un paso ya completado.
 
 Si cambia la posición o hay contacto inesperado, se detiene el mando de ese tramo
 y se calcula una maniobra nueva desde la postura actual. También se vuelve a
@@ -216,9 +222,11 @@ intentar sin exigir un desplazamiento manual de 10 mm. Una pared que cierre
 completamente el paso todavía puede impedir llegar: el programa no sustituye
 una búsqueda fallida por una orden de atravesarla.
 
-Al perder el marcador envía cero y espera una imagen estable; conserva el destino
-y recalcula el camino desde la posición recuperada. La ventana de continuación
-sin marcador descrita más abajo se aplica únicamente cuando no hay obstáculos.
+Una pérdida aislada del marcador admite hasta 100 ms de continuación con el
+último mando si su arco ya fue comprobado contra los obstáculos y la cámara
+sigue entregando imágenes recientes. No se usa durante una liberación inicial.
+Superado ese plazo envía cero y espera una imagen estable; conserva el destino
+y recalcula desde la posición recuperada.
 Cambiar la cámara o su resolución invalida el mapa; mover físicamente la cámara
 requiere recalibrar y dibujarlo de nuevo, aunque la resolución sea la misma.
 
@@ -265,20 +273,32 @@ el robot real. La velocidad alcanzable depende de la alimentación, carga y moto
 Pololu especifica 6500 rpm sin carga a 6 V para el modelo #5178; ese dato no es
 una medición del robot sobre el suelo. [Especificaciones de Pololu](https://www.pololu.com/product/5178/specs).
 
-## Corrección suave durante el avance
+## Seguimiento continuo de la ruta
 
-El avance utiliza un control proporcional y derivativo (PD) del rumbo, con
-filtrado de la orientación y de su variación entre imágenes. Una zona muerta de
-1,5° evita perseguir pequeñas oscilaciones de la medición. La corrección está
-limitada a 8°/s y cambia gradualmente, hasta 25°/s². La rueda interior conserva
-avance positivo y la corrección disminuye cerca del destino. No acumula una
-corrección integral visual que pueda quedarse cargada tras una pérdida.
+El controlador sigue un punto adelantado sobre una trayectoria fija, con una
+anticipación de 70 a 180 mm que aumenta con la velocidad. Calcula la curvatura
+para llegar a ese punto, filtra el rumbo y limita el cambio de velocidad angular
+a 240°/s². Reduce el avance en curvas cerradas y cerca del destino pendiente;
+no exige frenar en cada vértice ni reinicia el filtro al cubrir un punto intermedio.
+La proyección y la anticipación quedan limitadas al destino pendiente hasta
+que el contorno del robot lo cubra, por lo que no puede omitirlo al redondear.
+Después excluye de la proyección los tramos ya completados. Esto evita perseguir
+el punto anterior cuando el recorrido vuelve sobre la misma línea.
 
-Solo procesa imágenes distintas. Reinicia el filtro al cambiar de punto, al
-salir del avance o tras una pausa larga. Una lectura aislada que indique más de
-25° de error ya no provoca un giro en el sitio: debe persistir durante 250 ms y
-al menos tres imágenes diferentes. Los giros hacia el destino conservan el
-perfil anterior. La regulación por encoder de cada rueda también se mantiene.
+Antes de enviar un mando comprueba el arco de las ruedas y la rampa que realmente
+se aplicará, con la huella completa del robot. Si el arco principal no cabe,
+evalúa alternativas más lentas o con otra curvatura y giros hacia el camino.
+Si ninguna cabe, vuelve al planificador para buscar una liberación desde la
+postura actual. No utiliza un modelo entrenado: es seguimiento geométrico con
+predicción de colisiones, inspirado en
+[Regulated Pure Pursuit](https://docs.nav2.org/jazzy/configuration_and_development/configuration_guide/controller_plugins/configuring_regulated_pp/).
+La implementación funciona directamente en Python y no depende de ROS 2.
+
+El reloj de la rampa incluye el tiempo de cálculo entre ciclos: no descuenta
+el trabajo de geometría del intervalo de aceleración. La regulación por encoder
+de cada rueda permanece en la ESP32. El perfil circular de margen positivo
+conserva su controlador anterior; el perfil continuo corresponde al margen de
+0 mm usado actualmente y a los recorridos sin obstáculos.
 
 ## Límites del control y de la medición
 
@@ -286,23 +306,23 @@ perfil anterior. La regulación por encoder de cada rueda también se mantiene.
 |---|---|
 | Frecuencia del control de movimiento | 20 Hz |
 | Distancia al seleccionar o iniciar | Sin máximo fijo; el destino debe estar dentro de la imagen |
-| Paso de giro a avance | Hasta 8° sin obstáculos y hasta 3° con obstáculos |
-| Volver a girar durante el avance | Más de 25° sin obstáculos o 15° con obstáculos durante 250 ms y al menos 3 imágenes distintas |
+| Giro inicial del seguimiento continuo | Entra sobre 80° de desalineación y sale bajo 38°; valida el arco antes de avanzar |
+| Corrección durante el avance | Curvatura hacia el punto adelantado, con filtrado y aceleración angular limitada |
 | Velocidad máxima de avance | Escala ampliable y entrada numérica desde 50 mm/s; valor inicial de 100 mm/s |
 | Velocidad máxima de giro | Escala ampliable y entrada numérica desde 12°/s; valor inicial de 32°/s |
 | Aproximación al destino | Reduce la consigna según distancia de frenado; usa 450 mm/s² para anticipar la parada |
 | Fin del giro | Reduce según el ángulo pendiente; usa 240°/s² como referencia de frenado |
 | Subida y bajada de consigna en Python y ESP32 | 600 y 900 mm/s², respectivamente |
 | Subida y bajada de salida PWM local | 600 y 900 unidades/s; el aumento inicial hasta detectar movimiento conserva 300 unidades/s |
-| Cambio de sentido o de movimiento | Pasa por cero antes de invertir; frena ambas ruedas antes de cambiar entre giro y avance |
+| Cambio de sentido de una rueda | Pasa por cero antes de invertir; no impone una parada de ambas ruedas en cada curva |
 | Control local de velocidad | 100 Hz en la ESP32, con realimentación de ambos encoders |
 | Llegada a un destino del usuario | El punto queda dentro del contorno orientado del robot; no exige coincidencia con su centro |
-| Asentamiento | 150 ms entre puntos y 400 ms al terminar, con consignas cero; conserva la llegada al frenar y recalcula el siguiente tramo desde la posición real |
+| Asentamiento del perfil continuo | Sin pausa entre puntos; 400 ms con consignas cero al terminar |
 | Duración del intento | Sin cancelación automática por tiempo total; el tiempo se muestra como diagnóstico |
-| Tiempo sin progreso observado | Tras 5 segundos activos, pausa 0,5 segundos, vuelve a estimar y reintenta con los mismos topes |
+| Tiempo sin progreso observado | Tras 5 segundos activos sin avance en la ruta ni mejora del giro, recalcula desde la postura actual |
 | Imagen requerida al iniciar | Antigüedad de hasta 200 ms |
 | Imagen requerida para conducir | Observación actual visible, con antigüedad de hasta 150 ms |
-| Fallo breve de detección | En avance, hasta 400 ms, 60 mm o 15° estimados, lo primero que se agote; también reduce la ventana cerca del destino. Exige la misma cámara entregando imágenes nuevas y recientes |
+| Fallo breve de detección | Con obstáculos: hasta 100 ms sobre un arco normal ya validado. Sin obstáculos: hasta 400 ms, 60 mm o 15° estimados, lo primero que se agote. Exige la misma cámara con imágenes nuevas y recientes |
 | Recuperación del seguimiento | Al menos 3 fotogramas distintos y 150 ms de detección estable |
 
 Las órdenes de navegación expresan **milímetros por segundo por rueda**, con el
@@ -312,9 +332,10 @@ las consignas a la ESP32. El firmware incrementa el esfuerzo de arranque
 hasta observar movimiento en los encoders y después regular la velocidad de
 cada rueda. Una orden de 0/0 detiene también ese esfuerzo de arranque.
 
-El mínimo de 50 mm/s se aplica a la velocidad base de avance antes de corregir
-la orientación. La rueda interior puede recibir una velocidad inferior para
-respetar la curva. No se fuerza un mínimo independiente de PWM ni se modifica
+Los 50 mm/s son el mínimo seleccionable del control de velocidad máxima.
+Las ruedas pueden recibir velocidades inferiores al regular una curva o al
+acercarse a un destino; la interior puede invertir su sentido. No se fuerza
+un mínimo independiente de PWM ni se modifica
 el cero de parada; las rampas también pasan por velocidades inferiores al mínimo
 de marcha al arrancar y frenar.
 
@@ -398,6 +419,11 @@ odometría con ellos. El control de cada rueda sí permanece activo en la ESP32 
 100 Hz. No aumenta la consigna, confirma llegadas ni cambia de punto mientras
 no ve el marcador. Las imágenes nuevas sin marcador no renuevan el presupuesto.
 La interfaz muestra **Recuperando marcador** y retira la posición visual anterior.
+
+Con obstáculos, el seguimiento continuo solo conserva el último mando durante
+los 100 ms siguientes a un arco comprobado. No acelera, no cambia de destino
+ni extiende ese plazo con imágenes sin marcador. Una liberación inicial, una
+parada manual, una cámara desconectada o una imagen atrasada no usan ese margen.
 
 Si la detección no vuelve dentro de ese margen, envía 0/0 y espera, conservando la ruta y el punto pendiente. La cámara
 desconectada, una imagen atrasada, una fuente distinta o una parada manual no
@@ -496,6 +522,15 @@ la captura de imagen hasta la aplicación de una consigna.
   de borrar o detener. Las pruebas incluyen ruido de orientación,
   correcciones suaves, continuidad breve sin obstáculos, dibujo y persistencia de mapas,
   caminos bloqueados y desvíos por varios destinos.
+- La disposición de seis obstáculos del 11 de noviembre se reproduce con una
+  cámara proyectiva fija y una planta diferencial de 190 mm entre ruedas.
+  Completa los cuatro destinos a máximas de 200 y 600 mm/s, comprueba la cobertura
+  de cada punto y el contorno cada 5 ms sobre los arcos de las ruedas, sin
+  penetración en los obstáculos del modelo. El retorno entre los puntos 1 y 2
+  realiza aproximadamente 180°, sin las vueltas repetidas del controlador
+  anterior. Otra prueba verifica que pasar puntos alineados no inserta órdenes
+  cero. Estas son pruebas virtuales; la suavidad física debe verificarse en el
+  robot con su fricción e inercia reales.
 - Las pruebas automatizadas cubren geometría, sentido de los giros, correcciones,
   selección sin movimiento, límites de destino, pausa y recuperación de visión,
   cambios de fuente, D48, caducidad y recuperación de sesión, reinicio, confirmaciones

@@ -191,7 +191,9 @@ def test_process_capture_can_cancel_a_blocked_read_without_returning_last_frame(
 
 
 def test_process_capture_open_timeout_does_not_leave_a_child_running():
-    capture = ProcessCapture(0, "usb-current", capture_factory=Factory(mode="open_hang", blocked=context().Event()),
+    # Conservar el semáforo en el padre hasta que el hijo termine de arrancar.
+    blocked = context().Event()
+    capture = ProcessCapture(0, "usb-current", capture_factory=Factory(mode="open_hang", blocked=blocked),
                              devices_provider=devices, open_timeout_s=.1)
     try:
         assert not capture.isOpened()
