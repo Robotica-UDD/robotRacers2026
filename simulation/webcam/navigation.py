@@ -74,7 +74,6 @@ class Navigation:
     MAX_DURATION_SECONDS = 30.
     NO_PROGRESS_SECONDS = 5.
     STATUS_STARTUP_SECONDS = 1.25  # RobotLink actualiza el estado remoto cada segundo.
-    MAX_DISTANCE_M = .60
     ARRIVAL_M = .025
     SETTLED_M = .04
     SPEED_LIMITS = {"forward_min_mm_s": 50, "forward_max_mm_s": INT32_MAX,
@@ -737,7 +736,7 @@ class Navigation:
             calibration = self._calibration
             if calibration is None or not self._same_source(frame, calibration):
                 raise NavigationError("Calibra el centro y el frente antes de seleccionar un destino.")
-            observation = self._observe(frame, calibration, target, required=True)
+            self._observe(frame, calibration, target, required=True)
             corners = frame["marker_corners"]
             edge = sum(math.hypot(corners[(i + 1) % 4][0] - corners[i][0],
                                   corners[(i + 1) % 4][1] - corners[i][1]) for i in range(4)) / 4
@@ -745,8 +744,6 @@ class Navigation:
             if not (margin <= target[0] < frame_width - margin
                     and margin <= target[1] < frame_height - margin):
                 raise NavigationError("El destino debe quedar más alejado del borde de la imagen.", 422)
-            if observation["distance_m"] > self.MAX_DISTANCE_M:
-                raise NavigationError("Selecciona un destino a no más de 600 mm del robot.", 422)
             if append:
                 self._waypoints.append(target)
                 self._route_generation += 1
@@ -916,7 +913,7 @@ class Navigation:
                 raise NavigationError("Calibra el robot y selecciona un destino antes de iniciar.")
             index = self._waypoint_index if self._waypoint_index < len(self._waypoints) else 0
             target = list(self._waypoints[index])
-            observation = self._observe(frame, calibration, target, required=True)
+            self._observe(frame, calibration, target, required=True)
             if self._obstacle_load_error:
                 raise NavigationError(self._obstacle_load_error)
             if self._obstacles:
@@ -926,8 +923,6 @@ class Navigation:
                 if (current["distance_m"] > .01 or planned.get("heading") is not None and
                         abs(heading_error_rad(fresh["marker_corners"], calibration, planned["heading"])) > math.radians(3)):
                     raise NavigationError("El robot se movió durante el cálculo. Vuelve a iniciar.")
-            if observation["distance_m"] > self.MAX_DISTANCE_M:
-                raise NavigationError("El destino quedó a más de 600 mm. Vuelve a seleccionarlo.")
             remote = self.robot.state()
             if not remote.get("connected") or not remote.get("ready"):
                 raise NavigationError("Conecta el robot y comprueba que esté listo antes de iniciar.")

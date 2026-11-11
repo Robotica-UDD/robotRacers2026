@@ -104,12 +104,12 @@ como pendiente, pero exige pulsar **Iniciar recorrido** para volver a mover el r
 Es distinto de una reconexión de la webcam o del Wi-Fi durante una misión activa,
 que se reanuda automáticamente.
 
-Empieza con destinos cercanos. Se aceptan desplazamientos estimados de hasta
-**0,60 m** en línea recta desde el centro actual. El camino que rodea un obstáculo
-puede ser más largo. Los puntos muy próximos al borde de la imagen
-se rechazan: el margen mínimo es el mayor entre 20 píxeles y el 60 % del lado
-medio del marcador detectado. Esto ayuda a conservar el seguimiento; también
-debes comprobar que todo el robot permanezca dentro del área de prueba.
+Los destinos **no tienen un límite fijo de distancia desde el robot**: pueden
+estar a más de 600 mm, dentro de la imagen de la cámara. La planificación y el
+seguimiento siguen comprobando los obstáculos y la visibilidad del marcador.
+Con el margen de seguridad en 0 mm no se añade un borde adicional al seleccionar
+el punto. Comprueba que la trayectoria y el robot permanezcan dentro del área
+de prueba.
 
 No puedes añadir puntos ni recalibrar mientras un recorrido esté activo.
 **Borrar puntos** sí está disponible durante el movimiento y lo detiene.
@@ -256,7 +256,7 @@ perfil anterior. La regulación por encoder de cada rueda también se mantiene.
 | Parámetro del programa | Valor configurado |
 |---|---|
 | Frecuencia del control de movimiento | 20 Hz |
-| Distancia máxima al seleccionar o iniciar | 600 mm |
+| Distancia al seleccionar o iniciar | Sin máximo fijo; el destino debe estar dentro de la imagen |
 | Paso de giro a avance | Hasta 8° sin obstáculos y hasta 3° con obstáculos |
 | Volver a girar durante el avance | Más de 25° sin obstáculos o 15° con obstáculos durante 250 ms y al menos 3 imágenes distintas |
 | Velocidad máxima de avance | Escala ampliable y entrada numérica desde 50 mm/s; valor inicial de 100 mm/s |

@@ -444,12 +444,47 @@ def test_zero_margin_selection_does_not_add_an_invisible_camera_border(rig, x, y
     assert robot.starts == robot.stops == 0 and robot.drives == []
 
 
-def test_far_target_is_rejected_and_request_source_must_match(rig):
+@pytest.mark.parametrize("scale", [500., 200.])
+def test_far_target_can_be_selected_and_started(rig, scale):
+    camera, robot, nav = rig
+    camera.pose(scale=scale)
+    nav.calibrate([640., 480.], [640. + scale * .10, 480.], 1280, 960, "usb-camera")
+    selected = target(nav, 1100, 480)
+    assert selected["target_px"] == [1100., 480.]
+    assert selected["remaining_mm"] > 600
+    assert robot.starts == 0 and robot.drives == []
+    nav.start()
+    wait_for(lambda: any(left > 0 and right > 0 for left, right in robot.drives))
+    assert robot.starts == 1
+
+
+def test_far_waypoint_can_be_appended(rig):
     camera, robot, nav = rig
     camera.pose(scale=500.)
     calibrate(nav)
-    with pytest.raises(NavigationError, match="600 mm"):
-        target(nav, 1100, 480)
+    selected = target(nav, 800, 480)
+    selected = nav.append_target(1100, 480, 1280, 960, "usb-camera", selected["route_revision"])
+    assert selected["waypoints_px"] == [[800., 480.], [1100., 480.]]
+    assert robot.starts == 0 and robot.drives == []
+
+
+def test_start_accepts_target_after_robot_moves_more_than_600mm_away(rig):
+    camera, robot, nav = rig
+    camera.pose(scale=500.)
+    calibrate(nav)
+    selected = target(nav)
+    assert selected["remaining_mm"] < 600
+    camera.pose(x=400., scale=500.)
+    assert nav.state()["remaining_mm"] > 600
+    nav.start()
+    wait_for(lambda: bool(robot.drives))
+    assert robot.starts == 1
+
+
+def test_target_request_source_must_match(rig):
+    camera, robot, nav = rig
+    camera.pose(scale=500.)
+    calibrate(nav)
     with pytest.raises(NavigationError, match="imagen cambió"):
         nav.select_target(800, 480, 640, 480, "usb-camera")
     assert robot.starts == 0
