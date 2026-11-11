@@ -79,9 +79,14 @@ class AprilTagDetector:
 
 
 def annotate_frame(frame: np.ndarray, detection: Detection, robot_pose: dict | None = None,
-                   *, navigation_overlay: dict | None = None) -> np.ndarray:
+                   *, navigation_overlay: dict | None = None, hands=None) -> np.ndarray:
     """Copia visual: nunca modifica el fotograma usado por el detector."""
     result = frame.copy()
+    for hand in hands or []:
+        first, last = np.rint(np.asarray(hand["bbox_px"], dtype=float)).astype(int).reshape(2, 2)
+        cv2.rectangle(result, tuple(first), tuple(last), (75, 165, 255), 2, cv2.LINE_AA)
+        cv2.putText(result, "MANO", (int(first[0]), max(14, int(first[1]) - 5)),
+                    cv2.FONT_HERSHEY_SIMPLEX, .42, (75, 165, 255), 1, cv2.LINE_AA)
     if navigation_overlay:
         color = (205, 229, 108)
         path = navigation_overlay.get("path_px", [])

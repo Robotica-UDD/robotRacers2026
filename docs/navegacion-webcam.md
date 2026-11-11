@@ -77,6 +77,15 @@ ese estado o abrir el panel no envía órdenes al robot.
 
 ## Marcar un recorrido y moverse
 
+**Configuración probada en el robot real:** avance máximo de **240 mm/s** y
+giro máximo de **90°/s**. El usuario confirmó que con estos valores el robot
+funciona bien. Queda como referencia escrita en el panel; la nota no modifica
+los valores elegidos en los controles.
+
+La tarjeta **Casa** permite marcar un refugio y activar el regreso cuando una
+mano se acerca. El uso y las comprobaciones están en
+[Detección de manos y regreso a Casa](manos-y-casa.md).
+
 1. Con el robot detenido, haz clic en los destinos sobre zonas despejadas de la
    imagen. Cada clic añade un punto numerado; la línea muestra el orden del recorrido.
 2. **Marcar puntos nunca mueve el robot.** Revisa el sentido del frente,

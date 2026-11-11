@@ -144,6 +144,12 @@ class Navigation:
         self._pose_steps = []
         self._pose_step_index = 0
         self._clearance_info = None
+        self._home_watch_enabled = False
+        self._home_watch_session = None
+        self._home_watch_thread = None
+        self._home_cancel_callback = None
+        self._home_redirect = False
+        self._home_saved_route = None
         self._load_calibration()
         self._load_speeds()
         self._load_obstacles()
@@ -889,6 +895,8 @@ class Navigation:
                     "planning_message": self._planning_message if planning_visible else "Esperando posición para planificar.",
                     "steering_target_px": self._steering_target if planning_visible else None,
                     "pending_mission": self._pending_mission,
+                    "home_watch_armed": self._home_watch_enabled,
+                    "home_watch_idle": self._home_watch_session is not None and not self._active,
                     "vision_grace_active": self._vision_hold, "vision_gap_ms": self._vision_gap_ms,
                     "vision_pauses": self._vision_pauses, "brief_vision_gaps": self._brief_vision_gaps,
                     "mode_switches": self._mode_switches,
@@ -962,7 +970,124 @@ class Navigation:
             pass
         return result
 
-    def start(self, expected_route_revision=None):
+    def arm_home_watch(self, *, authorize=None):
+        """Activación explícita: sesión a cero mientras espera una mano."""
+        if authorize is not None and not authorize():
+            raise NavigationError("La reacción a manos se desactivó.")
+        with self._lock:
+            if self._closed:
+                raise NavigationError("El servicio de navegación está cerrado.")
+            if self._home_watch_enabled:
+                return
+            generation = self._route_generation
+            self._home_watch_enabled = True
+            active = self._active
+        try:
+            if not active:
+                remote = self.robot.state()
+                if remote.get("stop_reason") in {"button_stop", "driver_fault", "encoder_stall", "encoder_fault", "encoder_error"}:
+                    raise NavigationError("El robot mantiene una parada física o un fallo.")
+                ack = self.robot.start_navigation(require_velocity=True,
+                    required_velocity_mm_s=self._required_velocity(self.get_speeds()))
+                session = ack.get("session") if isinstance(ack, dict) else None
+                if not isinstance(session, str) or not session or len(session) > 128:
+                    raise NavigationError("No se confirmó la sesión de vigilancia.")
+                allowed = authorize is None or authorize()
+                with self._lock:
+                    if (not allowed or self._closed or not self._home_watch_enabled
+                            or generation != self._route_generation or self._active):
+                        raise NavigationError("El estado cambió al activar la reacción a manos.")
+                    self._home_watch_session = session
+            with self._lock:
+                if self._home_watch_thread is None or not self._home_watch_thread.is_alive():
+                    self._home_watch_thread = threading.Thread(target=self._home_watch_loop,
+                        daemon=True, name="webcam-home-zero-watch")
+                    self._home_watch_thread.start()
+        except Exception:
+            self.disarm_home_watch()
+            if not active:
+                self._safe_stop()
+            raise
+
+    def disarm_home_watch(self):
+        with self._lock:
+            self._home_watch_enabled = False
+            idle_session = self._home_watch_session
+            self._home_watch_session = None
+        if idle_session is not None:
+            self._safe_stop()
+
+    def _home_watch_loop(self):
+        while True:
+            with self._lock:
+                if self._closed or not self._home_watch_enabled:
+                    return
+                session = self._home_watch_session
+                active = self._active
+            if not active and session is not None:
+                try:
+                    remote = self.robot.state()
+                    if (not remote.get("connected") or not remote.get("ready")
+                            or remote.get("control_session") != session
+                            or not remote.get("navigation_active")
+                            or remote.get("resume_blocked") is True
+                            or remote.get("stop_reason") in {"button_stop", "driver_fault", "encoder_stall", "encoder_fault", "encoder_error"}):
+                        raise NavigationError("La vigilancia se detuvo por una parada o pérdida del enlace.")
+                    # Nunca se rearma aquí. D48 invalida esta misma sesión en
+                    # el firmware y los paquetes antiguos no pueden revivirla.
+                    self.robot.drive_velocity_navigation(0, 0)
+                except Exception:
+                    self.disarm_home_watch()
+                    callback = self._home_cancel_callback
+                    if callback:
+                        callback("La vigilancia se detuvo. Actívala de nuevo para continuar.")
+                    return
+            time.sleep(.05)
+
+    def return_home(self, point_px, metadata, *, authorize=None):
+        """Desvía la sesión existente; una detección nunca arma una sesión nueva."""
+        if authorize is not None and not authorize():
+            raise NavigationError("La reacción a manos se desactivó.")
+        frame = self._camera_state()
+        self._request_source(frame, metadata["frame_width"], metadata["frame_height"], metadata["camera_id"])
+        with self._lock:
+            if not self._home_watch_enabled or self._closed or (self._active and self._cancel.is_set()):
+                raise NavigationError("Activa la reacción a manos antes de volver a casa.")
+            self._observe(frame, self._calibration, point_px, required=True)
+            if not self._active and self._home_watch_session is None:
+                raise NavigationError("La sesión de vigilancia terminó. Actívala de nuevo.")
+            if self._home_saved_route is None:
+                self._home_saved_route = ([list(p) for p in self._waypoints], self._waypoint_index)
+            self._waypoints, self._waypoint_index = [list(point_px)], 0
+            self._sync_target_locked()
+            self._route_generation += 1
+            self._invalidate_plan_locked()
+            active = self._active
+            self._home_redirect = active
+            revision = self._route_generation
+        if not active:
+            # El latido de vigilancia mantiene a cero la sesión durante A*.
+            try:
+                return self.start(revision, _authorize=authorize, _home=True)
+            except Exception:
+                with self._lock:
+                    self._restore_home_route_locked()
+                self._save_calibration()
+                raise
+        return {"active": True, "returning_home": True}
+
+    def _restore_home_route_locked(self):
+        if self._home_saved_route is not None:
+            self._home_redirect = False
+            self._waypoints, self._waypoint_index = self._home_saved_route
+            self._home_saved_route = None
+            self._sync_target_locked()
+            self._route_generation += 1
+            self._invalidate_plan_locked()
+
+    def start(self, expected_route_revision=None, *, _authorize=None, _home=False):
+        if _authorize is not None and not _authorize():
+            raise NavigationError("El regreso a casa se canceló.")
         if expected_route_revision is not None and (type(expected_route_revision) is not int
                                                     or expected_route_revision < 0):
             raise NavigationError("La revisión de la ruta debe ser un entero no negativo.", 422)
@@ -1004,8 +1129,16 @@ class Navigation:
             required_velocity = self._required_velocity(self._speeds)
             if required_velocity > self._remote_velocity_limit(remote):
                 raise NavigationError("Actualiza el firmware antes de iniciar con las velocidades configuradas.")
-            if remote.get("moving") or remote.get("navigation_active"):
+            watch_session = self._home_watch_session
+            adopt_watch = (watch_session is not None and self._home_watch_enabled
+                           and remote.get("control_session") == watch_session
+                           and remote.get("navigation_active") and not remote.get("resume_blocked"))
+            if (_home or adopt_watch) and remote.get("stop_reason") in {"button_stop", "driver_fault", "encoder_stall", "encoder_fault", "encoder_error"}:
+                raise NavigationError("El robot mantiene una parada física o un fallo.")
+            if remote.get("moving") or (remote.get("navigation_active") and not adopt_watch):
                 raise NavigationError("El robot ya tiene un movimiento en curso.")
+            if _home and not adopt_watch:
+                raise NavigationError("La vigilancia terminó. No se reiniciará el robot automáticamente.")
             self._waypoint_index = index
             self._sync_target_locked()
             self._last_arrival_mm = None
@@ -1030,14 +1163,19 @@ class Navigation:
             boot_id = remote.get("boot_id")
         launched = False
         try:
-            ack = self.robot.start_navigation(require_velocity=True, required_velocity_mm_s=required_velocity)
+            if _authorize is not None and not _authorize():
+                raise NavigationError("El regreso a casa se canceló.")
+            ack = ({"session": watch_session} if adopt_watch else
+                   self.robot.start_navigation(require_velocity=True, required_velocity_mm_s=required_velocity))
             session = ack.get("session") if isinstance(ack, dict) else None
             if not isinstance(session, str) or not session or len(session) > 128:
                 raise NavigationError("El robot no confirmó la sesión. No se reenviará automáticamente.", 502)
+            allowed = _authorize is None or _authorize()
             with self._lock:
-                if self._cancel.is_set() or self._closed:
+                if self._cancel.is_set() or self._closed or not allowed:
                     raise NavigationError(self._cancel_reason)
                 self._session = session
+                self._home_watch_session = None
                 self._pending_mission = True
                 self._thread = threading.Thread(target=self._run,
                     args=(calibration, list(target), session, boot_id), daemon=True,
@@ -1065,6 +1203,8 @@ class Navigation:
     def cancel_local(self, reason: str = "Parada solicitada."):
         """Cancela el trabajador sin IO ni esperas; apto para el callback de RobotLink."""
         with self._lock:
+            self._home_watch_enabled = False
+            self._home_watch_session = None
             if not self._closed:
                 self._route_generation += 1
             if self._active:
@@ -1074,8 +1214,12 @@ class Navigation:
                     self._pending_mission = False
                 self._phase = "stopping"
                 self._message = reason
+        if self._home_cancel_callback:
+            self._home_cancel_callback(reason)
 
     def _safe_stop(self):
+        with self._lock:
+            self._home_watch_session = None
         try:
             self.robot.stop_navigation()
         except Exception:
@@ -1248,12 +1392,15 @@ class Navigation:
             self._closed = True
             worker = self._thread
             arming = self._arm_thread
+            watching = self._home_watch_thread
         self.cancel_local("Servicio de navegación cerrado.")
         self._safe_stop()
         if worker is not None and worker is not threading.current_thread():
             worker.join(timeout=2.)
         if arming is not None and arming is not threading.current_thread():
             arming.join(timeout=2.)
+        if watching is not None and watching is not threading.current_thread():
+            watching.join(timeout=.3)
 
     def _set_phase(self, phase, message):
         with self._lock:
@@ -1363,6 +1510,23 @@ class Navigation:
                 self._check_source(frame)
                 if self._cancel.is_set():
                     break
+                with self._lock:
+                    redirect = self._home_redirect
+                    if redirect:
+                        self._home_redirect = False
+                        target = list(self._target)
+                if redirect:
+                    self._zero_drive()
+                    continuous_key, continuous_path_px, continuous_goal_indices = None, [], {}
+                    path_follower.reset()
+                    pose_follower.reset()
+                    straight.reset()
+                    needs_plan, blocked_center = avoiding, None
+                    pose_finishing, pose_replan_at = False, 0.
+                    waypoint_covered, waypoint_settle_started = False, None
+                    mode = retry_until = settle_started = None
+                    verified_motion_until = no_progress_seconds = 0.
+                    best_distance = best_angle = best_path_remaining = math.inf
                 age = frame.get("frame_age_ms")
                 frame_sequence = frame.get("sequence")
                 if (type(frame_sequence) is int and frame_sequence != camera_sequence
@@ -2181,8 +2345,22 @@ class Navigation:
         except Exception:
             final_message = "No se pudo mantener el control del recorrido. Robot detenido."
         finally:
-            self._safe_stop()
             with self._lock:
+                keep_watch = (self._home_watch_enabled and final_phase == "arrived"
+                              and not self._cancel.is_set() and not self._closed)
+            if keep_watch:
+                try:
+                    self._zero_drive()
+                    with self._lock:
+                        self._home_watch_session = self._session
+                except Exception:
+                    keep_watch = False
+                    self._safe_stop()
+            else:
+                self._safe_stop()
+            with self._lock:
+                if not keep_watch:
+                    self._home_watch_enabled = False
                 self._session = None
                 self._active = False
                 if self._cancel.is_set():
@@ -2194,6 +2372,10 @@ class Navigation:
                     self._pending_mission = False
                 self._elapsed_ms = round((time.monotonic() - self._started_at) * 1000)
                 self._phase, self._message = final_phase, final_message
+                if self._home_saved_route is not None:
+                    self._restore_home_route_locked()
+                    if final_phase == "arrived":
+                        self._message = "Casa alcanzada. El recorrido anterior se conserva para iniciarlo de nuevo."
             self._save_calibration()
 
 

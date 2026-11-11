@@ -23,6 +23,7 @@ from .detector import AprilTagDetector, Detection, annotate_frame
 from .devices import discover_cameras, _manual_options
 from .robot_link import RobotLink, make_robot_router
 from .navigation import Navigation, make_navigation_router
+from .home_service import HomeService, make_home_router
 
 LOGGER = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -74,6 +75,9 @@ class CaptureSession:
         self._opening = False
         self.overlay_provider = None
         self.navigation_overlay_provider = None
+        self.hand_detector = None
+        self._hand_sequence = 0
+        self._hand_frames = {}
         self._message = "Cámara detenida."
         self._sequence = 0
         self._version = 0
@@ -102,6 +106,7 @@ class CaptureSession:
             self._opening = True
             self._message = "Abriendo cámara…"
             self._last_frame_at = None
+            self._hand_frames.clear()
             self._jpeg = None
             self._detection = Detection(False)
             self._fps = 0.0
@@ -122,6 +127,7 @@ class CaptureSession:
             self._detection = Detection(False)
             self._jpeg = None
             self._last_frame_at = None
+            self._hand_frames.clear()
             self._fps = 0.0
             self._message = "Cámara detenida."
             self._version += 1
@@ -278,7 +284,13 @@ class CaptureSession:
                 pose = self.overlay_provider(detection) if self.overlay_provider else None
                 route = (self.navigation_overlay_provider(detection, pose)
                          if self.navigation_overlay_provider else None)
-                display = annotate_frame(pixels, detection, pose, navigation_overlay=route)
+                hand_state, hand_frame = self.hand_observation()
+                hands = (hand_state.get("hands", []) if "captured_at" in hand_frame and hand_frame.get("running") and
+                         hand_frame.get("camera_id") == self._camera_id and
+                         hand_frame.get("frame_width") == pixels.shape[1] and
+                         hand_frame.get("frame_height") == pixels.shape[0] and
+                         hand_frame.get("frame_age_ms", float("inf")) <= 250 else [])
+                display = annotate_frame(pixels, detection, pose, navigation_overlay=route, hands=hands)
                 encoded, jpeg = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 if not encoded:
                     raise RuntimeError("No se pudo preparar la imagen de cámara.")
@@ -297,6 +309,21 @@ class CaptureSession:
                     self._fps = fps
                     self._jpeg = jpeg.tobytes()
                     self._message = "Robot detectado." if detection.visible else "Buscando AprilTag 0…"
+                    hand_detector = self.hand_detector
+                    if hand_detector is not None:
+                        self._hand_sequence += 1
+                        hand_sequence = self._hand_sequence
+                        self._hand_frames[hand_sequence] = {
+                            "visible": detection.visible, "marker_corners": detection.marker_corners,
+                            "frame_width": self._width, "frame_height": self._height,
+                            "camera_id": self._camera_id, "sequence": hand_sequence,
+                            "captured_at": received, "opening": False}
+                        while len(self._hand_frames) > 32:
+                            self._hand_frames.pop(next(iter(self._hand_frames)))
+                if hand_detector is not None:
+                    # Copiar el último fotograma al trabajador; nunca inferir
+                    # YOLO en este hilo ni formar una cola de imágenes.
+                    hand_detector.submit(pixels, hand_sequence, received)
         except Exception as exc:
             LOGGER.warning("Captura detenida: %s", exc)
             message = str(exc) if isinstance(exc, RuntimeError) else "Error de captura. Revisa la cámara y vuelve a iniciar."
@@ -321,6 +348,22 @@ class CaptureSession:
                 if self._active_capture is capture:
                     self._active_capture = None
         return "Cámara detenida.", False
+
+    def hand_observation(self):
+        detector = self.hand_detector
+        result = (detector.state() if detector is not None else
+                  {"status": "missing_model", "ready": False, "hands": []})
+        with self._lock:
+            saved = self._hand_frames.get(result.get("sequence"))
+            frame = dict(saved) if saved else {"visible": False, "frame_age_ms": None}
+            frame["running"] = self._running and not self._stop_event.is_set()
+            if saved:
+                frame["frame_age_ms"] = max(0., (self.clock() - saved["captured_at"]) * 1000.)
+                if (saved["camera_id"] != self._camera_id or
+                        saved["frame_width"] != self._width or saved["frame_height"] != self._height or
+                        result.get("captured_at") != saved["captured_at"]):
+                    frame["visible"] = False
+        return result, frame
 
     def _state_locked(self) -> dict:
         age = None if self._last_frame_at is None else max(0.0, self.clock() - self._last_frame_at)
@@ -381,7 +424,7 @@ class StartRequest(BaseModel):
 
 def create_app(capture_factory: Callable | None = None, detector=None,
                clock: Callable = time.monotonic, stale_after_s: float = 0.75,
-               camera_discovery: Callable | None = None, robot_link=None) -> FastAPI:
+               camera_discovery: Callable | None = None, robot_link=None, hand_detector=None) -> FastAPI:
     camera = CaptureSession(capture_factory, detector, clock, stale_after_s)
     # Una cámara inyectada no corresponde al hardware del equipo de pruebas.
     choices = camera_discovery or (discover_cameras if capture_factory is None
@@ -394,14 +437,20 @@ def create_app(capture_factory: Callable | None = None, detector=None,
         if capture_factory is None else None)
     camera.overlay_provider = navigation.overlay_pose
     camera.navigation_overlay_provider = navigation.overlay_route
+    home = HomeService(camera, navigation, robot,
+        runtime_path=Path(__file__).resolve().parents[1] / ".runtime/home-state.json"
+        if capture_factory is None else None, detector=hand_detector,
+        load_detector=capture_factory is None)
     robot.set_navigation_cancel_callback(navigation.cancel_local)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         try:
+            home.start()
             yield
         finally:
             await asyncio.to_thread(navigation.close)
+            await asyncio.to_thread(home.close)
             await asyncio.to_thread(camera.stop)
             await asyncio.to_thread(robot.close)
 
@@ -409,8 +458,10 @@ def create_app(capture_factory: Callable | None = None, detector=None,
     application.state.camera = camera
     application.state.robot = robot
     application.state.navigation = navigation
+    application.state.home = home
     application.include_router(make_robot_router(robot))
     application.include_router(make_navigation_router(navigation))
+    application.include_router(make_home_router(home))
 
     @application.middleware("http")
     async def uncached(request: Request, call_next):

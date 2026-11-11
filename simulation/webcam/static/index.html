@@ -19,6 +19,7 @@
     .obstacle-tools{margin:0 0 17px;padding:12px;border:1px solid var(--line);border-radius:14px;background:#ffffff58}.map-modes{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:3px;background:#dbe8e175;border-radius:10px}.map-mode{font:inherit;font-size:10px;font-weight:600;line-height:1.35;border:0;border-radius:8px;padding:9px 6px;background:transparent;color:#567168}.map-mode[aria-pressed="true"]{background:#fff;color:#175f50;box-shadow:0 1px 4px #244b3a12}.obstacle-draft-status{font-size:10px;line-height:1.6;color:var(--muted);margin:10px 0 0}.obstacle-draft-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:5px}.obstacle-draft-actions[hidden]{display:none}.obstacle-link{font:inherit;font-size:10px;color:var(--accent);background:none;border:0;padding:3px 0}.obstacle-link:hover:not(:disabled){text-decoration:underline}.obstacle-margin-row{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-top:12px}.obstacle-margin-row label{font-size:10px;line-height:1.4;margin:0}.obstacle-margin-value{display:flex;align-items:center;gap:5px}.obstacle-margin-value input{width:54px;font:inherit;font-size:12px;font-variant-numeric:tabular-nums;text-align:right;color:#24463e;border:1px solid var(--line);border-radius:7px;background:#ffffffaa;padding:6px}.obstacle-margin-value small{font-size:10px;color:var(--muted)}.obstacle-tools .button{font-size:10px;padding:9px;margin-top:10px}.planning-status{font-size:10px;line-height:1.55;margin:10px 0 0;color:#58786c}.planning-status:empty{display:none}.planning-status[data-mode="blocked"]{color:#a23e35}.navigation-obstacle{fill:#d85e493d;stroke:#e58a79;stroke-width:2}.navigation-obstacle-clearance{fill:#e6b65115;stroke:#e2b559;stroke-width:1.3;stroke-dasharray:5 4}.navigation-planned-path{fill:none;stroke:#6ce5ce;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}.navigation-path-dot{fill:#d0fff3;stroke:#20775f;stroke-width:1}.navigation-obstacle-draft{fill:#f18c6540;stroke:#ffba8d;stroke-width:2;stroke-dasharray:5 4}.navigation-obstacle-vertex{fill:#ffe0bd;stroke:#723e2a;stroke-width:1.5}
     .navigation-route-line{stroke:#8edec9bb;stroke-width:2;fill:none;stroke-linejoin:round}.navigation-waypoint-number{font-family:inherit;font-weight:650;text-anchor:middle;dominant-baseline:central;fill:#173c36}.navigation-progress{font-size:11px;font-weight:600;color:#547367;margin:-3px 0 13px;font-variant-numeric:tabular-nums}.navigation-route-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.navigation-route-actions .button{padding:11px 7px;font-size:11px;gap:6px;min-width:0}
     .navigation-robot-footprint{fill:#6ce5ce08;stroke:#83dfd0;stroke-width:1.5;stroke-linejoin:round;opacity:.85}.navigation-robot-front{fill:none;stroke:#a5eee0;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    .map-modes{grid-template-columns:repeat(3,minmax(0,1fr))}.home-controls{padding:23px}.home-controls [hidden]{display:none}.home-controls .section-label{margin-bottom:16px}.home-controls .navigation-instruction{min-height:0}.home-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.home-actions .button{font-size:10px;padding:10px 6px}.home-distance{margin:14px 0}.home-controls .home-toggle[aria-pressed="true"]{background:#e3f2e9;border-color:#90b6a1;color:#176044}.home-model{font-size:10px;color:var(--muted);line-height:1.6;margin:9px 0 0}.home-baseline{padding-top:11px;border-top:1px solid var(--line);color:#466e5f}.navigation-home-marker{fill:#f6e7bce8;stroke:#7a692f;stroke-width:1.5}.navigation-home-icon{fill:none;stroke:#665722;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}.navigation-home-label{font-family:inherit;font-weight:700;fill:#304e3e;stroke:#f7fff8;stroke-width:2.5;paint-order:stroke;text-anchor:middle}@media(max-width:1050px){.home-controls{padding:19px}}
   </style>
 </head>
 <body>
@@ -54,6 +55,7 @@
               <circle id="navigation-center" class="navigation-center" vector-effect="non-scaling-stroke" hidden/>
               <text id="navigation-center-label" font-family="inherit" font-weight="600" fill="#183f37" stroke="#e9fff6" stroke-width="2.2" paint-order="stroke" hidden>CENTRO</text>
               <g id="navigation-waypoints"></g>
+              <g id="navigation-home" hidden><circle id="navigation-home-circle" class="navigation-home-marker" vector-effect="non-scaling-stroke"/><path id="navigation-home-icon" class="navigation-home-icon" vector-effect="non-scaling-stroke"/><text id="navigation-home-label" class="navigation-home-label">CASA</text></g>
               <circle id="navigation-target" class="navigation-target" vector-effect="non-scaling-stroke" hidden/>
               <path id="navigation-cross" class="navigation-cross" vector-effect="non-scaling-stroke" fill="none" hidden/>
               <circle id="navigation-calibration-dot" class="calibration-dot" vector-effect="non-scaling-stroke" hidden/>
@@ -88,6 +90,7 @@
             <div class="map-modes" role="group" aria-label="Herramienta de dibujo">
               <button id="navigation-point-mode" class="map-mode" type="button" aria-pressed="true" disabled>Marcar puntos</button>
               <button id="navigation-obstacle-mode" class="map-mode" type="button" aria-pressed="false" disabled>Dibujar obstáculo</button>
+              <button id="navigation-home-mode" class="map-mode" type="button" aria-pressed="false" disabled>Marcar casa</button>
             </div>
             <p id="navigation-obstacle-hint" class="obstacle-draft-status" role="status">Marca destinos o dibuja el contorno de un obstáculo con cuatro clics.</p>
             <div id="navigation-obstacle-draft-actions" class="obstacle-draft-actions" hidden>
@@ -115,6 +118,7 @@
               <button id="navigation-turn-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
             </div>
             <p id="navigation-speed-note" class="speed-note">Máximas: el robot reduce al acercarse al destino.</p>
+            <p id="navigation-tested-settings" class="speed-note home-baseline">Configuración probada: avance 240 mm/s · giro máximo 90°/s.</p>
             <p id="navigation-speed-status" class="speed-status" role="status"></p>
             <p id="navigation-speed-error" class="error" role="alert" hidden></p>
           </div>
@@ -126,6 +130,17 @@
           </div>
           <p id="navigation-error" class="error" role="alert" hidden></p>
           <p class="navigation-note">Área despejada · cámara fija</p>
+        </section>
+        <section class="glass home-controls" aria-labelledby="home-title">
+          <h2 id="home-title" class="section-label">Casa</h2>
+          <p id="home-status" class="navigation-status" data-mode="idle" role="status">Sin punto de casa</p>
+          <p id="home-message" class="navigation-instruction">Marca un punto al que regresar cuando se acerque una mano.</p>
+          <div class="home-actions"><button id="home-mark" class="button secondary" type="button" disabled>Marcar casa</button><button id="home-clear" class="button secondary" type="button" disabled>Borrar casa</button></div>
+          <div class="obstacle-margin-row home-distance"><label for="home-distance">Mano cerca del robot</label><span class="obstacle-margin-value"><input id="home-distance" type="number" min="50" max="500" step="10" value="150" inputmode="numeric" aria-label="Distancia de reacción a una mano, en milímetros" disabled><small>mm aprox.</small></span></div>
+          <button id="home-toggle" class="button secondary home-toggle" type="button" aria-pressed="false" disabled>Reaccionar a manos</button>
+          <button id="home-cancel" class="button secondary robot-stop" type="button" hidden>Detener regreso a casa</button>
+          <p id="home-model" class="home-model" role="status">Preparando detección de manos…</p>
+          <p id="home-error" class="error" role="alert" hidden></p>
         </section>
         <section class="glass robot-controls" aria-labelledby="robot-title">
           <h2 id="robot-title" class="section-label">Robot</h2>
@@ -185,6 +200,8 @@
     let routePointQueue = [], routePointSending = false, routeEditGeneration = 0;
     let routePointSendingGeneration = -1;
     let navigationTool = 'points', obstacleDraft = [], obstaclePointer = null, obstacleDraftSource = '';
+    let homeState = null, homeAvailable = false, homeBusy = '', homeReadBusy = false;
+    let homeReadVersion = 0, homeAppliedVersion = 0, homeActionVersion = 0, homeDistanceEditing = false;
     let obstacleMarginEditing = false, obstacleMarginPending = false;
     let calibrationStage = '', calibrationCenter = null, calibrationAnchor = null;
     let calibrationCenterTag = null, calibrationProjectionReady = false, calibrationSourceKey = '';
@@ -436,9 +453,10 @@
       const configuring = robotIsConfiguring();
       const actionBusy = robotConnectBusy || robotPulseSubmitting || robotStopBusy;
       const navigating = navigationOwnsRobot();
-      const configurationBlocked = navigating && !navigationAllowsReconnect();
-      $('robot-pulse').disabled = !linked || !robotState?.ready || moving || robotPulsePending || actionBusy || configuring || navigating || !!calibrationStage || navigationTool === 'obstacle' || obstacleDraft.length > 0 || ['calibrate', 'obstacles', 'obstacle-settings'].includes(navigationBusy);
-      $('robot-stop').disabled = !linked || !(moving || navigating) || robotStopBusy;
+      const watchingHands = navigationState?.home_watch_armed === true || homeState?.enabled === true;
+      const configurationBlocked = (navigating && !navigationAllowsReconnect()) || watchingHands;
+      $('robot-pulse').disabled = !linked || !robotState?.ready || moving || robotPulsePending || actionBusy || configuring || navigating || watchingHands || !!calibrationStage || navigationTool !== 'points' || obstacleDraft.length > 0 || ['calibrate', 'obstacles', 'obstacle-settings'].includes(navigationBusy);
+      $('robot-stop').disabled = !linked || !(moving || navigating || watchingHands || robotState?.navigation_active) || robotStopBusy;
       $('robot-pulse-label').textContent = moving ? 'Avanzando…' : robotPulsePending ? 'Confirmando parada…' : 'Avanzar 1 segundo';
       $('robot-stop-label').textContent = robotStopBusy ? 'Deteniendo…' : 'Detener';
       $('robot-connect').disabled = !robotAvailable || actionBusy || configuring || moving || configurationBlocked || !$('robot-port').value;
@@ -620,10 +638,135 @@
       if (render) updateNavigationUI();
     }
     function setNavigationTool(tool) {
-      if (!['points', 'obstacle'].includes(tool) || !canEditObstacles()) return;
+      if (!['points', 'obstacle', 'home'].includes(tool) || (tool === 'home' ? !canMarkHome() : !canEditObstacles())) return;
       routeEditGeneration++; routePointQueue = [];
       cancelObstacleDraft(false); navigationTool = tool;
       setNavigationError(''); updateNavigationUI();
+    }
+    function homePointInImage() {
+      const source = homeState?.source;
+      return homeAvailable && finitePoint(homeState?.home_px) && source?.camera_id === state?.camera_id &&
+        source?.frame_width === state?.frame_width && source?.frame_height === state?.frame_height ? homeState.home_px : null;
+    }
+    function canMarkHome() {
+      return homeAvailable && !homeBusy && !homeState?.enabled && canEditNavigation() && navigationCalibrated() && !calibrationStage;
+    }
+    function canArmHome() {
+      return homeAvailable && !homeBusy && !!homePointInImage() && cameraVisionFresh() && navigationCalibrated() &&
+        !calibrationStage && !navigationBusy && !routePointsPending() && !obstacleDraft.length &&
+        homeState?.detector?.status === 'ready' && robotAvailable && !!robotState?.connected && !!robotState.ready &&
+        robotState.velocity_control === true && robotState.encoder_ready === true &&
+        !robotPulsePending && !robotPulseSubmitting && !robotStopBusy && !robotConnectBusy &&
+        (!robotState.moving || navigationOwnsRobot());
+    }
+    function setHomeError(message) {
+      $('home-error').textContent = message;
+      $('home-error').hidden = !message;
+    }
+    function renderHomeUI() {
+      const enabled = homeState?.enabled === true, returning = homeState?.returning === true || homeState?.phase === 'returning';
+      const point = homePointInImage(), editing = navigationTool === 'home';
+      const labels = {disabled: point ? 'Reacción desactivada' : 'Sin punto de casa', watching: 'Atento a las manos', near_hand: 'Mano cerca del robot', returning: 'Volviendo a casa', home: 'En casa', at_home: 'En casa', paused: 'Regreso en pausa', waiting_detector: 'Esperando detección de manos', waiting_vision: 'Esperando el marcador', waiting_connection: 'Esperando al robot', error: 'Revisar regreso a casa'};
+      $('home-status').textContent = !homeAvailable ? 'Casa no disponible' : editing ? 'Marca la casa en la imagen' : labels[homeState?.phase] || (enabled ? 'Atento a las manos' : point ? 'Casa guardada' : 'Sin punto de casa');
+      $('home-status').dataset.mode = homeState?.phase === 'error' ? 'error' : enabled || returning ? 'active' : 'idle';
+      $('home-message').textContent = editing ? 'Haz clic en el punto de inicio. Marcarlo no mueve el robot.' : homeState?.message || 'Marca un punto al que regresar cuando se acerque una mano.';
+      $('navigation-home-mode').setAttribute('aria-pressed', String(editing));
+      $('navigation-home-mode').disabled = !canMarkHome();
+      $('home-mark').disabled = !canMarkHome();
+      $('home-mark').textContent = editing ? 'Seleccionando casa…' : point ? 'Cambiar casa' : 'Marcar casa';
+      $('home-clear').disabled = !point || !canMarkHome();
+      const toggle = $('home-toggle');
+      toggle.setAttribute('aria-pressed', String(enabled));
+      toggle.textContent = enabled ? 'Desactivar reacción a manos' : 'Reaccionar a manos';
+      toggle.disabled = homeBusy !== '' || (enabled ? !homeAvailable : !canArmHome());
+      const distance = $('home-distance');
+      distance.disabled = !homeAvailable || !!homeBusy || returning;
+      if (!homeDistanceEditing && !homeBusy) distance.value = homeState?.distance_mm ?? 150;
+      $('home-cancel').hidden = !returning;
+      $('home-cancel').disabled = !homeAvailable || !!homeBusy;
+      const detector = homeState?.detector;
+      const detectorLabels = {ready: 'YOLO · detección de manos lista', loading: 'YOLO · cargando detección de manos…', missing: 'YOLO · falta instalar el modelo de manos', missing_model: 'YOLO · falta instalar el modelo de manos', error: 'YOLO · detector no disponible', closed: 'YOLO · detección detenida'};
+      $('home-model').textContent = !homeAvailable ? 'Esperando el servicio de casa y manos.' : detectorLabels[detector?.status] || 'Preparando detección de manos…';
+    }
+    function renderHome(next) {
+      homeState = next; homeAvailable = true;
+      if (navigationTool === 'home' && homeState?.enabled) navigationTool = 'points';
+      renderHomeUI(); drawNavigationOverlay();
+    }
+    async function readHomeState() {
+      if (homeReadBusy) return;
+      homeReadBusy = true;
+      const version = ++homeReadVersion;
+      try {
+        const next = await api('/api/home/state');
+        if (version >= homeAppliedVersion) { homeAppliedVersion = version; renderHome(next); }
+      } catch {
+        if (version >= homeAppliedVersion) { homeAppliedVersion = version; homeAvailable = false; renderHomeUI(); }
+      } finally { homeReadBusy = false; }
+    }
+    async function pollHome() {
+      await readHomeState();
+      setTimeout(pollHome, 500);
+    }
+    async function homePost(action, body) {
+      if (homeBusy) return false;
+      const version = ++homeActionVersion;
+      homeAppliedVersion = ++homeReadVersion; homeBusy = action;
+      setHomeError(''); renderHomeUI();
+      try {
+        const result = await api(`/api/home/${action}`, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body: JSON.stringify(body)});
+        if (version !== homeActionVersion) return false;
+        homeAppliedVersion = ++homeReadVersion; renderHome(result);
+        return true;
+      } catch (error) {
+        if (version === homeActionVersion) setHomeError(error.message || 'No se pudo actualizar la casa.');
+        return false;
+      } finally { if (version === homeActionVersion) { homeBusy = ''; updateNavigationUI(); } }
+    }
+    async function markHomePoint(point) {
+      if (!canMarkHome() || navigationTool !== 'home' || !finitePoint(point)) return false;
+      const saved = await homePost('point', {x: point[0], y: point[1], frame_width: state.frame_width, frame_height: state.frame_height, camera_id: state.camera_id || null});
+      if (saved) navigationTool = 'points';
+      updateNavigationUI();
+      return saved;
+    }
+    async function toggleHomeReaction() {
+      const enabled = homeState?.enabled === true;
+      if (homeBusy || !homeAvailable || (!enabled && !canArmHome())) return;
+      await homePost('settings', {enabled: !enabled});
+    }
+    async function cancelHomeReturn() {
+      // Desarmar también cancela la autorización de un regreso que todavía
+      // esté calculando su ruta, aunque Navigation.active aún sea falso.
+      if (!homeAvailable || homeBusy || !(homeState?.returning || homeState?.phase === 'returning')) return;
+      await homePost('settings', {enabled: false});
+    }
+    async function saveHomeDistance() {
+      if (!homeDistanceEditing) return;
+      homeDistanceEditing = false;
+      const input = $('home-distance'), value = Number(input.value);
+      if (!input.value.trim() || !Number.isInteger(value) || value < 50 || value > 500) {
+        input.value = homeState?.distance_mm ?? 150;
+        setHomeError('La distancia debe estar entre 50 y 500 mm.'); return;
+      }
+      if (value !== homeState?.distance_mm) await homePost('settings', {distance_mm: value});
+      else renderHomeUI();
+    }
+    function clearHomePoint() {
+      if (canMarkHome() && homePointInImage()) homePost('clear', {});
+    }
+    function drawHomeOverlay(scale) {
+      const point = homePointInImage(), marker = $('navigation-home');
+      if (point) {
+        marker.setAttribute('transform', `translate(${point[0]} ${point[1]})`);
+        $('navigation-home-circle').setAttribute('r', 12 / scale);
+        const size = 6 / scale;
+        $('navigation-home-icon').setAttribute('d', `M ${-size} 0 L 0 ${-size} L ${size} 0 M ${-size * .7} ${-size * .2} V ${size} H ${size * .7} V ${-size * .2}`);
+        $('navigation-home-label').setAttribute('y', 24 / scale);
+        $('navigation-home-label').setAttribute('font-size', 9 / scale);
+      }
+      setSvgVisible(marker, !!point);
+      return !!point;
     }
     function obstacleQuadValid(points) {
       if (!Array.isArray(points) || points.length !== 4 || !points.every(finitePoint)) return false;
@@ -694,7 +837,7 @@
       $('navigation-obstacle-mode').setAttribute('aria-pressed', String(navigationTool === 'obstacle'));
       $('navigation-point-mode').disabled = !editable;
       $('navigation-obstacle-mode').disabled = !editable || count >= 32;
-      $('navigation-obstacle-hint').textContent = navigationBusy === 'obstacles' ? 'Guardando obstáculo…' : navigationTool === 'obstacle' ? `Vértice ${Math.min(4, obstacleDraft.length + 1)} de 4 · Sigue el borde del obstáculo.` : count ? `${count} ${count === 1 ? 'obstáculo guardado' : 'obstáculos guardados'} · El camino se calcula automáticamente.` : 'Marca destinos o dibuja el contorno de un obstáculo con cuatro clics.';
+      $('navigation-obstacle-hint').textContent = navigationTool === 'home' ? 'Haz clic en el punto de casa. El robot permanecerá detenido.' : navigationBusy === 'obstacles' ? 'Guardando obstáculo…' : navigationTool === 'obstacle' ? `Vértice ${Math.min(4, obstacleDraft.length + 1)} de 4 · Sigue el borde del obstáculo.` : count ? `${count} ${count === 1 ? 'obstáculo guardado' : 'obstáculos guardados'} · El camino se calcula automáticamente.` : 'Marca destinos o dibuja el contorno de un obstáculo con cuatro clics.';
       $('navigation-obstacle-draft-actions').hidden = !obstacleDraft.length;
       $('navigation-obstacle-cancel').disabled = !!navigationBusy;
       $('navigation-obstacle-undo').disabled = !!navigationBusy || !obstacleDraft.length;
@@ -813,6 +956,7 @@
       const key = cameraKey();
       if (key === calibrationSourceKey) return;
       if (calibrationStage) persistCalibrationDraft();
+      if (navigationTool === 'home') navigationTool = 'points';
       const previous = calibrationSourceKey;
       if (obstacleDraftSource && obstacleDraftSource !== key) { routeEditGeneration++; routePointQueue = []; obstacleDraft = []; obstaclePointer = null; obstacleDraftSource = ''; navigationTool = 'points'; }
       calibrationSourceKey = key;
@@ -1003,6 +1147,7 @@
       drawRoutePoints(points, navigationWaypointIndex(), box.scale);
       const obstacleLayer = drawObstacleOverlay(box.scale, center);
       const footprintVisible = drawRobotFootprintOverlay(center, box.scale);
+      const homeVisible = drawHomeOverlay(box.scale);
       if (navigationFrameOverlayEnabled() || obstacleLayer.hasObstacles || obstacleLayer.path.length > 1) setSvgVisible($('navigation-route-line'), false);
       const steeringTarget = navigationCameraKey === cameraKey() && navigationState?.planning_status === 'ready' && finitePoint(navigationState?.steering_target_px) ? navigationState.steering_target_px : obstacleLayer.path[1] || (obstacleLayer.hasObstacles ? null : target);
       const ring = $('navigation-target'), cross = $('navigation-cross'), tether = $('navigation-tether'), dot = $('navigation-center'), centerLabel = $('navigation-center-label'), calibrationDot = $('navigation-calibration-dot');
@@ -1026,7 +1171,7 @@
       setSvgVisible(dot, !navigationFrameOverlayEnabled() && !!center);
       setSvgVisible(centerLabel, !navigationFrameOverlayEnabled() && !!center);
       setSvgVisible(tether, !navigationFrameOverlayEnabled() && !!center && !!steeringTarget); setSvgVisible(calibrationDot, !!preview);
-      setSvgVisible(overlay, points.length > 0 || !!target || !!center || !!preview || obstacleLayer.visible || footprintVisible);
+      setSvgVisible(overlay, points.length > 0 || !!target || !!center || !!preview || obstacleLayer.visible || footprintVisible || homeVisible);
     }
     function sameSpeeds(first, second) {
       return first.forward_mm_s === second.forward_mm_s && first.turn_deg_s === second.turn_deg_s;
@@ -1229,8 +1374,9 @@
       $('navigation-stop').disabled = !active || ['stop', 'clear-targets', 'clear-obstacles'].includes(navigationBusy);
       $('navigation-clear').disabled = !navigationAvailable || navigationBusy === 'clear-targets' || (!pointCount && !routePointsPending());
       $('navigation-clear-label').textContent = navigationBusy === 'clear-targets' ? 'Borrando…' : 'Borrar puntos';
-      viewport.dataset.selectable = (navigationTool === 'obstacle' && !calibrationStage ? canEditObstacles() : canEditNavigation(!calibrationStage) && (!!calibrationStage || (navigationCalibrated() && navigationRouteRevision() !== null))) ? 'true' : 'false';
+      viewport.dataset.selectable = (navigationTool === 'home' && !calibrationStage ? canMarkHome() : navigationTool === 'obstacle' && !calibrationStage ? canEditObstacles() : canEditNavigation(!calibrationStage) && (!!calibrationStage || (navigationCalibrated() && navigationRouteRevision() !== null))) ? 'true' : 'false';
       renderObstacleTools();
+      renderHomeUI();
       renderSpeedControls();
       updateRobotButtons();
       drawNavigationOverlay();
@@ -1316,6 +1462,12 @@
       }
     }
     async function selectNavigationPoint(event) {
+      if (!calibrationStage && navigationTool === 'home') {
+        if (!canMarkHome()) return;
+        const point = nativeImagePoint(event.clientX, event.clientY, viewport.getBoundingClientRect(), state.frame_width, state.frame_height);
+        if (point) await markHomePoint(point);
+        return;
+      }
       if (!calibrationStage && navigationTool === 'obstacle') {
         if (!canEditObstacles()) return;
         const obstaclePoint = nativeImagePoint(event.clientX, event.clientY, viewport.getBoundingClientRect(), state.frame_width, state.frame_height);
@@ -1367,13 +1519,21 @@
     }
     $('navigation-point-mode').addEventListener('click', () => setNavigationTool('points'));
     $('navigation-obstacle-mode').addEventListener('click', () => setNavigationTool('obstacle'));
+    $('navigation-home-mode').addEventListener('click', () => setNavigationTool('home'));
+    $('home-mark').addEventListener('click', () => setNavigationTool('home'));
+    $('home-clear').addEventListener('click', clearHomePoint);
+    $('home-toggle').addEventListener('click', toggleHomeReaction);
+    $('home-cancel').addEventListener('click', cancelHomeReturn);
+    $('home-distance').addEventListener('focus', () => { homeDistanceEditing = true; });
+    $('home-distance').addEventListener('blur', saveHomeDistance);
+    $('home-distance').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); saveHomeDistance(); } });
     $('navigation-obstacle-cancel').addEventListener('click', () => { if (!navigationBusy) { cancelObstacleDraft(false); navigationTool = 'points'; updateNavigationUI(); } });
     $('navigation-obstacle-undo').addEventListener('click', () => { if (!navigationBusy) { obstacleDraft.pop(); obstaclePointer = null; updateNavigationUI(); } });
     $('navigation-obstacle-clear').addEventListener('click', clearNavigationObstacles);
     $('navigation-obstacle-margin').addEventListener('focus', () => { obstacleMarginEditing = true; updateNavigationUI(); });
     $('navigation-obstacle-margin').addEventListener('blur', saveObstacleMargin);
     $('navigation-obstacle-margin').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); saveObstacleMargin(); } });
-    window.addEventListener('keydown', event => { if (event.key === 'Escape' && navigationTool === 'obstacle' && !navigationBusy) { cancelObstacleDraft(false); navigationTool = 'points'; updateNavigationUI(); } });
+    window.addEventListener('keydown', event => { if (event.key === 'Escape' && ['obstacle', 'home'].includes(navigationTool) && !navigationBusy && !homeBusy) { cancelObstacleDraft(false); navigationTool = 'points'; updateNavigationUI(); } });
     $('navigation-calibrate').addEventListener('click', beginCalibration);
     $('navigation-start').addEventListener('click', startNavigation);
     $('navigation-stop').addEventListener('click', stopNavigation);
@@ -1408,6 +1568,7 @@
     window.addEventListener('resize', drawNavigationOverlay);
     updateNavigationUI();
     pollNavigation();
+    pollHome();
     updateRobotButtons();
     loadRobotPorts();
     pollRobot();
