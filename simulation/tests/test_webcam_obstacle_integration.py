@@ -2,6 +2,7 @@
 import math
 import time
 
+import cv2
 import numpy as np
 import pytest
 
@@ -10,9 +11,9 @@ from simulation.webcam.navigation import Navigation, INT32_MAX
 from simulation.webcam.navigation_geometry import _homographies, _project, observe_robot
 from simulation.webcam.obstacle_planner import point_clearances_mm
 from simulation.webcam.pose_obstacle_planner import check_pose
-from simulation.webcam.robot_footprint import ROBOT_RADIUS_MM
+from simulation.webcam.robot_footprint import ROBOT_FOOTPRINT_MM, ROBOT_RADIUS_MM
 from simulation.webcam.straight_control import StraightControl
-from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, ClosedLoopRobot, wait_for
+from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, ClosedLoopRobot, goal_under_body, wait_for
 from simulation.tests.test_webcam_obstacle_current_scene import (CORNERS, CENTER, FRONT, OBSTACLES,
                                                                GOAL, calibration)
 
@@ -58,16 +59,16 @@ def test_two_user_destinations_keep_their_order_while_both_legs_avoid_the_obstac
         def record_progress():
             original_sync()
             if nav._active:
-                passed.append((nav._waypoint_index,robot.x,robot.y))
+                passed.append((nav._waypoint_index,robot.x,robot.y,robot.yaw))
         nav._sync_target_locked = record_progress
         nav.start(nav.state()['route_revision'])
         wait_for(lambda:not nav.state()['active'], timeout=15.)
         state=nav.state()
         assert state['phase']=='arrived', (state['phase'],state['planning_status'],state['planning_message'])
         assert state['waypoint_index']==state['waypoint_count']==2
-        assert [index for index,_,_ in passed] == [1,2]
-        assert math.hypot(passed[0][1]-.56,passed[0][2]) <= .04
-        assert math.hypot(robot.x,robot.y) <= .04
+        assert [index for index,_,_,_ in passed] == [1,2]
+        assert goal_under_body(*passed[0][1:], (.56, 0.))
+        assert goal_under_body(robot.x, robot.y, robot.yaw, (0., 0.))
         assert robot.starts==1 and robot.drives[-1]==(0,0)
         corners=[[460.,468.],[484.,468.],[484.,492.],[460.,492.]]
         clearances=[point_clearances_mm(corners,nav._calibration,[472+x*600,480-y*600],[POLYGON])
@@ -182,6 +183,7 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
                 assert not normal_drive_seen, step
         assert all(values["clear"] for _, values in robot.trace)
         final = observe_robot(camera.state()["marker_corners"], cal, GOAL)
-        assert final["distance_m"] <= nav.SETTLED_M
+        assert cv2.pointPolygonTest(np.asarray(ROBOT_FOOTPRINT_MM, dtype=np.float32),
+                                   tuple(value * 1000. for value in final["target_local_m"]), False) >= 0.
     finally:
         nav.close()

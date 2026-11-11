@@ -19,7 +19,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot
-from .robot_footprint import ROBOT_RADIUS_MM
+from .robot_footprint import ROBOT_RADIUS_MM, point_under_robot
 from .pose_follower import PoseFollower
 from .pose_obstacle_planner import (plan_pose_path, check_pose, check_swept_motion,
                                     heading_error_rad, check_wheel_motion)
@@ -325,14 +325,25 @@ class Navigation:
             heading = math.radians(observe_robot(frame["marker_corners"], calibration)["heading_deg"])
             first_heading = heading
             start = center
+            at_initial_pose = True
             try:
                 for number, goal in enumerate(goals, index + 1):
                     with self._lock:
                         if generation != self._route_generation or self._cancel.is_set() and self._active:
                             return {"status": "waiting", "message": "El recorrido cambió durante el cálculo.",
                                     "path": [], "inflated": [], "legs": [], "center": center}
+                    if at_initial_pose and point_under_robot(observe_robot(
+                            frame["marker_corners"], calibration, goal)["target_local_m"]):
+                        # Ya está bajo el robot: no hace falta encontrar un
+                        # giro ni trasladar su centro hasta este destino.
+                        steps = [{"target_px": list(center), "heading_rad": heading,
+                                  "direction": 1, "kind": "drive"}]
+                        pose_legs.append(steps)
+                        legs.append([list(center)])
+                        continue
                     result = plan_pose_path(frame["marker_corners"], calibration, start, goal, obstacles,
                                             start_heading_rad=heading, allow_start_overlap=True)
+                    at_initial_pose = False
                     path.extend(result["path_px"][1:])
                     # A coincident, free destination is a zero-speed step. It must
                     # count as arrival rather than endlessly asking for another plan.
@@ -1215,6 +1226,8 @@ class Navigation:
         next_arm = 0.
         retry_until = None
         settle_started = None
+        waypoint_covered = False
+        waypoint_settle_started = None
         last_valid_capture = None
         last_valid_sequence = None
         last_valid_distance = None
@@ -1446,6 +1459,87 @@ class Navigation:
                     retry_until = None
                     no_progress_seconds = 0.
                     best_distance, best_angle = math.inf, math.inf
+                # Los destinos del usuario se alcanzan con el robot completo,
+                # no solo con el punto calibrado entre las ruedas. Los puntos
+                # técnicos de un rodeo conservan su precisión independiente.
+                with self._lock:
+                    user_goal = list(self._waypoints[self._waypoint_index])
+                    arrival_obstacles = [[list(p) for p in poly] for poly in self._obstacles]
+                goal_observation = self._observe(frame, calibration, user_goal)
+                if goal_observation is not None and point_under_robot(goal_observation["target_local_m"]):
+                    waypoint_covered = True
+                if waypoint_covered:
+                    self._set_phase("settling", "Punto alcanzado. Deteniendo el robot…")
+                    try:
+                        with self._lock:
+                            braking_commands = tuple(self._ramp_values)
+                        braking_clear = True
+                        if arrival_obstacles and any(braking_commands):
+                            try:
+                                braking_clear = check_wheel_motion(frame["marker_corners"], calibration,
+                                    *braking_commands, duration_s=.25, obstacles_px=arrival_obstacles,
+                                    allow_start_overlap=True)["clear"]
+                            except (ValueError, TypeError, KeyError):
+                                braking_clear = False
+                        if braking_clear:
+                            self._ramp_drive(0, 0)
+                        else:
+                            self._zero_drive()
+                        was_controlling = True
+                    except Exception:
+                        self._abandon()
+                        session, session_seen = None, False
+                        waiting_vision = True
+                        waypoint_settle_started = None
+                        self._cancel.wait(self.CONTROL_INTERVAL)
+                        continue
+                    if self._last_left == self._last_right == 0:
+                        if waypoint_settle_started is None:
+                            waypoint_settle_started = active_seconds
+                    else:
+                        waypoint_settle_started = None
+                    with self._lock:
+                        duration = (self.WAYPOINT_SETTLE_SECONDS if
+                                    self._waypoint_index + 1 < len(self._waypoints) else self.SETTLE_SECONDS)
+                    if (waypoint_settle_started is not None
+                            and active_seconds - waypoint_settle_started >= duration):
+                        with self._lock:
+                            if self._cancel.is_set():
+                                break
+                            self._last_arrival_mm = (round(goal_observation["distance_m"] * 1000., 1)
+                                                     if goal_observation else None)
+                            self._waypoint_index += 1
+                            self._sync_target_locked()
+                            next_target = None if self._target is None else list(self._target)
+                            if next_target is None:
+                                self._pending_mission = False
+                            else:
+                                # El siguiente rodeo parte de la pose real al
+                                # detenerse, no del centro del punto anterior.
+                                if avoiding:
+                                    self._invalidate_plan_locked()
+                                else:
+                                    self._planned_path = [list(goal_observation["center_px"])] + [
+                                        list(point) for point in self._waypoints[self._waypoint_index:]]
+                                self._steering_target = list(next_target)
+                        self._save_calibration()
+                        if next_target is None:
+                            final_phase, final_message = "arrived", "Ruta completada. Robot detenido."
+                            break
+                        target = next_target
+                        waypoint_covered = False
+                        waypoint_settle_started = None
+                        needs_plan, blocked_center = avoiding, None
+                        mode = None
+                        retry_until = settle_started = None
+                        no_progress_seconds = 0.
+                        best_distance = best_angle = math.inf
+                        large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
+                        straight.reset()
+                        pose_follower.reset()
+                        pose_finishing, pose_replan_at = False, 0.
+                    self._cancel.wait(self.CONTROL_INTERVAL)
+                    continue
                 if avoiding and self._uses_oriented_footprint():
                     if needs_plan or not self._pose_steps:
                         self._zero_drive()

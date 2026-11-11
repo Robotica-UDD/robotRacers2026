@@ -7,6 +7,8 @@ import math
 import threading
 import time
 
+import cv2
+import numpy as np
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
@@ -15,6 +17,7 @@ from simulation.webcam.navigation import (Navigation, NavigationError, make_navi
                                          INT32_MAX, MAX_TURN_DEG_S, _velocity_mm_s)
 from simulation.webcam.detector import Detection
 from simulation.webcam.navigation_geometry import observe_robot
+from simulation.webcam.robot_footprint import ROBOT_FOOTPRINT_MM
 
 
 class FakeCamera:
@@ -142,6 +145,15 @@ def wait_for(predicate, timeout=1.5):
             return
         time.sleep(.005)
     assert predicate(), "No se completó la condición del controlador simulado."
+
+
+def goal_under_body(x, y, yaw, goal):
+    """Aceptación geométrica independiente de la función de llegada del control."""
+    c, s = math.cos(yaw), math.sin(yaw)
+    polygon = np.asarray([[x + (c * px - s * py) / 1000.,
+                           y + (s * px + c * py) / 1000.]
+                          for px, py in ROBOT_FOOTPRINT_MM], dtype=np.float32)
+    return cv2.pointPolygonTest(polygon, tuple(goal), False) >= 0.
 
 
 def calibrate(nav):
@@ -594,8 +606,8 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, pr
         wait_for(lambda: not nav.state()["active"], timeout=3.)
         result = nav.state()
         assert result["phase"] == "arrived", result["message"]
-        assert math.hypot(robot.x - goal[0], robot.y - goal[1]) <= nav.ARRIVAL_M + .001
-        assert result["remaining_mm"] <= 26
+        assert goal_under_body(robot.x, robot.y, robot.yaw, goal)
+        assert result["remaining_mm"] == pytest.approx(math.hypot(robot.x - goal[0], robot.y - goal[1]) * 1000., abs=.1)
         first_left, first_right = next(command for command in robot.drives if command != (0, 0))
         # Esta aceptación usa una planta de 20 ms y rampas aceleradas que leen
         # el reloj real: el primer valor puede variar con la carga del proceso.
@@ -1385,16 +1397,16 @@ def test_ordered_route_closed_loop_passes_each_point_then_requires_explicit_rest
         def observe_progress():
             original()
             if nav._active:
-                passed.append((nav._waypoint_index, robot.x, robot.y))
+                passed.append((nav._waypoint_index, robot.x, robot.y, robot.yaw))
 
         nav._sync_target_locked = observe_progress
         nav.start()
         wait_for(lambda: not nav.state()["active"], timeout=4.)
         state = nav.state()
         assert state["phase"] == "arrived", state["message"]
-        assert [index for index, _, _ in passed] == [1, 2, 3, 4]
-        for (_, x, y), goal in zip(passed, goals):
-            assert math.hypot(x - goal[0], y - goal[1]) <= .026
+        assert [index for index, _, _, _ in passed] == [1, 2, 3, 4]
+        for (_, x, y, yaw), goal in zip(passed, goals):
+            assert goal_under_body(x, y, yaw, goal)
         assert state["waypoint_index"] == state["waypoint_count"] == 4 and state["target_px"] is None
         assert robot.starts == robot.stops == 1
         count = len(robot.drives)

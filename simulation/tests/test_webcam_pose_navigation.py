@@ -234,7 +234,7 @@ def test_signed_wheel_feedback_completes_detour_and_shallow_contact_escape(obsta
         result = nav.state()
         assert result["phase"] == "arrived", (result["phase"], result["planning_message"], result["message"])
         assert result["waypoint_index"] == result["waypoint_count"] == 1
-        assert math.hypot(robot.x + .4, robot.y - .3) <= nav.SETTLED_M
+        assert cv2.pointPolygonTest(body_polygon(robot.x, robot.y, robot.yaw), (-400., 300.), False) >= 0.
         backwards = [row for row in robot.trace if row["left"] + row["right"] < 0]
         if initial_depth > .002:
             assert backwards
@@ -285,7 +285,7 @@ def test_destination_behind_robot_turns_around_then_drives_forward():
         wait_for(lambda: not nav.state()["active"], timeout=6.0)
         result = nav.state()
         assert result["phase"] == "arrived", (result["phase"], result["planning_message"], result["message"])
-        assert math.hypot(robot.x + .2, robot.y) <= nav.SETTLED_M
+        assert cv2.pointPolygonTest(body_polygon(robot.x, robot.y, robot.yaw), (-200., 0.), False) >= 0.
         assert all(row["left"] + row["right"] >= 0 for row in robot.trace)
         assert any(row["left"] * row["right"] < 0 for row in robot.trace)
 

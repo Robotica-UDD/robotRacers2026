@@ -26,6 +26,7 @@ Este módulo no lee archivos de ejecución ni altera la calibración.
 from __future__ import annotations
 
 import math
+from numbers import Real
 
 
 # En el extremo lateral, el taco tiene (x, z) = (4,29282, 2,5) mm.
@@ -59,3 +60,24 @@ ROBOT_RADIUS_MM: float = math.ceil(
 def robot_radius_mm() -> float:
     """Radio del barrido completo del robot sobre su eje, sin margen extra."""
     return ROBOT_RADIUS_MM
+
+
+def point_under_robot(local_point_m) -> bool:
+    """Un destino queda alcanzado al entrar en el contorno del robot.
+
+    Coordenadas relativas al eje de las ruedas, X hacia delante e Y hacia la
+    izquierda, como ``observe_robot()["target_local_m"]``. Incluye el borde;
+    no añade el círculo de barrido ni el soporte desplazado del marcador.
+    """
+    try:
+        if len(local_point_m) != 2 or any(isinstance(v, bool) or not isinstance(v, Real)
+                                         or not math.isfinite(v) for v in local_point_m):
+            return False
+        x, y = (float(value) * 1000. for value in local_point_m)
+    except (TypeError, ValueError, OverflowError):
+        return False
+    signs = []
+    for first, last in zip(ROBOT_FOOTPRINT_MM, ROBOT_FOOTPRINT_MM[1:] + ROBOT_FOOTPRINT_MM[:1]):
+        signs.append((last[0] - first[0]) * (y - first[1])
+                     - (last[1] - first[1]) * (x - first[0]))
+    return all(value >= -1e-6 for value in signs) or all(value <= 1e-6 for value in signs)

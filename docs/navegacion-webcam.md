@@ -93,6 +93,14 @@ el punto pendiente pulsando **Iniciar recorrido**; después de completar toda la
 lista, ese mismo botón permite repetirla desde el primer punto. Si añades puntos
 después de completar una ruta, el siguiente inicio recorre solo los nuevos.
 
+Un destino se considera alcanzado en cuanto queda **debajo del contorno del
+robot**, sin exigir que coincida con el centro entre ruedas. El contorno nominal
+abarca unos 83 mm delante, 53 mm detrás y hasta 116 mm a cada lado, según su forma
+y la orientación actual. Cuando cubre el punto, frena y conserva esa llegada
+aunque se desplace un poco al detenerse. Después calcula el siguiente tramo
+desde la posición real. Los puntos intermedios necesarios para rodear obstáculos
+mantienen su precisión y no usan esta zona de llegada ampliada.
+
 Si la pérdida de detección supera el margen breve o se pierde la conexión Wi-Fi,
 la misión **espera con los motores a cero**, conservando la lista, su progreso y la calibración. Al recuperarse una
 imagen estable y el enlace, continúa automáticamente hacia el punto pendiente.
@@ -267,8 +275,8 @@ perfil anterior. La regulación por encoder de cada rueda también se mantiene.
 | Subida y bajada de salida PWM local | 600 y 900 unidades/s; el aumento inicial hasta detectar movimiento conserva 300 unidades/s |
 | Cambio de sentido o de movimiento | Pasa por cero antes de invertir; frena ambas ruedas antes de cambiar entre giro y avance |
 | Control local de velocidad | 100 Hz en la ESP32, con realimentación de ambos encoders |
-| Inicio de la parada | Distancia estimada de hasta 25 mm |
-| Asentamiento | 150 ms entre puntos y 400 ms al terminar, con consignas cero; acepta hasta 40 mm al confirmar cada llegada |
+| Llegada a un destino del usuario | El punto queda dentro del contorno orientado del robot; no exige coincidencia con su centro |
+| Asentamiento | 150 ms entre puntos y 400 ms al terminar, con consignas cero; conserva la llegada al frenar y recalcula el siguiente tramo desde la posición real |
 | Duración del intento | Sin cancelación automática por tiempo total; el tiempo se muestra como diagnóstico |
 | Tiempo sin progreso observado | Tras 5 segundos activos, pausa 0,5 segundos, vuelve a estimar y reintenta con los mismos topes |
 | Imagen requerida al iniciar | Antigüedad de hasta 200 ms |

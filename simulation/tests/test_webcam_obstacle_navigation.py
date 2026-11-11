@@ -15,7 +15,7 @@ from simulation.webcam.navigation import INT32_MAX, Navigation, NavigationError
 from simulation.webcam.obstacle_planner import point_clearance_mm, point_clearances_mm, segment_is_clear
 from simulation.webcam.robot_footprint import ROBOT_RADIUS_MM
 from simulation.webcam.straight_control import StraightControl
-from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, wait_for
+from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, goal_under_body, wait_for
 
 
 QUAD = [[[628., 444.], [652., 444.], [652., 516.], [628., 516.]]]
@@ -366,7 +366,7 @@ def test_closed_loop_detours_through_subpoints_without_entering_physical_clearan
         assert min(value["obstacle_mm"] for value in robot.clearances) >= ROBOT_RADIUS_MM + 30 - .1
         assert min(value["camera_mm"] for value in robot.clearances) > nav._camera_view_margin(nav._calibration, 30)
         assert robot.starts == 1 and robot.stops == 1
-        assert math.hypot(robot.x - .56, robot.y) <= .04
+        assert goal_under_body(robot.x, robot.y, robot.heading, (.56, 0.))
     finally:
         nav.close()
 
