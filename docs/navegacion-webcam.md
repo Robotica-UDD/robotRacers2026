@@ -173,6 +173,16 @@ antes de girar. Si la posición estimada ya aparece en contacto, busca una manio
 que reduzca ese contacto hasta salir; no exige apartarlo manualmente para volver
 a calcular. La salida se hace a velocidad reducida.
 
+Durante esa salida se admiten hasta **0,25 mm de aumento transitorio** únicamente
+en un contacto que el modelo ya detectaba al iniciar. Esto permite que la
+envolvente de las ruedas comience un giro de liberación, sin confundir una
+variación de décimas de milímetro con la ausencia de camino. El límite inicial
+se conserva en todos los pasos y comprobaciones de mando del mismo plan;
+no se acumula una tolerancia nueva en cada ciclo. Los extremos de las maniobras
+de escape deben reducir el contacto hasta quedar libres, y no se permite
+iniciar contacto con otro obstáculo. El recorrido normal conserva sus
+comprobaciones sin esta tolerancia de escape.
+
 El borde de la cámara tampoco lleva un radio reservado. Se comprueba la posición
 real de las cuatro esquinas del marcador en cada postura prevista, sin los
 84 mm que antes se exigían alrededor del centro para cualquier orientación.

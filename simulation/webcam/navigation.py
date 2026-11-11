@@ -1583,7 +1583,8 @@ class Navigation:
                     try:
                         swept = check_swept_motion(frame["marker_corners"], calibration,
                             observation["center_px"], current_heading, target, step["heading_rad"],
-                            obstacles, allow_start_overlap=escaping)
+                            obstacles, allow_start_overlap=escaping,
+                            max_penetration_mm=step.get("max_penetration_mm") if escaping else None)
                     except (ValueError, KeyError, TypeError):
                         swept = {"clear": False}
                     if not swept["clear"]:
@@ -1625,7 +1626,8 @@ class Navigation:
                         try:
                             return all(check_wheel_motion(frame["marker_corners"], calibration,
                                 a, b, duration_s=horizon, obstacles_px=obstacles,
-                                allow_start_overlap=escaping)["clear"]
+                                allow_start_overlap=escaping,
+                                max_penetration_mm=step.get("max_penetration_mm") if escaping else None)["clear"]
                                 for a, b in (preview, command))
                         except (ValueError, TypeError, KeyError):
                             return False

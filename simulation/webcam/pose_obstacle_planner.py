@@ -27,6 +27,7 @@ ANGLE_PRIMITIVE_RAD = math.radians(15.)
 MAX_ESCAPE_TRAVEL_M = .20
 MAX_REVERSE_ESCAPE_M = .080
 MAX_OUTPUT_SEGMENT_M = .45
+ESCAPE_CONTACT_ALLOWANCE_MM = .25
 _DISTANCE_EPS_M = 1e-7
 
 
@@ -205,17 +206,21 @@ class _Scene:
     def swept(self, start, end, *, allow_overlap=False, max_penetration=None, tolerance=0., curve_error=0.):
         initial, _, _ = self.evaluate(start)
         allowed = np.maximum(initial, tolerance)
+        # La envolvente de las ruedas puede crecer unas décimas de milímetro
+        # al comenzar un giro que termina liberando el contacto. Solo el
+        # obstáculo que ya está en contacto recibe esa holgura geométrica.
+        allowance = np.where(initial > tolerance + _DISTANCE_EPS_M,
+                             ESCAPE_CONTACT_ALLOWANCE_MM / 1000., _DISTANCE_EPS_M)
         ceiling = float(np.max(initial, initial=0.)) if max_penetration is None else max_penetration
         initial_max = float(np.max(initial, initial=0.))
         if not allow_overlap and initial_max > tolerance + _DISTANCE_EPS_M:
             return False, initial_max
-        if allow_overlap and initial_max > max(ceiling, tolerance) + _DISTANCE_EPS_M:
+        if allow_overlap and initial_max > max(ceiling, tolerance) + ESCAPE_CONTACT_ALLOWANCE_MM / 1000.:
             return False, initial_max
         distance = math.hypot(end.x - start.x, end.y - start.y)
         angle = _wrap(end.yaw - start.yaw)
         intervals = max(1, math.ceil(distance / .01), math.ceil(abs(angle) / math.radians(3.)))
         previous = start
-        previous_depths = initial
         maximum = initial_max
         for i in range(1, intervals + 1):
             if self.deadline is not None and time.monotonic() > self.deadline:
@@ -235,15 +240,15 @@ class _Scene:
                                      for parts in self.parts], dtype=float)
             maximum = max(maximum, float(np.max(swept_depths, initial=0.)))
             if allow_overlap:
-                # Ningún obstáculo nuevo puede penetrar la huella. El contacto
-                # inicial puede disminuir; solo tolera 0,05 mm de redondeo.
-                if (np.any(depths > previous_depths + .00005)
-                        or np.any(swept_depths > allowed + .00005)
-                        or maximum > max(ceiling, tolerance) + .00005):
+                # El techo global procede de la posición inicial del escape;
+                # no se renueva al pasar por sus posturas intermedias.
+                if (np.any(depths > allowed + allowance)
+                        or np.any(swept_depths > allowed + allowance)
+                        or maximum > max(ceiling, tolerance) + ESCAPE_CONTACT_ALLOWANCE_MM / 1000.):
                     return False, maximum
             elif np.any(swept_depths > tolerance + _DISTANCE_EPS_M):
                 return False, maximum
-            previous, previous_depths = pose, depths
+            previous = pose
         return True, maximum
 
 
@@ -370,7 +375,9 @@ def check_wheel_motion(corners, calibration, left_mm_s, right_mm_s, duration_s=.
                                          curve_error=curve_error)
         peak = max(peak, penetration)
         depths, marker, _ = scene.evaluate(following)
-        if allow_start_overlap and np.any(depths > np.maximum(initial_depths, tolerance) + .00005):
+        allowance = np.where(initial_depths > tolerance + _DISTANCE_EPS_M,
+                             ESCAPE_CONTACT_ALLOWANCE_MM / 1000., _DISTANCE_EPS_M)
+        if allow_start_overlap and np.any(depths > np.maximum(initial_depths, tolerance) + allowance):
             valid = False
         if not valid:
             return {'clear': False, 'penetration_mm': peak * 1000., 'marker_visible': bool(marker),
@@ -605,6 +612,8 @@ def _output(scene, start, actions, initial_penetration, planning_started):
         image = scene.image_point(pose.point)
         steps.append({'target_px': image, 'heading_rad': scene.image_heading(pose),
                       'direction': direction, 'kind': kind, 'escaping': escaping})
+        if escaping or kind == 'escape':
+            steps[-1]['max_penetration_mm'] = initial_penetration * 1000.
         distance = float(np.linalg.norm(pose.point - previous.point))
         length += distance
         if distance > 1e-7:
@@ -757,6 +766,8 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
             if not valid:
                 continue
             new_depth = float(np.max(scene.evaluate(pose)[0], initial=0.))
+            if node.escaping and new_depth > float(np.max(scene.evaluate(node.pose)[0], initial=0.)) + .00005:
+                continue  # Cada primitiva debe acabar reduciendo el contacto.
             still_escaping = node.escaping and new_depth > tolerance + _DISTANCE_EPS_M
             movement_cost = .025 * ANGLE_PRIMITIVE_RAD if motion == 'turn' else travel * (1.08 if direction < 0 else 1.)
             switch_cost = .01 if motion != 'turn' and direction != node.direction else 0.
