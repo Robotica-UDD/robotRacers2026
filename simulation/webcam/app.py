@@ -73,6 +73,7 @@ class CaptureSession:
         self._camera_label: str | None = None
         self._opening = False
         self.overlay_provider = None
+        self.navigation_overlay_provider = None
         self._message = "Cámara detenida."
         self._sequence = 0
         self._version = 0
@@ -275,7 +276,9 @@ class CaptureSession:
                     pixels = cv2.cvtColor(pixels, cv2.COLOR_BGRA2BGR)
                 detection = self.detector.process(pixels)
                 pose = self.overlay_provider(detection) if self.overlay_provider else None
-                display = annotate_frame(pixels, detection, pose)
+                route = (self.navigation_overlay_provider(detection, pose)
+                         if self.navigation_overlay_provider else None)
+                display = annotate_frame(pixels, detection, pose, navigation_overlay=route)
                 encoded, jpeg = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 if not encoded:
                     raise RuntimeError("No se pudo preparar la imagen de cámara.")
@@ -337,6 +340,7 @@ class CaptureSession:
             "heading_deg": self._detection.heading_deg if visible else None,
             "marker_corners": self._detection.marker_corners if visible else None,
             "marker_id": 0, "frame_age_ms": None if age is None else round(age * 1000, 1),
+            "navigation_overlay_in_frame": self.navigation_overlay_provider is not None,
             "heading_convention": "0° derecha, 90° arriba; ángulo en la imagen sin espejo.",
         }
 
@@ -389,6 +393,7 @@ def create_app(capture_factory: Callable | None = None, detector=None,
         Path(__file__).resolve().parents[1] / ".runtime/navigation-state.json"
         if capture_factory is None else None)
     camera.overlay_provider = navigation.overlay_pose
+    camera.navigation_overlay_provider = navigation.overlay_route
     robot.set_navigation_cancel_callback(navigation.cancel_local)
 
     @asynccontextmanager

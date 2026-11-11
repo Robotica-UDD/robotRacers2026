@@ -320,7 +320,7 @@ def test_stop_and_d48_cancel_movement_but_keep_user_route_and_map(stop_kind):
         assert robot.starts == starts
 
 
-def test_vision_pause_stops_immediately_then_replans_the_same_user_destination():
+def test_vision_pause_stops_then_reuses_the_guarded_path_to_the_same_destination():
     far_obstacle = [[(.3, .2), (.4, .2), (.4, .3), (.3, .3)]]
     with synthetic_scene(start=(0.0, 0.0, 0.0), polygons=far_obstacle) as (camera, robot, nav):
         before = select(nav, (.2, 0.0))

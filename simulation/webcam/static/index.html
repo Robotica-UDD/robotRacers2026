@@ -52,6 +52,7 @@
               <polyline id="navigation-route-line" class="navigation-route-line" vector-effect="non-scaling-stroke" hidden/>
               <line id="navigation-tether" class="navigation-tether" vector-effect="non-scaling-stroke" hidden/>
               <circle id="navigation-center" class="navigation-center" vector-effect="non-scaling-stroke" hidden/>
+              <text id="navigation-center-label" font-family="inherit" font-weight="600" fill="#183f37" stroke="#e9fff6" stroke-width="2.2" paint-order="stroke" hidden>CENTRO</text>
               <g id="navigation-waypoints"></g>
               <circle id="navigation-target" class="navigation-target" vector-effect="non-scaling-stroke" hidden/>
               <path id="navigation-cross" class="navigation-cross" vector-effect="non-scaling-stroke" fill="none" hidden/>
@@ -64,7 +65,7 @@
         <div class="metrics" aria-label="Mediciones en la imagen">
           <div class="metric"><div class="metric-label">Frecuencia</div><div class="metric-value"><span id="fps">—</span><small>imágenes/s</small></div></div>
           <div class="metric"><div class="metric-label">Orientación en imagen</div><div class="metric-value"><span id="heading">—</span><small>°</small></div></div>
-          <div class="metric"><div class="metric-label">Centro del marcador</div><div class="metric-value metric-center"><span id="center">—</span><small>px</small></div></div>
+          <div class="metric"><div id="center-label" class="metric-label">Centro del marcador</div><div class="metric-value metric-center"><span id="center">—</span><small>px</small></div></div>
         </div>
       </section>
       <aside class="sidebar">
@@ -269,7 +270,7 @@
       $('fps').textContent = running && Number.isFinite(next.fps) ? number.format(next.fps) : '—';
       const heading = visible ? Math.round(((next.heading_deg % 360 + 360) % 360) * 10) / 10 % 360 : null;
       $('heading').textContent = visible ? number.format(heading) : '—';
-      $('center').textContent = visible ? `${Math.round(next.center_px[0])}, ${Math.round(next.center_px[1])}` : '—';
+      renderCenterMeasurement();
       const dimensions = running && next.frame_width && next.frame_height ? `${next.frame_width} × ${next.frame_height} px` : '';
       const processing = running && Number.isFinite(next.processing_ms) ? `Procesamiento ${number.format(next.processing_ms)} ms` : '';
       $('capture-detail').textContent = [dimensions, processing].filter(Boolean).join(' · ') || 'Python + OpenCV';
@@ -724,6 +725,25 @@
     function cameraVisionFresh() {
       return cameraFrameFresh() && !!state.visible && Array.isArray(state.marker_corners) && state.marker_corners.length === 4;
     }
+    function calibratedCenterInImage() {
+      if (!cameraVisionFresh() || !navigationCalibrated()) return null;
+      const geometry = navigationState?.calibration_geometry;
+      if (finitePoint(geometry?.center_tag_m) && Number.isFinite(geometry.marker_size_m) && geometry.marker_size_m > 0) {
+        const size = geometry.marker_size_m;
+        const unit = [geometry.center_tag_m[0] / size + .5, .5 - geometry.center_tag_m[1] / size];
+        return mapQuadPoint(unit, [[0, 0], [1, 0], [1, 1], [0, 1]], state.marker_corners);
+      }
+      return finitePoint(navigationState?.center_px) ? navigationState.center_px : null;
+    }
+    function renderCenterMeasurement() {
+      const calibrated = navigationAvailable && navigationCalibrated();
+      const point = calibrated ? calibratedCenterInImage() : cameraVisionFresh() ? state?.center_px : null;
+      $('center-label').textContent = calibrated ? 'Centro del robot' : 'Centro del marcador';
+      $('center').textContent = finitePoint(point) ? `${Math.round(point[0])}, ${Math.round(point[1])}` : '—';
+    }
+    function navigationFrameOverlayEnabled() {
+      return state?.navigation_overlay_in_frame === true;
+    }
     function containedImageGeometry(rect, width, height) {
       if (!(rect.width > 0 && rect.height > 0 && width > 0 && height > 0)) return null;
       const scale = Math.min(rect.width / width, rect.height / height);
@@ -806,6 +826,29 @@
     }
     function mapQuadPoint(point, from, to) {
       if (!finitePoint(point) || !Array.isArray(from) || !Array.isArray(to) || from.length !== 4 || to.length !== 4 || !from.every(finitePoint) || !to.every(finitePoint)) return null;
+      const unit = [[0, 0], [1, 0], [1, 1], [0, 1]];
+      const isUnit = quad => quad.every((p, i) => p.every((v, j) => Math.abs(v - unit[i][j]) < 1e-9));
+      const fromUnit = isUnit(from), toUnit = isUnit(to);
+      const corners = fromUnit ? to : toUnit ? from : null;
+      const meanEdge = corners ? corners.reduce((sum, p, i) => sum + Math.hypot(p[0] - corners[(i + 1) % 4][0], p[1] - corners[(i + 1) % 4][1]), 0) / 4 : Infinity;
+      if (corners && meanEdge <= 48) {
+        // Mismo ajuste afín de las cuatro esquinas que usa Python cuando el
+        // marcador es pequeño: el centro seleccionado no cambia de modelo
+        // entre el primer clic y la confirmación del frente.
+        const origin = [0, 1].map(j => (3 * corners[0][j] + corners[1][j] - corners[2][j] + corners[3][j]) / 4);
+        const horizontal = [0, 1].map(j => (corners[1][j] + corners[2][j] - corners[0][j] - corners[3][j]) / 2);
+        const vertical = [0, 1].map(j => (corners[2][j] + corners[3][j] - corners[0][j] - corners[1][j]) / 2);
+        const determinant = horizontal[0] * vertical[1] - horizontal[1] * vertical[0];
+        if (Math.abs(determinant) < 1e-10) return null;
+        let result;
+        if (fromUnit) result = [0, 1].map(j => origin[j] + point[0] * horizontal[j] + point[1] * vertical[j]);
+        else {
+          const dx = point[0] - origin[0], dy = point[1] - origin[1];
+          result = [(dx * vertical[1] - dy * vertical[0]) / determinant,
+                    (horizontal[0] * dy - horizontal[1] * dx) / determinant];
+        }
+        return finitePoint(result) ? result : null;
+      }
       const matrix = [];
       for (let i = 0; i < 4; i++) {
         const [x, y] = from[i], [u, v] = to[i];
@@ -895,17 +938,21 @@
       valid.forEach((polygon, index) => group.children[index].setAttribute('points', polygon.map(point => point.join(',')).join(' ')));
       return valid.length;
     }
-    function drawObstacleOverlay(scale) {
+    function drawObstacleOverlay(scale, center = null) {
       const sourceMatches = navigationCameraKey === cameraKey();
       const obstacles = sourceMatches ? navigationObstacles() : [];
       const orientedWithoutExtraMargin = navigationState?.collision_model === 'oriented_footprint' && (navigationState?.obstacle_settings?.safety_margin_mm ?? 0) === 0;
       drawPolygonGroup('navigation-obstacle-clearances', sourceMatches && obstacles.length && !orientedWithoutExtraMargin ? navigationState?.inflated_obstacles_px : [], 'navigation-obstacle-clearance');
       drawPolygonGroup('navigation-obstacles', obstacles, 'navigation-obstacle');
-      const path = sourceMatches && navigationState?.planning_status === 'ready' && Array.isArray(navigationState?.planned_path_px) && navigationState.planned_path_px.every(finitePoint) ? navigationState.planned_path_px : [];
+      // La ruta visual es independiente de si el controlador está calculando
+      // una corrección. Solo una edición del mapa o de la cámara la invalida.
+      const suppliedPath = Object.prototype.hasOwnProperty.call(navigationState || {}, 'display_path_px') ? navigationState.display_path_px : navigationState?.planned_path_px;
+      const path = sourceMatches && Array.isArray(suppliedPath) && suppliedPath.every(finitePoint) ? suppliedPath.map(point => [...point]) : [];
+      if (finitePoint(center) && path.length) path[0] = [...center];
       const line = $('navigation-planned-path'), dots = $('navigation-path-dots');
       line.setAttribute('points', path.map(point => point.join(',')).join(' '));
-      setSvgVisible(line, obstacles.length > 0 && path.length > 1);
-      const intermediates = obstacles.length ? path.slice(1, -1) : [];
+      setSvgVisible(line, !navigationFrameOverlayEnabled() && path.length > 1);
+      const intermediates = !navigationFrameOverlayEnabled() && obstacles.length ? path.slice(1, -1) : [];
       while (dots.children.length > intermediates.length) dots.removeChild(dots.lastElementChild);
       while (dots.children.length < intermediates.length) {
         const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -929,7 +976,7 @@
     }
     function drawRobotFootprintOverlay(center, scale) {
       const supplied = navigationState?.robot_footprint_px;
-      const valid = !!center && navigationCameraKey === cameraKey() && navigationState?.collision_model === 'oriented_footprint' && Array.isArray(supplied) && supplied.length >= 3 && supplied.length <= 64 && supplied.every(finitePoint);
+      const valid = !navigationFrameOverlayEnabled() && !!center && navigationCameraKey === cameraKey() && navigationState?.collision_model === 'oriented_footprint' && Array.isArray(supplied) && supplied.length >= 3 && supplied.length <= 64 && supplied.every(finitePoint);
       drawPolygonGroup('navigation-robot-footprint', valid ? [supplied] : [], 'navigation-robot-footprint');
       const chevron = $('navigation-robot-front'), front = valid && finitePoint(navigationState?.front_px) ? navigationState.front_px : null;
       const distance = front ? Math.hypot(front[0] - center[0], front[1] - center[1]) : 0;
@@ -951,28 +998,34 @@
       overlay.style.width = `${box.width}px`; overlay.style.height = `${box.height}px`;
       overlay.setAttribute('viewBox', `0 0 ${state.frame_width} ${state.frame_height}`);
       const target = navigationCameraKey === cameraKey() && finitePoint(navigationState?.target_px) ? navigationState.target_px : null;
-      const center = cameraVisionFresh() && navigationCalibrated() && finitePoint(navigationState?.center_px) ? navigationState.center_px : null;
+      const center = calibratedCenterInImage();
       const points = navigationCameraKey === cameraKey() ? navigationWaypoints() : [];
       drawRoutePoints(points, navigationWaypointIndex(), box.scale);
-      const obstacleLayer = drawObstacleOverlay(box.scale);
+      const obstacleLayer = drawObstacleOverlay(box.scale, center);
       const footprintVisible = drawRobotFootprintOverlay(center, box.scale);
-      if (obstacleLayer.hasObstacles) setSvgVisible($('navigation-route-line'), false);
-      const steeringTarget = obstacleLayer.hasObstacles && navigationState?.planning_status !== 'ready' ? null : navigationCameraKey === cameraKey() && finitePoint(navigationState?.steering_target_px) ? navigationState.steering_target_px : obstacleLayer.hasObstacles ? obstacleLayer.path[1] || null : target;
-      const ring = $('navigation-target'), cross = $('navigation-cross'), tether = $('navigation-tether'), dot = $('navigation-center'), calibrationDot = $('navigation-calibration-dot');
+      if (navigationFrameOverlayEnabled() || obstacleLayer.hasObstacles || obstacleLayer.path.length > 1) setSvgVisible($('navigation-route-line'), false);
+      const steeringTarget = navigationCameraKey === cameraKey() && navigationState?.planning_status === 'ready' && finitePoint(navigationState?.steering_target_px) ? navigationState.steering_target_px : obstacleLayer.path[1] || (obstacleLayer.hasObstacles ? null : target);
+      const ring = $('navigation-target'), cross = $('navigation-cross'), tether = $('navigation-tether'), dot = $('navigation-center'), centerLabel = $('navigation-center-label'), calibrationDot = $('navigation-calibration-dot');
       if (target) {
         ring.setAttribute('cx', target[0]); ring.setAttribute('cy', target[1]); ring.setAttribute('r', (points.length ? 17 : 13) / box.scale);
         const arm = 5 / box.scale;
         cross.setAttribute('d', `M ${target[0] - arm} ${target[1]} H ${target[0] + arm} M ${target[0]} ${target[1] - arm} V ${target[1] + arm}`);
       }
-      if (center) { dot.setAttribute('cx', center[0]); dot.setAttribute('cy', center[1]); dot.setAttribute('r', 4 / box.scale); }
+      if (center) {
+        dot.setAttribute('cx', center[0]); dot.setAttribute('cy', center[1]); dot.setAttribute('r', 4 / box.scale);
+        centerLabel.setAttribute('x', center[0] + 8 / box.scale); centerLabel.setAttribute('y', center[1] - 8 / box.scale);
+        centerLabel.setAttribute('font-size', 9 / box.scale);
+      }
       if (center && steeringTarget) {
         tether.setAttribute('x1', center[0]); tether.setAttribute('y1', center[1]);
         tether.setAttribute('x2', steeringTarget[0]); tether.setAttribute('y2', steeringTarget[1]);
       }
       const preview = cameraVisionFresh() && calibrationProjectionReady && finitePoint(calibrationCenter) && (calibrationStage || navigationBusy === 'calibrate');
       if (preview) { calibrationDot.setAttribute('cx', calibrationCenter[0]); calibrationDot.setAttribute('cy', calibrationCenter[1]); calibrationDot.setAttribute('r', 5 / box.scale); }
-      setSvgVisible(ring, !!target); setSvgVisible(cross, !!target && !points.length); setSvgVisible(dot, !!center);
-      setSvgVisible(tether, !!center && !!steeringTarget); setSvgVisible(calibrationDot, !!preview);
+      setSvgVisible(ring, !!target); setSvgVisible(cross, !!target && !points.length);
+      setSvgVisible(dot, !navigationFrameOverlayEnabled() && !!center);
+      setSvgVisible(centerLabel, !navigationFrameOverlayEnabled() && !!center);
+      setSvgVisible(tether, !navigationFrameOverlayEnabled() && !!center && !!steeringTarget); setSvgVisible(calibrationDot, !!preview);
       setSvgVisible(overlay, points.length > 0 || !!target || !!center || !!preview || obstacleLayer.visible || footprintVisible);
     }
     function sameSpeeds(first, second) {
@@ -1148,6 +1201,7 @@
       renderSpeedControls();
     }
     function updateNavigationUI() {
+      renderCenterMeasurement();
       const active = navigationOwnsRobot();
       const calibrationPaused = !!calibrationStage && (!cameraVisionFresh() || !navigationAvailable || active || !calibrationProjectionReady);
       const phases = {planning: 'Buscando una maniobra', paused_obstacle: 'Buscando un paso disponible', uncalibrated: 'Calibración pendiente', idle: 'Listo para añadir puntos', selected: 'Recorrido preparado', arming: 'Preparando recorrido', turning: 'Girando hacia el punto', advancing: 'Avanzando al punto', settling: 'Estabilizando', arrived: 'Recorrido completado', stopped: 'Recorrido detenido', stopping: 'Deteniendo recorrido', retrying: 'Recalculando desde la posición actual', error: 'Recorrido detenido', paused_vision: 'En pausa · esperando visión', paused_connection: 'En pausa · esperando conexión', reconnecting: 'Reconectando al robot', paused: 'Recorrido en pausa'};

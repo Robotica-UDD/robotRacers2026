@@ -126,6 +126,9 @@ class Navigation:
         self._obstacle_source = None
         self._safety_margin_mm = 0
         self._planned_path = []
+        # Ruta para dibujar, separada de la autorización de conducir.
+        # Se conserva mientras se recupera visión o se calcula una alternativa.
+        self._display_path = []
         self._inflated_obstacles = []
         self._planned_legs = []
         self._avoidance_points = []
@@ -216,6 +219,7 @@ class Navigation:
 
     def _invalidate_plan_locked(self):
         self._planned_path = []
+        self._display_path = []
         self._inflated_obstacles = []
         self._planned_legs = []
         self._avoidance_points = []
@@ -439,6 +443,8 @@ class Navigation:
                     return None
                 self._planning_status, self._planning_message = result["status"], result["message"]
                 self._planned_path, self._inflated_obstacles = result["path"], result["inflated"]
+                if result["status"] == "ready" and len(result["path"]) > 1:
+                    self._display_path = [list(point) for point in result["path"]]
                 self._planned_legs = result["legs"]
                 self._plan_attempted_at = time.monotonic()
                 self._plan_key, self._plan_center = key, result["center"]
@@ -843,6 +849,14 @@ class Navigation:
                 frame.get(field) == self._obstacle_source.get(field)
                 for field in ("camera_id", "frame_width", "frame_height")))
             planning_visible = not self._obstacles or (map_visible and self._vision(frame))
+            if self._planning_status == "ready" and len(self._planned_path) > 1:
+                self._display_path = [list(point) for point in self._planned_path]
+            display_path = ([list(point) for point in self._display_path]
+                            if calibration is not None and self._same_source(frame, calibration) else [])
+            if observation and display_path:
+                # El anclaje visual sigue el centro que se eligió al calibrar,
+                # no el inicio histórico del plan ni el centro del AprilTag.
+                display_path[0] = list(observation["center_px"])
             footprint = []
             if observation and self._uses_oriented_footprint():
                 try:
@@ -852,6 +866,10 @@ class Navigation:
                     pass
             return {"phase": self._phase, "active": self._active,
                     "calibrated": calibration is not None and self._same_source(frame, calibration),
+                    "calibration_geometry": ({"center_tag_m": list(calibration.center_tag_m),
+                        "front_angle_rad": calibration.front_angle_rad,
+                        "marker_size_m": calibration.marker_size_m}
+                        if calibration is not None and self._same_source(frame, calibration) else None),
                     "message": self._message, "target_px": target,
                     "waypoints_px": [list(point) for point in self._waypoints],
                     "waypoint_index": self._waypoint_index, "waypoint_count": len(self._waypoints),
@@ -865,6 +883,7 @@ class Navigation:
                     "maneuver": (self._pose_steps[self._pose_step_index] if self._pose_steps and
                                  self._pose_step_index < len(self._pose_steps) else None),
                     "planned_path_px": self._planned_path if planning_visible else [],
+                    "display_path_px": display_path,
                     "inflated_obstacles_px": self._inflated_obstacles if planning_visible else [],
                     "planning_status": self._planning_status if planning_visible else "waiting",
                     "planning_message": self._planning_message if planning_visible else "Esperando posición para planificar.",
@@ -909,6 +928,39 @@ class Navigation:
             return observe_robot(corners, calibration)
         except (ValueError, TypeError):
             return None
+
+    def overlay_route(self, detection, pose=None):
+        """Geometría visual del mismo fotograma; no calcula rutas ni manda ruedas."""
+        frame = self._camera_state()
+        with self._lock:
+            calibration = self._calibration
+            if calibration is None or not self._same_source(frame, calibration):
+                return None
+            source = (self._planned_path if self._planning_status == "ready" and
+                      len(self._planned_path) > 1 else self._display_path)
+            path = [list(point) for point in source]
+            target = list(self._steering_target) if self._steering_target else None
+        result = {"path_px": path, "footprint_px": [], "steering_target_px": None}
+        if pose is None:
+            return result
+        # Reproyectar la huella y el origen con las esquinas de ESTE fotograma,
+        # no con la pose recibida por el navegador 125–200 ms antes.
+        corners = (detection.get("marker_corners") if isinstance(detection, dict)
+                   else getattr(detection, "marker_corners", None))
+        try:
+            _, backward, _ = _homographies(corners, calibration.marker_size_m,
+                                           calibration.width, calibration.height)
+            c, s = math.cos(calibration.front_angle_rad), math.sin(calibration.front_angle_rad)
+            result["footprint_px"] = [_project(backward,
+                [calibration.center_tag_m[0] + (c * x - s * y) / 1000.,
+                 calibration.center_tag_m[1] + (s * x + c * y) / 1000.], [0., 0.]).tolist()
+                for x, y in ROBOT_FOOTPRINT_MM]
+            if path:
+                path[0] = list(pose["center_px"])
+            result["steering_target_px"] = target
+        except (ValueError, TypeError, KeyError):
+            pass
+        return result
 
     def start(self, expected_route_revision=None):
         if expected_route_revision is not None and (type(expected_route_revision) is not int
@@ -1417,7 +1469,11 @@ class Navigation:
                         stable_since, stable_frames, last_sequence = None, 0, None
                         stable = False
                         next_arm = tick
-                        needs_plan = avoiding
+                        # Recuperar el enlace no cambia la geometría de la ruta.
+                        # El siguiente mando se vuelve a comprobar desde la pose
+                        # actual antes de conducir; un bloqueo sí pide otro plan.
+                        reuse_route = self._uses_oriented_footprint() and bool(self._pose_steps)
+                        needs_plan = needs_plan or (avoiding and not reuse_route)
                         blocked_center = None
 
                 if session is None:
@@ -1497,11 +1553,12 @@ class Navigation:
                     large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
                     self._set_phase("paused_vision", "Esperando una imagen estable. El destino se conserva.")
                     if avoiding:
-                        needs_plan, blocked_center = True, None
                         with self._lock:
+                            reuse_route = self._uses_oriented_footprint() and bool(self._pose_steps)
+                            needs_plan = needs_plan or not reuse_route
+                            blocked_center = None
                             self._planning_status = "waiting"
-                            self._planning_message = "Esperando seguimiento estable para recalcular."
-                            self._planned_path = []
+                            self._planning_message = "Ruta conservada. Esperando seguimiento estable."
                     try:
                         self._zero_drive()  # Renueva la sesión sin mover el robot.
                     except Exception:
@@ -1515,6 +1572,10 @@ class Navigation:
                     retry_until = None
                     no_progress_seconds = 0.
                     best_distance, best_angle = math.inf, math.inf
+                    with self._lock:
+                        if avoiding and not needs_plan and self._pose_steps:
+                            self._planning_status = "ready"
+                            self._planning_message = "Ruta actualizada desde el centro del robot."
                 # Los destinos del usuario se alcanzan con el robot completo,
                 # no solo con el punto calibrado entre las ruedas. Los puntos
                 # técnicos de un rodeo conservan su precisión independiente.

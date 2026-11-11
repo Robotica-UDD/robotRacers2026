@@ -105,6 +105,9 @@ rodeo describen el camino; no son órdenes de detenerse.
 Si la pérdida de detección supera el margen breve o se pierde la conexión Wi-Fi,
 la misión **espera con los motores a cero**, conservando la lista, su progreso y la calibración. Al recuperarse una
 imagen estable y el enlace, continúa automáticamente hacia el punto pendiente.
+Primero vuelve a proyectar la ruta conservada desde el centro calibrado y
+comprueba el siguiente arco. Recuperar el marcador por sí solo no fuerza un
+nuevo cálculo global ni reinicia el progreso de la trayectoria.
 No debes volver a seleccionarlo ni iniciar otra misión. Un cambio real de
 cámara o resolución sí requiere repetir la calibración.
 
@@ -191,7 +194,7 @@ real de las cuatro esquinas del marcador en cada postura prevista, sin los
 84 mm que antes se exigían alrededor del centro para cualquier orientación.
 El objetivo no impone una dirección final: el plan puede llegar con una orientación
 que mantenga el marcador visible. Una pérdida prolongada de detección pausa
-el movimiento y conserva el recorrido para recalcular al recuperarla.
+el movimiento y conserva el recorrido para retomarlo desde la pose recuperada.
 
 Un valor de separación positivo conserva el perfil circular anterior con el margen
 elegido y su reserva de seguimiento. La configuración actual permanece en **0 mm**.
@@ -225,8 +228,9 @@ una búsqueda fallida por una orden de atravesarla.
 Una pérdida aislada del marcador admite hasta 100 ms de continuación con el
 último mando si su arco ya fue comprobado contra los obstáculos y la cámara
 sigue entregando imágenes recientes. No se usa durante una liberación inicial.
-Superado ese plazo envía cero y espera una imagen estable; conserva el destino
-y recalcula desde la posición recuperada.
+Superado ese plazo envía cero y espera una imagen estable. Conserva el camino
+y lo vuelve a proyectar desde la posición recuperada; busca otra ruta global
+si las comprobaciones locales indican que ya no cabe.
 Cambiar la cámara o su resolución invalida el mapa; mover físicamente la cámara
 requiere recalibrar y dibujarlo de nuevo, aunque la resolución sea la misma.
 
@@ -299,6 +303,19 @@ el trabajo de geometría del intervalo de aceleración. La regulación por encod
 de cada rueda permanece en la ESP32. El perfil circular de margen positivo
 conserva su controlador anterior; el perfil continuo corresponde al margen de
 0 mm usado actualmente y a los recorridos sin obstáculos.
+
+La línea, la huella, la dirección y la cruz **CENTRO** se dibujan dentro del
+mismo fotograma de la webcam. Su origen es el centro seleccionado durante la
+calibración, aunque el AprilTag esté desplazado. No dependen del sondeo del
+navegador cada 125–200 ms, que podía hacer aparecer el origen detrás del robot
+en movimiento. Los puntos numerados y los obstáculos se mantienen como controles
+superpuestos. Antes de calibrar, la cruz representa únicamente el marcador.
+
+La última ruta visual permanece durante una pérdida de detección o mientras
+se calcula una alternativa. Una nueva ruta la sustituye completa, sin un intervalo
+en blanco. Esto no autoriza a conducir sin una pose válida: visualización y
+comprobación del movimiento son estados distintos. Borrar puntos, cambiar el
+mapa o recalibrar invalida esa imagen de ruta; cambiar de cámara impide reutilizarla.
 
 ## Límites del control y de la medición
 
@@ -428,7 +445,8 @@ parada manual, una cámara desconectada o una imagen atrasada no usan ese margen
 Si la detección no vuelve dentro de ese margen, envía 0/0 y espera, conservando la ruta y el punto pendiente. La cámara
 desconectada, una imagen atrasada, una fuente distinta o una parada manual no
 usan ese margen. Tras tres fotogramas distintos y al menos 150 ms de seguimiento
-estable, recalcula desde la posición observada, conservando el destino.
+estable, reproyecta el camino desde la posición observada y comprueba el mando
+antes de continuar, conservando el destino.
 
 Si falla el enlace, caduca la sesión o se reinicia el robot, la misión espera
 la conexión. Descarta la sesión local y envía una parada UDP de mejor esfuerzo,
@@ -470,6 +488,11 @@ camino de nuevo. El mapa y su margen se guardan en
 
 El estado incluye `obstacles_px`, `obstacle_settings`, `planned_path_px`,
 `inflated_obstacles_px`, `planning_status` y `planning_message`.
+`display_path_px` conserva la última ruta visual de la misma cámara y revisión
+durante el recálculo o la espera de visión. No indica autorización de movimiento.
+`calibration_geometry` describe el centro y frente respecto al marcador. La
+captura anuncia `navigation_overlay_in_frame` cuando la ruta y la pose se dibujan
+en el propio vídeo; el navegador evita superponer otra versión atrasada.
 `steering_target_px` señala el punto intermedio que sigue el robot;
 `target_px` conserva el destino elegido por el usuario. Los puntos de desvío no
 incrementan el contador de destinos completados. Un mapa guardado que no pueda

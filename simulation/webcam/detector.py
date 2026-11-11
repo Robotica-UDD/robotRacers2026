@@ -78,20 +78,38 @@ class AprilTagDetector:
                          corners.tolist(), duration, len(found))
 
 
-def annotate_frame(frame: np.ndarray, detection: Detection, robot_pose: dict | None = None) -> np.ndarray:
+def annotate_frame(frame: np.ndarray, detection: Detection, robot_pose: dict | None = None,
+                   *, navigation_overlay: dict | None = None) -> np.ndarray:
     """Copia visual: nunca modifica el fotograma usado por el detector."""
     result = frame.copy()
+    if navigation_overlay:
+        color = (205, 229, 108)
+        path = navigation_overlay.get("path_px", [])
+        if len(path) > 1:
+            points = np.rint(np.asarray(path, dtype=float)).astype(np.int32)
+            cv2.polylines(result, [points], False, color, 2, cv2.LINE_AA)
+        hull = navigation_overlay.get("footprint_px", [])
+        if len(hull) >= 3:
+            points = np.rint(np.asarray(hull, dtype=float)).astype(np.int32)
+            cv2.polylines(result, [points], True, color, 1, cv2.LINE_AA)
+        target = navigation_overlay.get("steering_target_px")
+        if robot_pose is not None and target is not None:
+            start = tuple(np.rint(robot_pose["center_px"]).astype(int))
+            end = tuple(np.rint(target).astype(int))
+            cv2.line(result, start, end, color, 2, cv2.LINE_AA)
     if not detection.visible or detection.marker_corners is None or detection.center_px is None:
         return result
     corners = np.asarray(detection.marker_corners, dtype=float)
     points = np.rint(corners).astype(np.int32)
     cv2.polylines(result, [points], True, (110, 231, 52), 2, cv2.LINE_AA)
+    if robot_pose is None and navigation_overlay is not None:
+        # Existe calibración, pero este fotograma no permite proyectar su
+        # centro. No sustituirlo por una cruz o flecha en el AprilTag trasero.
+        return result
     center = np.asarray(detection.center_px)
     direction = (corners[1] + corners[2] - corners[0] - corners[3]) / 2
     direction /= np.linalg.norm(direction)
     length = max(35.0, float(np.linalg.norm(corners[1] - corners[0])) * 0.85)
-    marker_center = tuple(np.rint(center).astype(int))
-    cv2.drawMarker(result, marker_center, (255, 255, 255), cv2.MARKER_CROSS, 16, 2, cv2.LINE_AA)
     if robot_pose is not None:
         center = np.asarray(robot_pose["center_px"], dtype=float)
         direction = np.asarray(robot_pose["front_px"], dtype=float) - center
@@ -99,6 +117,16 @@ def annotate_frame(frame: np.ndarray, detection: Detection, robot_pose: dict | N
         if norm > 0:
             direction /= norm
         cv2.circle(result, tuple(np.rint(center).astype(int)), 5, (255, 210, 85), -1, cv2.LINE_AA)
+    # Una sola cruz de referencia: el centro calibrado cuando existe; el
+    # centro del marcador solo se usa antes de calibrar el robot.
+    cv2.drawMarker(result, tuple(np.rint(center).astype(int)), (255, 255, 255),
+                   cv2.MARKER_CROSS, 16, 2, cv2.LINE_AA)
+    if robot_pose is not None:
+        label_center = tuple(np.rint(center + np.array([9., 16.])).astype(int))
+        cv2.putText(result, "CENTRO", label_center, cv2.FONT_HERSHEY_SIMPLEX, .35,
+                    (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(result, "CENTRO", label_center, cv2.FONT_HERSHEY_SIMPLEX, .35,
+                    (255, 255, 255), 1, cv2.LINE_AA)
     start = tuple(np.rint(center).astype(int))
     end = tuple(np.rint(center + length * direction).astype(int))
     cv2.arrowedLine(result, start, end, (255, 210, 85), 3, cv2.LINE_AA, tipLength=0.22)
