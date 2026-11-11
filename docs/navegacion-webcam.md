@@ -154,6 +154,17 @@ solo se admite como una salida inicial corta cuando está en contacto o no hay
 espacio para girar; después se detiene, se orienta y continúa hacia delante.
 No se elige la reversa para ahorrar un giro o hacer un rodeo completo.
 
+Al rodear obstáculos, la prioridad es **pocos tramos largos, giros cercanos a
+90° y espacio respecto de los bordes**, aunque el recorrido sea más largo.
+Los ejes se estiman a partir de las paredes dibujadas; una pared inclinada en
+la imagen no obliga a hacer el recorrido horizontal respecto de la cámara.
+El plan compara rutas por carriles y penaliza los giros y la proximidad tanto
+a los obstáculos como al borde visible. Prefiere el centro de los pasillos.
+Es una preferencia de selección, no un margen nuevo que prohíba pasar.
+Los tramos casi paralelos pueden mantenerse rectos sin añadir dos giros pequeños
+para corregir unos milímetros. Si no cabe una maniobra ortogonal, conserva la
+búsqueda con ángulos más flexibles y las salidas de contacto ya disponibles.
+
 El plan contempla esas maniobras de liberación y giros en el sitio. Comprueba el barrido
 de la huella durante cada movimiento, no solo sus extremos. Prefiere recorridos
 con más espacio cuando hay alternativas, sin convertir esa preferencia en una

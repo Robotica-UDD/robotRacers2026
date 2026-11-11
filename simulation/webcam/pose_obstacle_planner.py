@@ -19,6 +19,7 @@ from .navigation_geometry import Calibration, observe_robot, _project
 from .obstacle_planner import (_PlaneMap, _finite, _inside_polygon,
                                 _segment_distance, _grid, _grid_anchor, _astar, _simplify)
 from .robot_footprint import ROBOT_FOOTPRINT_MM
+from .orthogonal_planner import orthogonal_route
 
 POSITION_CELL_M = .0125
 DRIVE_PRIMITIVE_M = .025
@@ -619,7 +620,7 @@ def _output(scene, start, actions, initial_penetration, planning_started):
 
 def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, start_heading_rad=None,
                    footprint_mm=ROBOT_FOOTPRINT_MM, max_seconds=3., allow_start_overlap=True,
-                   contact_tolerance_mm=0., require_marker_visible=True):
+                   contact_tolerance_mm=0., require_marker_visible=True, prefer_orthogonal=True):
     """Búsqueda híbrida de poses con avance ordinario siempre hacia delante.
 
     ``heading_rad`` de cada paso está en la imagen, positivo hacia arriba.
@@ -632,6 +633,8 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
         raise ValueError('El tiempo de cálculo debe estar entre 0,05 y 5 segundos.')
     if type(allow_start_overlap) is not bool:
         raise ValueError('La salida de un contacto debe ser verdadera o falsa.')
+    if type(prefer_orthogonal) is not bool:
+        raise ValueError('La preferencia de giros rectos debe ser verdadera o falsa.')
     started = time.monotonic(); deadline = started + seconds
     tolerance, _ = _options(contact_tolerance_mm, None)
     scene = _Scene(corners, calibration, obstacles_px, footprint_mm, require_marker_visible)
@@ -651,6 +654,15 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
     if any(_inside_polygon(goal, polygon) for polygon in scene.plane.obstacles):
         raise ValueError('El destino está dentro de un obstáculo.')
     escaping = initial_penetration > tolerance + _DISTANCE_EPS_M
+    if prefer_orthogonal and not escaping:
+        # Priorizar una ruta sencilla y centrada antes de que el antiguo
+        # buscador devuelva el primer atajo diagonal. Se reserva tiempo para
+        # encontrar un paso más flexible cuando no caben los giros rectos.
+        orthogonal_deadline = min(deadline - min(.3, seconds * .2),
+                                  started + min(.9, seconds * .4))
+        rectilinear = orthogonal_route(scene, start, goal, tolerance, orthogonal_deadline)
+        if rectilinear is not None:
+            return _output(scene, start, rectilinear, initial_penetration, started)
     incumbent = None
     if not escaping:
         direct = _connector(scene, start, goal, tolerance, deadline)
@@ -658,7 +670,8 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
             if _actions_cost(scene, start, direct) < float(np.linalg.norm(goal - start.point)) * 1.12 + .03:
                 return _output(scene, start, direct, initial_penetration, started)
             incumbent = direct
-    guide_deadline = min(deadline - .3, started + seconds * .45)
+    remaining_start = time.monotonic()
+    guide_deadline = min(deadline - .3, remaining_start + (deadline - remaining_start) * .45)
     guided = _guided_routes(scene, start, goal, tolerance, escaping, initial_penetration, guide_deadline)
     if guided is not None:
         if incumbent is None or _actions_cost(scene, start, guided) < _actions_cost(scene, start, incumbent):

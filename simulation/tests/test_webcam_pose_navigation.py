@@ -16,8 +16,9 @@ import cv2
 import numpy as np
 import pytest
 
-from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, wait_for
+from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, wait_for, goal_under_body
 from simulation.webcam.navigation import Navigation, NavigationError
+from simulation.webcam.navigation_geometry import observe_robot
 from simulation.webcam.obstacle_planner import camera_visibility_margin_mm, point_clearances_mm
 from simulation.webcam.robot_footprint import ROBOT_FOOTPRINT_MM, ROBOT_RADIUS_MM
 from simulation.webcam.straight_control import StraightControl
@@ -198,7 +199,11 @@ def test_recorded_projective_camera_accepts_visible_goal_80mm_from_the_edge():
         assert state["collision_model"] == "oriented_footprint"
         assert state["clearance_info"]["view_required_mm"] == 0.0
         assert state["waypoints_px"] == [goal]
-        assert state["planned_path_px"][-1] == pytest.approx(goal, abs=.01)
+        # El destino ya queda bajo el robot con la zona de llegada ampliada:
+        # la vista previa acepta la posición actual sin buscar otro giro.
+        assert state["planned_path_px"][-1] == pytest.approx(state["center_px"], abs=.01)
+        assert goal_under_body(0., 0., 0., observe_robot(
+            camera.state()["marker_corners"], nav._calibration, goal)["target_local_m"])
         assert robot.starts == robot.stops == 0 and robot.drives == []
     finally:
         nav.close()
