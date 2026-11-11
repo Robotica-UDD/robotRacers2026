@@ -118,7 +118,7 @@ def test_reached_waypoint_stays_reached_while_braking_carries_the_body_past_it(m
         assert all(left >= 0 and right >= 0 for left, right in robot.drives)
 
 
-def test_ordered_covered_points_replan_the_next_leg_from_the_actual_stopped_pose(monkeypatch):
+def test_ordered_covered_points_continue_without_a_redundant_runtime_replan(monkeypatch):
     with synthetic_scene(start=(0., 0., 0.), polygons=REMOTE_OBSTACLE) as (camera, robot, nav):
         first = select(nav, (.080, 0.))
         nav.append_target(*pixel((.300, 0.)), FRAME_WIDTH, FRAME_HEIGHT,
@@ -135,10 +135,13 @@ def test_ordered_covered_points_replan_the_next_leg_from_the_actual_stopped_pose
         nav.start()
         wait_for(lambda: nav.state()["waypoint_index"] == 1 and
                  any(left > 0 and right > 0 for left, right in robot.drives), timeout=3.)
-        assert runtime_starts
-        # No se llegó al centro del primer punto de 80 mm: el segundo tramo
-        # debe partir del robot detenido en el origen, no de ese punto ideal.
-        assert runtime_starts[0] == pytest.approx(pixel((0., 0.)), abs=.01)
+        assert not runtime_starts
+        # El primer destino ya está bajo el robot: conserva el tramo previsto
+        # desde el origen real, sin una parada ni otro cálculo innecesario.
+        state = nav.state()
+        assert state["planned_path_px"][0] == pytest.approx(pixel((0., 0.)), abs=.01)
+        nonzero = next(i for i, command in enumerate(robot.drives) if command != (0, 0))
+        assert all(left != 0 or right != 0 for left, right in robot.drives[nonzero:])
         center = pixel((.225, 0.))
         camera.pose(x=center[0], y=center[1], heading=0., scale=SCALE)
         wait_for(lambda: not nav.state()["active"], timeout=3.)

@@ -327,7 +327,7 @@ def heading_error_rad(corners, calibration, heading_rad):
 def check_wheel_motion(corners, calibration, left_mm_s, right_mm_s, duration_s=.12, *,
                        obstacles_px, footprint_mm=ROBOT_FOOTPRINT_MM,
                        allow_start_overlap=False, max_penetration_mm=None,
-                       contact_tolerance_mm=0., require_marker_visible=True):
+                       contact_tolerance_mm=0., require_marker_visible=True, _scene=None):
     """Predice el arco diferencial de las consignas, sin enviar movimiento.
 
     Integra con pasos de hasta20ms y verifica la huella barrida. Usa las órdenes
@@ -341,7 +341,8 @@ def check_wheel_motion(corners, calibration, left_mm_s, right_mm_s, duration_s=.
     if type(allow_start_overlap) is not bool:
         raise ValueError('La salida de un contacto debe ser verdadera o falsa.')
     tolerance, maximum = _options(contact_tolerance_mm, max_penetration_mm)
-    scene = _Scene(corners, calibration, obstacles_px, footprint_mm, require_marker_visible)
+    scene = (_Scene(corners, calibration, obstacles_px, footprint_mm, require_marker_visible)
+             if _scene is None else _scene)
     observed = observe_robot(corners, calibration)
     pose = scene.pose(observed['center_px'], math.radians(observed['heading_deg']))
     initial_depths, marker, center = scene.evaluate(pose)
@@ -495,14 +496,85 @@ def _needs_initial_reverse(scene, start, goal, tolerance, deadline):
     required_turn, _ = scene.swept(start, desired, tolerance=tolerance)
     if not required_turn:
         return True
-    quarters = []
-    for sign in (1, -1):
+    quarter_turns = []
+    turn_to_goal = _wrap(bearing - start.yaw)
+    signs = ((1, -1) if abs(abs(turn_to_goal) - math.pi) < 1e-6
+             else (1 if turn_to_goal >= 0 else -1,))
+    for sign in signs:
         if time.monotonic() > deadline:
             return False
         free, _ = scene.swept(start, _Pose(start.x, start.y, start.yaw + sign * math.pi / 2.),
                               tolerance=tolerance)
-        quarters.append(free)
-    return not any(quarters)
+        quarter_turns.append(free)
+    # Un giro libre hacia el lado opuesto no garantiza espacio para encarar
+    # el destino. Permitir una liberación inicial corta cuando se bloquea el
+    # cuarto de vuelta hacia el camino evita encerrar una pose libre junto a
+    # una esquina; el resto del recorrido sigue siendo hacia delante.
+    return not any(quarter_turns)
+
+
+def _free_start_recovery(scene, start, goal, tolerance, deadline):
+    """Libera una esquina con giro y retroceso corto, sin admitir contacto.
+
+    Un inicio libre puede no tener espacio para girar hacia el destino. El
+    retroceso queda limitado al prefijo de recuperación; tras él se utiliza
+    el conector ordinario de avance. Se comprueban también los giros previos
+    al retroceso, que el antiguo conjunto de prefijos no podía representar.
+    """
+    if not scene.plane.obstacles or time.monotonic() >= deadline:
+        return None
+    body = scene.polygon(start)
+    low, high = np.min(body, axis=0), np.max(body, axis=0)
+    near_corner = any(float(np.linalg.norm(np.maximum(np.maximum(
+        np.min(obstacle, axis=0) - high, low - np.max(obstacle, axis=0)), 0.)))
+        < scene.radius for obstacle in scene.plane.obstacles)
+    if not near_corner:
+        return None
+    saved_deadline = scene.deadline
+    scene.deadline = deadline if saved_deadline is None else min(saved_deadline, deadline)
+    try:
+        options = []
+        for degrees in (0., -15., 15., -30., 30., -45., 45., -60., 60., -90., 90.):
+            angle = math.radians(degrees)
+            for length in (.020, .040, .060, MAX_REVERSE_ESCAPE_M):
+                travel = scene.radius * abs(angle) + length
+                if travel <= MAX_ESCAPE_TRAVEL_M + 1e-9:
+                    options.append((travel, abs(angle), length, angle))
+        options.sort()
+        turn_cache = {}
+        free_prefixes = []
+        for _, _, length, angle in options:
+            if time.monotonic() >= deadline:
+                return None
+            turned = _Pose(start.x, start.y, _wrap(start.yaw + angle))
+            if angle not in turn_cache:
+                turn_cache[angle] = scene.swept(start, turned, tolerance=tolerance)[0]
+            if not turn_cache[angle]:
+                continue
+            point = turned.point - length * np.array([math.cos(turned.yaw), math.sin(turned.yaw)])
+            backed = _Pose(float(point[0]), float(point[1]), turned.yaw)
+            if not scene.swept(turned, backed, tolerance=tolerance)[0]:
+                continue
+            prefix = ([(turned, 'turn', 1, True)] if abs(angle) > 1e-7 else [])
+            prefix.append((backed, 'escape', -1, True))
+            free_prefixes.append((backed, prefix))
+            tail = _connector(scene, backed, goal, tolerance, deadline)
+            if tail is not None:
+                return prefix + tail
+        # Liberar la orientación no implica que la línea directa al objetivo
+        # evite la barrera. Reutilizar los mismos prefijos ya comprobados con
+        # una cola ortogonal permite salir de la esquina y rodearla de frente.
+        # Cada propuesta conserva el límite global y un presupuesto corto.
+        for backed, prefix in free_prefixes:
+            if time.monotonic() >= deadline:
+                break
+            tail_deadline = min(deadline, time.monotonic() + .12)
+            tail = orthogonal_route(scene, backed, goal, tolerance, tail_deadline)
+            if tail is not None:
+                return prefix + tail
+        return None
+    finally:
+        scene.deadline = saved_deadline
 
 
 def _guided_routes(scene, start, goal, tolerance, escaping, initial_penetration, deadline):
@@ -679,6 +751,13 @@ def plan_pose_path(corners, calibration, start_px, goal_px, obstacles_px, *, sta
             if _actions_cost(scene, start, direct) < float(np.linalg.norm(goal - start.point)) * 1.12 + .03:
                 return _output(scene, start, direct, initial_penetration, started)
             incumbent = direct
+        if direct is None:
+            recovery_started = time.monotonic()
+            recovery_deadline = min(deadline - min(.3, seconds * .15),
+                                    recovery_started + min(1., max(0., deadline - recovery_started) * .6))
+            recovered = _free_start_recovery(scene, start, goal, tolerance, recovery_deadline)
+            if recovered is not None:
+                return _output(scene, start, recovered, initial_penetration, started)
     remaining_start = time.monotonic()
     guide_deadline = min(deadline - .3, remaining_start + (deadline - remaining_start) * .45)
     guided = _guided_routes(scene, start, goal, tolerance, escaping, initial_penetration, guide_deadline)

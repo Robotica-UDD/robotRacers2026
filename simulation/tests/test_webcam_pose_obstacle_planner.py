@@ -104,6 +104,29 @@ def test_rectangle_detour_is_fast_and_all_sweeps_are_valid():
     validate_steps(corners, cal, start, 0., obstacle, result)
 
 
+@pytest.mark.parametrize('jitter_m', [-.0002, 0., .0002])
+def test_free_corner_recovery_can_join_an_orthogonal_detour(jitter_m):
+    corners, cal, p = scene()
+    obstacles = [rectangle(p, -.18, .1, .18, .25)]
+    start = p(-.01475246 + jitter_m, -.01242430)
+    goal, heading = p(-.4, .3), math.radians(159.329)
+    assert check_pose(corners, cal, start, heading, obstacles)['clear']
+    began = time.monotonic()
+    result = plan_pose_path(corners, cal, start, goal, obstacles,
+                            start_heading_rad=heading)
+    assert time.monotonic() - began < 1.
+    assert any(step['kind'] == 'escape' and step['direction'] < 0
+               for step in result['steps'])
+    assert validate_steps(corners, cal, start, heading, obstacles, result) == pytest.approx(goal, abs=.01)
+    # No existía contacto inicial: tampoco puede introducirlo el prefijo de
+    # recuperación ni su unión con la ruta que rodea la barrera de frente.
+    previous = start
+    for step in result['steps']:
+        assert check_swept_motion(corners, cal, previous, heading, step['target_px'],
+                                  step['heading_rad'], obstacles)['clear']
+        previous, heading = step['target_px'], step['heading_rad']
+
+
 def test_marker_visibility_is_its_real_oriented_quad_not_an_84mm_circle():
     # El centro está a80mm del borde. El marcador va desplazado hacia dentro,
     # por lo que queda completo aunque el antiguo radio84mm lo rechazase.

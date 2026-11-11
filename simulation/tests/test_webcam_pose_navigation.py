@@ -16,7 +16,8 @@ import cv2
 import numpy as np
 import pytest
 
-from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, wait_for, goal_under_body
+from simulation.tests.test_webcam_point_navigation import (FakeCamera, FakeRobot, wait_for,
+                                                          goal_under_body, scale_path_clock)
 from simulation.webcam.navigation import Navigation, NavigationError
 from simulation.webcam.navigation_geometry import observe_robot
 from simulation.webcam.obstacle_planner import camera_visibility_margin_mm, point_clearances_mm
@@ -223,6 +224,7 @@ def test_full_wall_still_has_no_path_and_never_arms():
 
 @pytest.mark.parametrize("obstacle_y", [.100, .080])
 def test_signed_wheel_feedback_completes_detour_and_shallow_contact_escape(obstacle_y, monkeypatch):
+    scale_path_clock(monkeypatch)
     # La planta avanza 20 ms por ciclo de 1 ms: filtros y rampas usan el mismo factor 20.
     monkeypatch.setattr(StraightControl, "BEARING_FILTER_SECONDS", .12 / 20)
     monkeypatch.setattr(StraightControl, "DERIVATIVE_FILTER_SECONDS", .15 / 20)
@@ -275,7 +277,8 @@ def test_signed_wheel_feedback_completes_detour_and_shallow_contact_escape(obsta
         assert robot.trace[-1]["penetration_mm"] <= .002
 
 
-def test_destination_behind_robot_turns_around_then_drives_forward():
+def test_destination_behind_robot_turns_around_then_drives_forward(monkeypatch):
+    scale_path_clock(monkeypatch)
     far_obstacle = [[(.3, .2), (.4, .2), (.4, .3), (.3, .3)]]
     with synthetic_scene(start=(0.0, 0.0, 0.0), polygons=far_obstacle, plant=True) as (_, robot, nav):
         selected = select(nav, (-.2, 0.0))

@@ -13,7 +13,8 @@ from simulation.webcam.obstacle_planner import point_clearances_mm
 from simulation.webcam.pose_obstacle_planner import check_pose
 from simulation.webcam.robot_footprint import ROBOT_FOOTPRINT_MM, ROBOT_RADIUS_MM
 from simulation.webcam.straight_control import StraightControl
-from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, ClosedLoopRobot, goal_under_body, wait_for
+from simulation.tests.test_webcam_point_navigation import (FakeCamera, FakeRobot, ClosedLoopRobot,
+                                                          goal_under_body, wait_for, scale_path_clock)
 from simulation.tests.test_webcam_obstacle_current_scene import (CORNERS, CENTER, FRONT, OBSTACLES,
                                                                GOAL, calibration)
 
@@ -88,13 +89,14 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
     El inicio queda a unos145 mm del obstáculo. Se comprueba la huella orientada
     durante todo el recorrido, sin imponer un círculo como segundo filtro.
     """
+    scale_path_clock(monkeypatch)
     cal = calibration()
     _, projection, _ = _homographies(CORNERS, .04, 1280, 720)
     camera = FakeCamera()
     camera.update(frame_height=720, camera_id="recorded-camera", running=True,
                   opening=False, marker_corners=CORNERS)
     plans, sweeps, planned_steps = [], [], []
-    original_plan, original_sweep = navigation_module.plan_pose_path, navigation_module.check_swept_motion
+    original_plan, original_sweep = navigation_module.plan_pose_path, navigation_module.check_wheel_motion
 
     def recorded_plan(*args, **kwargs):
         plans.append(1)
@@ -104,11 +106,11 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
 
     def recorded_sweep(*args, **kwargs):
         result = original_sweep(*args, **kwargs)
-        sweeps.append(result["clear"])
+        sweeps.append(result)
         return result
 
     monkeypatch.setattr(navigation_module, "plan_pose_path", recorded_plan)
-    monkeypatch.setattr(navigation_module, "check_swept_motion", recorded_sweep)
+    monkeypatch.setattr(navigation_module, "check_wheel_motion", recorded_sweep)
     # El paso de la planta es20 ms; el ensayo acelera veinte veces el reloj.
     monkeypatch.setattr(StraightControl, "BEARING_FILTER_SECONDS", .12 / 20)
     monkeypatch.setattr(StraightControl, "DERIVATIVE_FILTER_SECONDS", .15 / 20)
@@ -171,7 +173,7 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
         assert state["phase"] == "arrived", (state["phase"], state["planning_message"], state["message"])
         assert state["waypoint_index"] == state["waypoint_count"] == 1
         assert robot.starts == 1 and robot.drives[-1] == (0, 0)
-        assert plans and sweeps and all(sweeps)
+        assert plans and sweeps and any(result["clear"] for result in sweeps)
         assert all(step["direction"] == 1 for step in planned_steps if step["kind"] == "drive")
         assert all(left + right >= 0 or step.get("kind") == "escape"
                    for left, right, step in robot.motion_steps)

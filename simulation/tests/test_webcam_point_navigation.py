@@ -17,6 +17,7 @@ from simulation.webcam.navigation import (Navigation, NavigationError, make_navi
                                          INT32_MAX, MAX_TURN_DEG_S, _velocity_mm_s)
 from simulation.webcam.detector import Detection
 from simulation.webcam.navigation_geometry import observe_robot
+from simulation.webcam.path_follower import PathFollower
 from simulation.webcam.robot_footprint import ROBOT_FOOTPRINT_MM
 
 
@@ -160,6 +161,14 @@ def calibrate(nav):
     return nav.calibrate([640., 480.], [740., 480.], 1280, 960, "usb-camera")
 
 
+def scale_path_clock(monkeypatch, factor=20.):
+    """Iguala los filtros al paso virtual20ms/ciclo real1ms de las plantas."""
+    monkeypatch.setattr(PathFollower, "ANGULAR_ACCELERATION_RAD_S2",
+                        PathFollower.ANGULAR_ACCELERATION_RAD_S2 * factor)
+    monkeypatch.setattr(PathFollower, "BEARING_FILTER_SECONDS",
+                        PathFollower.BEARING_FILTER_SECONDS / factor)
+
+
 def target(nav, x=900., y=480.):
     return nav.select_target(x, y, 1280, 960, "usb-camera")
 
@@ -230,17 +239,18 @@ def test_turn_sign_and_small_forward_correction_are_positive_left(rig):
     target(nav, 840, 280)
     nav.start()
     wait_for(lambda: bool(robot.drives))
-    wait_for(lambda: any(left < 0 and right > 0 for left, right in robot.drives))
-    left, right = next(command for command in robot.drives if command != (0, 0))
-    assert -53 <= left < 0 and 0 < right <= 53
+    wait_for(lambda: any(left + right > 0 and left < right for left, right in robot.drives))
+    left, right = next((left, right) for left, right in robot.drives
+                       if left + right > 0 and left < right)
+    assert left + right > 0 and -100 <= left < right <= 100
     # Una vez orientado, una pequeña desviación mantiene avance con corrección.
     until = time.monotonic() + .3
     while time.monotonic() < until:
         camera.pose(heading=math.radians(40))  # Destino a 45°, quedan 5° a izquierda.
         time.sleep(.02)  # El filtro consume fotogramas nuevos, no repite una imagen fija.
-    wait_for(lambda: any(l >= 0 and r > l for l, r in robot.drives))
+    wait_for(lambda: any(l + r > 0 and r > l for l, r in robot.drives))
     assert nav.state()["phase"] == "advancing"
-    # La histéresis no vuelve a giro con 15°; sí cuando supera 25°.
+    # Los errores moderados se corrigen con curvatura, manteniendo avance.
     camera.pose(heading=math.radians(30))
     time.sleep(.03)
     assert nav.state()["phase"] == "advancing"
@@ -248,7 +258,8 @@ def test_turn_sign_and_small_forward_correction_are_positive_left(rig):
     while time.monotonic() < until:
         camera.pose(heading=math.radians(10))
         time.sleep(.02)
-    wait_for(lambda: nav.state()["phase"] == "turning")
+    assert nav.state()["phase"] == "advancing"
+    assert sum(robot.drives[-1]) > 0 and robot.drives[-1][0] < robot.drives[-1][1]
 
 
 @pytest.mark.parametrize("bearing", [-1., -.05, 0., .05, 1.])
@@ -365,16 +376,19 @@ def test_other_session_pauses_without_stealing_control(rig):
     assert robot.stops == 0 and robot.starts == 1
 
 
-def test_no_progress_retries_without_cancelling_or_increasing_cap(rig):
+def test_no_progress_does_not_insert_a_pause_or_increase_the_cap(rig):
     _, robot, nav = rig
     nav.NO_PROGRESS_SECONDS = .05
     nav.RETRY_PAUSE_SECONDS = .03
     calibrate(nav)
     target(nav)
     nav.start()
-    wait_for(lambda: nav.state()["phase"] == "retrying")
-    assert nav.state()["active"] is True and robot.stops == 0
     wait_for(lambda: nav.state()["phase"] == "advancing")
+    count = len(robot.drives)
+    time.sleep(.15)
+    assert nav.state()["active"] is True and robot.stops == 0
+    assert nav.state()["phase"] == "advancing"
+    assert robot.drives[count:] and all(left > 0 and right > 0 for left, right in robot.drives[count:])
     assert all(abs(left) <= 100 and abs(right) <= 100 for left, right in robot.drives)
 
 
@@ -584,7 +598,8 @@ def test_routes_require_panel_header_and_bounded_exact_json(rig):
 @pytest.mark.parametrize("goal", [(.18, 0.), (0., .15), (0., -.15), (-.18, 0.),
                                   (-.14, .12), (-.14, -.12)])
 @pytest.mark.parametrize("profile", [(100, 32), (300, 100)])
-def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, profile):
+def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, profile, monkeypatch):
+    scale_path_clock(monkeypatch)
     camera = FakeCamera()
     robot = ClosedLoopRobot(camera)
     nav = Navigation(camera, robot)
@@ -616,6 +631,10 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, pr
         turn_limit = math.ceil(95 * math.radians(profile[1]))
         if abs(initial_bearing) <= 8:
             assert 0 < first_left <= profile[0] and 0 < first_right <= profile[0]
+        elif abs(initial_bearing) < 80:
+            assert first_left + first_right > 0
+            assert abs(first_left) <= profile[0] and abs(first_right) <= profile[0]
+            assert first_left < first_right if initial_bearing > 0 else first_right < first_left
         elif initial_bearing > 0:
             assert -turn_limit <= first_left < 0 and 0 < first_right <= turn_limit
         else:
@@ -738,7 +757,8 @@ def test_active_deadlines_freeze_during_vision_wait(rig):
     assert nav.state()["active"] is True and robot.stops == 0
     stable_vision(camera, nav)
     wait_for(lambda: nav.state()["phase"] == "advancing")
-    wait_for(lambda: nav.state()["phase"] == "retrying")
+    time.sleep(.12)
+    assert nav.state()["phase"] == "advancing"
     assert nav.state()["active"] is True and robot.stops == 0
 
 
@@ -1377,7 +1397,8 @@ def test_appending_ordered_waypoints_never_starts_and_legacy_target_replaces_rou
     assert robot.starts == robot.stops == 0 and robot.drives == []
 
 
-def test_ordered_route_closed_loop_passes_each_point_then_requires_explicit_restart():
+def test_ordered_route_closed_loop_passes_each_point_then_requires_explicit_restart(monkeypatch):
+    scale_path_clock(monkeypatch)
     camera = FakeCamera()
     robot = ClosedLoopRobot(camera)
     nav = Navigation(camera, robot)
@@ -1412,9 +1433,17 @@ def test_ordered_route_closed_loop_passes_each_point_then_requires_explicit_rest
         count = len(robot.drives)
         time.sleep(.03)
         assert robot.starts == 1 and len(robot.drives) == count
+        restarted_indices = []
+        original_arm = robot.start_navigation
+
+        def capture_restart(**kwargs):
+            restarted_indices.append(nav._waypoint_index)
+            return original_arm(**kwargs)
+
+        monkeypatch.setattr(robot, "start_navigation", capture_restart)
         nav.start()  # La ruta completada solo vuelve a empezar por acción explícita.
         wait_for(lambda: bool(nav.state()["active"]))
-        assert nav.state()["waypoint_index"] == 0 and robot.starts == 2
+        assert restarted_indices == [0] and robot.starts == 2
     finally:
         nav.close()
 
@@ -1675,21 +1704,21 @@ def test_brief_heading_outlier_does_not_trigger_an_in_place_turn(rig):
         camera.pose(heading=-math.radians(35))
         time.sleep(.025)
     assert nav.state()['phase'] == 'advancing'
-    assert all(left > 0 and right > 0 for left, right in robot.drives[count:])
+    assert all(left + right > 0 for left, right in robot.drives[count:])
     camera.pose()
     time.sleep(.03)
     assert nav.state()['phase'] == 'advancing'
 
 
-def test_sustained_heading_error_still_requests_a_proper_turn(rig):
+def test_sustained_moderate_heading_error_is_corrected_while_advancing(rig):
     camera, robot, nav = rig
     begin_observed_motion(camera, robot, nav)
     until = time.monotonic() + .34
     while time.monotonic() < until:
         camera.pose(heading=-math.radians(35))
         time.sleep(.02)
-    wait_for(lambda: nav.state()['phase'] == 'turning')
-    assert any(left < 0 < right for left, right in robot.drives)
+    assert nav.state()['phase'] == 'advancing'
+    assert sum(robot.drives[-1]) > 0 and robot.drives[-1][0] < robot.drives[-1][1]
 
 
 def test_steering_correction_does_not_modify_turn_commands():

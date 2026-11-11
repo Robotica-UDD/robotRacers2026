@@ -43,6 +43,7 @@ class PoseFollower:
     """
 
     ARRIVAL_M = .008
+    ESCAPE_ARRIVAL_M = .0015
     TURN_TOLERANCE_RAD = math.radians(3.)
     TURN_HOLD_SECONDS = .10
     MAX_DRIVE_ERROR_RAD = math.radians(18.)
@@ -124,7 +125,8 @@ class PoseFollower:
         distance, bearing = (_finite(observation.get(key)) for key in ("distance_m", "bearing_rad"))
         if distance is None or bearing is None or distance < 0:
             return self._invalid("No se pudo medir la posición actual.")
-        if distance <= self.ARRIVAL_M:
+        arrival = self.ESCAPE_ARRIVAL_M if kind == "escape" else self.ARRIVAL_M
+        if distance <= arrival:
             self._straight.reset()
             return self._result(done=True, phase="settling", message="Deteniendo el robot en la maniobra…")
         error = _wrap(bearing - (math.pi if direction < 0 else 0.))
@@ -132,7 +134,7 @@ class PoseFollower:
             self._straight.reset()
             return self._result(replan=True, message="Recalculando el recorrido desde la orientación actual…")
         limit = min(_INT32_MAX, forward, self.ESCAPE_SPEED_MM_S if kind == "escape" else _INT32_MAX)
-        braking = math.sqrt(2. * self.BRAKING_MM_S2 * max(0., distance * 1000. - self.ARRIVAL_M * 1000.))
+        braking = math.sqrt(2. * self.BRAKING_MM_S2 * max(0., distance * 1000. - arrival * 1000.))
         speed = min(limit, max(min(20., limit), braking))
         sequence = observation.get("sequence")
         if isinstance(sequence, bool) or not isinstance(sequence, Integral) or sequence < 0:

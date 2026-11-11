@@ -18,11 +18,12 @@ import time
 
 from fastapi import APIRouter, HTTPException, Request
 
-from .navigation_geometry import Calibration, calibrate_robot, observe_robot
-from .robot_footprint import ROBOT_RADIUS_MM, point_under_robot
+from .navigation_geometry import Calibration, calibrate_robot, observe_robot, _homographies, _project
+from .robot_footprint import ROBOT_RADIUS_MM, ROBOT_FOOTPRINT_MM, point_under_robot
 from .pose_follower import PoseFollower
+from .path_follower import PathFollower
 from .pose_obstacle_planner import (plan_pose_path, check_pose, check_swept_motion,
-                                    heading_error_rad, check_wheel_motion)
+                                    heading_error_rad, check_wheel_motion, _Scene)
 from .straight_control import StraightControl
 from .obstacle_planner import (plan_path, segment_is_clear, point_clearances_mm,
                                camera_visibility_margin_mm, validate_obstacles)
@@ -58,6 +59,7 @@ class Navigation:
     FRESH_SECONDS = .20
     VISION_GRACE_SECONDS = .15
     BRIEF_VISION_GAP_SECONDS = .10
+    OBSTACLE_VISION_GRACE_SECONDS = .10
     CONTINUATION_MAX_SECONDS = .40
     CONTINUATION_MAX_TRAVEL_MM = 60.
     CONTINUATION_MAX_SWEEP_DEG = 15.
@@ -1067,6 +1069,51 @@ class Navigation:
             outputs = [_velocity_mm_s(value) for value in self._ramp_values]
         self._drive(*outputs)
 
+    def _continuous_command(self, frame, calibration, path_px, follower, speeds, tick,
+                            stop_at_index=None, start_at_index=0):
+        """Anticipa la ruta y valida la rampa y el arco antes de mandar ruedas."""
+        corners = frame["marker_corners"]
+        forward, backward, reference = _homographies(corners, calibration.marker_size_m,
+                                                     calibration.width, calibration.height)
+        c, s = math.cos(calibration.front_angle_rad), math.sin(calibration.front_angle_rad)
+        local = []
+        for point in path_px:
+            delta = _project(forward, point, reference) - calibration.center_tag_m
+            local.append([float(c * delta[0] + s * delta[1]),
+                          float(-s * delta[0] + c * delta[1])])
+        with self._lock:
+            obstacles = [[list(p) for p in poly] for poly in self._obstacles]
+            values = tuple(self._ramp_values)
+            dt = (self.CONTROL_INTERVAL if self._ramp_stamp is None else
+                  max(0., min(.1, tick - self._ramp_stamp)))
+        scene = _Scene(corners, calibration, obstacles, ROBOT_FOOTPRINT_MM)
+        checked = {}
+
+        def preview(left, right):
+            return [self._ramp_value(value, target, dt, self.SPEED_RISE_MM_S2,
+                                    self.SPEED_FALL_MM_S2)
+                    for value, target in zip(values, (left, right))]
+
+        def clear(left, right, horizon):
+            key = (left, right, round(horizon, 3))
+            if key not in checked:
+                duration = min(.5, max(.12, horizon + frame["frame_age_ms"] / 1000.))
+                checked[key] = all(check_wheel_motion(corners, calibration, a, b,
+                    duration_s=duration, obstacles_px=obstacles, _scene=scene)["clear"]
+                    for a, b in (preview(left, right), (left, right)))
+            return checked[key]
+
+        result = follower.update(local, tick, speeds, is_clear=clear,
+                                 sequence=frame.get("sequence"), previous_wheels=values,
+                                 stop_at_index=stop_at_index, start_at_index=start_at_index)
+        result["applied"] = preview(result["left"], result["right"])
+        target = result.get("target_local_m")
+        if target is not None:
+            tag = [calibration.center_tag_m[0] + c * target[0] - s * target[1],
+                   calibration.center_tag_m[1] + s * target[0] + c * target[1]]
+            result["target_px"] = _project(backward, tag, [0., 0.]).tolist()
+        return result
+
     def _update_motion_estimate(self, frame, observation, now):
         """Velocidades visuales filtradas; no son lecturas de encoder."""
         if observation is None:
@@ -1237,6 +1284,12 @@ class Navigation:
         large_angle_since, large_angle_frames, large_angle_sequence = None, 0, None
         straight = StraightControl()
         pose_follower = PoseFollower()
+        path_follower = PathFollower()
+        continuous_key = None
+        continuous_path_px = []
+        continuous_goal_indices = {}
+        best_path_remaining = math.inf
+        verified_motion_until = 0.
         pose_finishing = False
         pose_replan_at = 0.
         with self._lock:
@@ -1401,7 +1454,10 @@ class Navigation:
                 if observation is None:
                     gap_window = hold_seconds if gap_window is None else min(gap_window, hold_seconds)
                     hold_seconds = gap_window
-                can_hold = (not avoiding and observation is None and not waiting_vision
+                if avoiding:
+                    hold_seconds = min(hold_seconds, self.OBSTACLE_VISION_GRACE_SECONDS)
+                can_hold = ((not avoiding or tick < verified_motion_until)
+                            and observation is None and not waiting_vision
                             and last_valid_capture is not None
                             and 0 <= tick - last_valid_capture < hold_seconds
                             and camera_capture is not None and 0 <= tick - camera_capture <= self.VISION_GRACE_SECONDS
@@ -1468,7 +1524,38 @@ class Navigation:
                 goal_observation = self._observe(frame, calibration, user_goal)
                 if goal_observation is not None and point_under_robot(goal_observation["target_local_m"]):
                     waypoint_covered = True
+                with self._lock:
+                    more_points = self._waypoint_index + 1 < len(self._waypoints)
+                continuous_mode = not avoiding or self._uses_oriented_footprint()
+                if waypoint_covered and more_points and continuous_mode:
+                    # Pasar un destino no es una orden de freno. La trayectoria
+                    # conserva sus esquinas y su progreso hasta el último punto.
+                    with self._lock:
+                        if self._cancel.is_set():
+                            break
+                        self._last_arrival_mm = round(goal_observation["distance_m"] * 1000., 1)
+                        self._waypoint_index += 1
+                        self._sync_target_locked()
+                        target = list(self._target)
+                        if avoiding:
+                            self._pose_legs = self._pose_legs[1:]
+                            self._planned_legs = self._planned_legs[1:]
+                            self._pose_steps = self._pose_legs[0] if self._pose_legs else []
+                            self._pose_step_index = 0
+                            if self._pose_steps and (self._pose_steps[0]["kind"] == "escape"
+                                                     or self._pose_steps[0].get("escaping", False)):
+                                # Una liberación futura se calcula desde donde
+                                # quedó el robot, no desde un centro ideal que
+                                # la llegada por cobertura no exige alcanzar.
+                                needs_plan, blocked_center = True, None
+                                continuous_key = None
+                    self._save_calibration()
+                    waypoint_covered = False
+                    waypoint_settle_started = None
+                    best_angle = math.inf
+                    no_progress_seconds = 0.
                 if waypoint_covered:
+                    verified_motion_until = 0.
                     self._set_phase("settling", "Punto alcanzado. Deteniendo el robot…")
                     try:
                         with self._lock:
@@ -1540,7 +1627,102 @@ class Navigation:
                         pose_finishing, pose_replan_at = False, 0.
                     self._cancel.wait(self.CONTROL_INTERVAL)
                     continue
+                with self._lock:
+                    step = (self._pose_steps[self._pose_step_index] if self._pose_steps
+                            and self._pose_step_index < len(self._pose_steps) else None)
+                    escape_pending = step is not None and (step["kind"] == "escape"
+                                                           or step.get("escaping", False))
+                if continuous_mode and not escape_pending and not needs_plan:
+                    with self._lock:
+                        plan_stamp = self._plan_attempted_at
+                        if continuous_key != plan_stamp or not continuous_path_px:
+                            continuous_path_px = [list(observation["center_px"])]
+                            continuous_goal_indices = {}
+                            if avoiding:
+                                remaining = [self._pose_steps[self._pose_step_index:], *self._pose_legs[1:]]
+                                for offset, leg in enumerate(remaining):
+                                    if any(p["kind"] == "escape" or p.get("escaping") for p in leg):
+                                        break
+                                    continuous_path_px.extend(list(p["target_px"]) for p in leg if p["kind"] == "drive")
+                                    goal_index = self._waypoint_index + offset
+                                    goal = list(self._waypoints[goal_index])
+                                    if math.dist(continuous_path_px[-1], goal) <= .01:
+                                        # La ida y vuelta por la proyección redondea
+                                        # el extremo; no crear un segmento microscópico.
+                                        continuous_path_px[-1] = goal
+                                    else:
+                                        continuous_path_px.append(goal)
+                                    continuous_goal_indices[goal_index] = len(continuous_path_px) - 1
+                            else:
+                                for goal_index in range(self._waypoint_index, len(self._waypoints)):
+                                    continuous_path_px.append(list(self._waypoints[goal_index]))
+                                    continuous_goal_indices[goal_index] = len(continuous_path_px) - 1
+                            continuous_key = plan_stamp
+                            path_follower.reset()
+                            best_path_remaining = math.inf
+                            best_angle = math.inf
+                            no_progress_seconds = 0.
+                        current_goal_index = continuous_goal_indices.get(self._waypoint_index)
+                        previous_goal_index = continuous_goal_indices.get(self._waypoint_index - 1, 0)
+                    if len(continuous_path_px) > 1:
+                        try:
+                            output = self._continuous_command(frame, calibration, continuous_path_px,
+                                                               path_follower, speeds, tick,
+                                                               stop_at_index=current_goal_index,
+                                                               start_at_index=previous_goal_index)
+                            if output["blocked"] or output["done"]:
+                                verified_motion_until = 0.
+                                self._zero_drive()
+                                needs_plan, blocked_center = avoiding, None
+                                continuous_key = None
+                                if not avoiding:
+                                    continuous_path_px = []
+                                self._set_phase("planning", "Buscando una trayectoria con espacio para continuar…")
+                            else:
+                                if output["remaining_m"] < best_path_remaining - .003:
+                                    best_path_remaining = output["remaining_m"]
+                                    no_progress_seconds = 0.
+                                lookahead = output.get("target_local_m")
+                                if lookahead is not None and output["phase"] == "turning":
+                                    if mode != "turning":
+                                        best_angle = math.inf
+                                    angle = abs(math.atan2(lookahead[1], lookahead[0]))
+                                    if angle < best_angle - math.radians(2.):
+                                        best_angle, no_progress_seconds = angle, 0.
+                                if no_progress_seconds >= self.NO_PROGRESS_SECONDS and avoiding:
+                                    self._zero_drive()
+                                    needs_plan, blocked_center = True, None
+                                    continuous_key = None
+                                    self._set_phase("planning", "Calculando otra maniobra desde la posición actual…")
+                                    self._cancel.wait(self.CONTROL_INTERVAL)
+                                    continue
+                                with self._lock:
+                                    self._ramp_values = output["applied"]
+                                    # Use the timestamp of the validated preview:
+                                    # geometry time belongs to the next control interval.
+                                    self._ramp_stamp = tick
+                                    self._steering_target = output.get("target_px", list(target))
+                                    index = max(1, output["path_index"])
+                                    self._planned_path = [list(observation["center_px"])] + continuous_path_px[index:]
+                                self._drive(*[_velocity_mm_s(v) for v in output["applied"]])
+                                verified_motion_until = tick + self.OBSTACLE_VISION_GRACE_SECONDS
+                                self._set_phase(output["phase"], output["message"])
+                                mode = output["phase"]
+                                was_controlling = True
+                        except (ValueError, TypeError, KeyError):
+                            self._zero_drive()
+                            needs_plan, blocked_center = avoiding, None
+                            continuous_key = None
+                        except Exception:
+                            self._abandon()
+                            session, session_seen = None, False
+                            waiting_vision = True
+                            needs_plan = avoiding
+                            continuous_key = None
+                        self._cancel.wait(max(0., self.CONTROL_INTERVAL - (time.monotonic() - tick)))
+                        continue
                 if avoiding and self._uses_oriented_footprint():
+                    verified_motion_until = 0.
                     if needs_plan or not self._pose_steps:
                         self._zero_drive()
                         if tick >= pose_replan_at:
@@ -1660,7 +1842,7 @@ class Navigation:
                     if pose_finishing and self._last_left == self._last_right == 0:
                         # Check the stopped pose as well: braking can move the robot
                         # beyond a short step or carry a turn past its endpoint.
-                        if (observation["distance_m"] > .020 or step["kind"] == "turn" and
+                        if (observation["distance_m"] > (.003 if step["kind"] == "escape" else .020) or step["kind"] == "turn" and
                                 abs(error) > math.radians(6)):
                             self._zero_drive()
                             needs_plan, pose_finishing = True, False
@@ -1717,7 +1899,7 @@ class Navigation:
                             self._cancel.wait(self.CONTROL_INTERVAL)
                             continue
                         with self._lock:
-                            self._ramp_values, self._ramp_stamp = applied, time.monotonic()
+                            self._ramp_values, self._ramp_stamp = applied, tick
                         self._drive(*[_velocity_mm_s(value) for value in applied])
                         was_controlling = True
                     except Exception:
