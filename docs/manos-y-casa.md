@@ -17,8 +17,10 @@ sobrescribir los controles de velocidad.
    alrededor de los obstáculos dibujados y el control por encoders existente.
 5. Si una mano permanece lejos durante **2 segundos**, el robot fija un
    **punto de interés** para acercarse. Se considera lejana a partir de
-   **250 mm** desde la huella del robot; si aumentas la distancia de reacción,
-   ese umbral será como mínimo la distancia de reacción más 100 mm.
+   **200 mm** desde la huella del robot; si aumentas la distancia de reacción,
+   ese umbral será como mínimo la distancia de reacción más 50 mm.
+   Una tolerancia de continuidad de 20 mm evita reiniciar el contador por ruido
+   alrededor del umbral; nunca desactiva la prioridad de una mano cercana.
 6. El punto de interés reserva **100 mm de separación mínima estimada entre
    la huella del robot y el recuadro de la mano**. El tamaño completo del robot
    y la tolerancia de llegada pueden dejar algo más de separación. Se comprueba
@@ -40,7 +42,19 @@ No repite el acercamiento al mismo gesto:
 la mano debe desaparecer durante un segundo antes de iniciar otra confirmación.
 No se intenta atraer al robot mientras está regresando a Casa. Si no hay un
 punto de acercamiento accesible, la vigilancia y la reacción de refugio siguen
-activas.
+activas. Un cálculo fallido no consume el gesto: vuelve a intentarlo tras
+2 segundos mientras la misma mano siga visible y conserva el motivo en el panel.
+El punto solo queda fijado después de aceptar el acercamiento.
+
+Una pérdida breve del AprilTag no borra la confirmación si MediaPipe sigue
+viendo la mano ya asociada. Se usa la geometría anterior solo para asociar su
+palma en la cámara fija; iniciar el viaje siempre exige una posición actual
+y válida del robot. La ausencia real de mano pausa el tiempo acumulado.
+
+El panel distingue confirmación, espera por visión o enlace y reintentos. Muestra
+la distancia estimada y el umbral de curiosidad: con la reacción de miedo inicial
+de 150 mm, una mano a 120 mm corresponde a Casa; la curiosidad comienza desde
+200 mm. El recuadro completo de la mano puede estar mucho más cerca que su palma.
 
 **Cancelar regreso**, **Cancelar acercamiento**, **Detener** y **D48** tienen prioridad. Desactivar o borrar
 Casa invalida también una orden pendiente durante el cálculo de ruta. Al
@@ -84,6 +98,12 @@ fotograma** mediante secuencia y tiempo de captura. No se comparan manos de
 una imagen antigua con una posición posterior del robot. Se rechazan detecciones
 atrasadas, cambios de cámara y dimensiones incompatibles.
 
+Antes de buscar maniobras de acercamiento, una cuadrícula de conectividad
+descarta candidatos al otro lado de un perímetro cerrado. Esta comprobación
+solo elimina regiones desconectadas; el punto elegido todavía necesita una
+ruta válida con la huella orientada. Así no se agota el tiempo probando primero
+puntos que están fuera del recinto del robot.
+
 Una detección no abre una sesión nueva en la ESP32: utiliza la sesión armada
 por el botón de vigilancia o la del recorrido en curso. D48 invalida esa sesión
 y la detección no puede volver a armarla automáticamente. Los latidos de la
@@ -116,9 +136,17 @@ Con separación solicitada de 100 mm, las pruebas de ruedas simuladas terminaron
 a 125–176 mm según la orientación y la tolerancia de llegada.
 
 Las pruebas sin hardware verifican la proximidad con el centro calibrado, la
-confirmación temporal, el destino fijo tras desaparecer la mano, la separación
-final, el desvío alrededor de un obstáculo, la prioridad de Casa y la restauración
+confirmación temporal, la alternancia de detecciones válidas y pérdidas del
+AprilTag, el reintento tras fallar sin retirar la mano, el destino fijo tras
+desaparecer la mano, la separación final, el desvío alrededor de un obstáculo, la prioridad de Casa y la restauración
 inactiva del recorrido anterior. También comprueban la prioridad de las paradas
 incluso durante planificación o armado. La reacción completa en el suelo debe
 probarse con el robot real; la separación depende de la calibración y de la altura
 de la mano respecto al plano usado.
+
+Revisión del 11 de noviembre de 2026: 1.065 pruebas aprobadas. El ensayo
+`test_recorded_six_wall_feedback_completes_all_four_destinations_without_deadlock`
+con máximas de 600 mm/s y 1.600°/s no completó los cuatro destinos en su plazo
+de 35 s. El mismo fallo se reprodujo aislado en la versión anterior `eb246cf`,
+con fuentes de navegación y control idénticas. Queda pendiente revisar ese
+escenario de velocidad alta; este ajuste no cambia el controlador de movimiento.
