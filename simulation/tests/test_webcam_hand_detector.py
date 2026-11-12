@@ -3,13 +3,14 @@ import io
 import json
 import threading
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from simulation.tools import download_hand_model
 from simulation.webcam.hand_detector import (
-    AsyncHandDetector, HandDetector, CONFIG_NAME, WEIGHTS_NAME,
+    AsyncHandDetector, HandDetector, MODEL_FILE,
 )
 
 
@@ -22,26 +23,28 @@ def wait_until(predicate, timeout=2.):
     assert predicate(), "El trabajador de inferencia no publicó su estado."
 
 
-class FakeNet:
-    def __init__(self, rows):
-        self.rows = np.asarray(rows, dtype=np.float32)
-        self.backend = self.target = self.blob = None
-
-    def setPreferableBackend(self, backend): self.backend = backend
-    def setPreferableTarget(self, target): self.target = target
-    def getUnconnectedOutLayersNames(self): return ('hands',)
-    def setInput(self, blob): self.blob = blob
-    def forward(self, names):
-        assert names == ('hands',)
-        return [self.rows]
+def landmarks(x1=.3, y1=.3, x2=.7, y2=.7, *, z=0.):
+    return [SimpleNamespace(x=x1 + (x2 - x1) * (i % 3) / 2.,
+                            y=y1 + (y2 - y1) * (i // 3) / 6., z=z) for i in range(21)]
 
 
-def detector_with_rows(tmp_path, rows):
-    (tmp_path / CONFIG_NAME).write_text('fake')
-    (tmp_path / WEIGHTS_NAME).write_bytes(b'fake')
-    net = FakeNet(rows)
-    detector = HandDetector(tmp_path, net_factory=lambda *_: net)
-    return detector, net
+class FakeBackend:
+    def __init__(self, hands):
+        self.hands, self.calls, self.closed = hands, [], False
+
+    def detect(self, rgb, timestamp_ms):
+        self.calls.append((rgb.copy(), timestamp_ms))
+        categories = [[SimpleNamespace(category_name='Left', score=.51)] for _ in self.hands]
+        return SimpleNamespace(hand_landmarks=self.hands, handedness=categories)
+
+    def close(self): self.closed = True
+
+
+def detector_with_hands(tmp_path, hands, *, clock=lambda: 1.):
+    (tmp_path / MODEL_FILE).write_bytes(b'fake')
+    backend = FakeBackend(hands)
+    detector = HandDetector(tmp_path, backend_factory=lambda *_args, **_kwargs: backend, clock=clock)
+    return detector, backend
 
 
 def test_missing_model_has_an_explicit_offline_installation_message(tmp_path):
@@ -50,41 +53,56 @@ def test_missing_model_has_an_explicit_offline_installation_message(tmp_path):
 
 
 @pytest.mark.parametrize('options', [dict(confidence=False), dict(confidence=1),
-                                    dict(nms_threshold=0), dict(input_size=300)])
+    dict(presence_confidence=0), dict(tracking_confidence=float('nan')), dict(num_hands=0)])
 def test_invalid_network_settings_are_rejected(tmp_path, options):
     with pytest.raises(ValueError):
         HandDetector(tmp_path, **options)
 
 
-def test_opencv_class_confidence_boxes_clipping_and_suppression(tmp_path):
-    detector, net = detector_with_rows(tmp_path, [
-        [.5, .5, .4, .4, .6, .9],
-        [.51, .5, .4, .4, .7, .8],  # misma mano, se suprime por solapamiento
-        [0., .1, .2, .4, .5, .75],  # recortar el borde de imagen
-        [.2, .2, .1, .1, .9, .4],   # confianza insuficiente
-        [.2, .2, -.1, .1, .9, .9],  # caja inválida
-        [float('nan'), .2, .1, .1, .9, .9],
-    ])
+def test_mediapipe_landmarks_rgb_timestamps_and_handedness_have_distinct_meanings(tmp_path):
+    detector, backend = detector_with_hands(tmp_path, [landmarks()])
+    image = np.full((100, 200, 3), [10, 20, 30], np.uint8)
+    hands = detector.process(image)
+    assert len(hands) == 1
+    assert hands[0]['bbox_px'] == pytest.approx([60., 30., 140., 70.])
+    assert len(hands[0]['landmarks_px']) == 21
+    assert hands[0]['confidence'] == 1  # aceptada por umbrales; no score izquierda/derecha
+    assert hands[0]['confidence_kind'] == 'model_threshold_acceptance'
+    assert hands[0]['handedness_score'] == .51 and hands[0]['handedness'] == 'Left'
+    assert hands[0]['palm_px'] == pytest.approx(np.mean(np.asarray(hands[0]['landmarks_px'])[[0,5,9,13,17]], axis=0))
+    assert backend.calls[0][0][0,0].tolist() == [30, 20, 10]
+    detector.process(image)
+    assert [call[1] for call in backend.calls] == [1000, 1001]
+    json.dumps(hands, allow_nan=False)
+    detector.close()
+    assert backend.closed
+
+
+@pytest.mark.parametrize('z', [-100., 0., 100.])
+def test_no_height_or_apparent_size_filter_discards_an_accepted_hand(tmp_path, z):
+    detector, _ = detector_with_hands(tmp_path, [landmarks(.49,.49,.51,.51,z=z),
+                                               landmarks(-.1,-.1,1.1,1.1,z=z)])
     hands = detector.process(np.zeros((100, 200, 3), np.uint8))
     assert len(hands) == 2
-    assert hands[0]['bbox_px'] == pytest.approx([60., 30., 140., 70.], abs=1e-4)
-    assert hands[0]['confidence'] == pytest.approx(.9)  # no multiplicar otra vez por objectness
-    assert hands[1]['bbox_px'] == pytest.approx([0., 0., 20., 30.], abs=1e-4)
-    assert net.blob.shape == (1, 3, 416, 416)
-    # La salida pública es serializable y no conserva escalares de numpy.
-    json.dumps(hands, allow_nan=False)
+    assert hands[1]['bbox_px'] == [0., 0., 200., 100.]
 
 
-def test_empty_network_output_returns_no_previous_boxes(tmp_path):
-    detector, _ = detector_with_rows(tmp_path, [[.5, .5, .1, .1, .9, .2]])
+def test_empty_landmarks_do_not_retain_the_previous_hand_and_invalid_points_are_ignored(tmp_path):
+    bad = landmarks(); bad[0].x = float('nan')
+    detector, backend = detector_with_hands(tmp_path, [bad, landmarks()[:20]])
+    assert detector.process(np.zeros((100, 200, 3), np.uint8)) == []
+    backend.hands = [landmarks()]
+    assert detector.process(np.zeros((100, 200, 3), np.uint8))
+    backend.hands = []
     assert detector.process(np.zeros((100, 200, 3), np.uint8)) == []
 
 
 @pytest.mark.parametrize('image', [None, np.zeros((10, 10)), np.zeros((10, 10, 4), np.uint8)])
-def test_invalid_frames_are_not_submitted_to_the_network(tmp_path, image):
-    detector, _ = detector_with_rows(tmp_path, [])
+def test_invalid_frames_are_not_submitted_to_the_model(tmp_path, image):
+    detector, backend = detector_with_hands(tmp_path, [])
     with pytest.raises(ValueError):
         detector.process(image)
+    assert not backend.calls
 
 
 class RecordingDetector:
@@ -199,5 +217,17 @@ def test_installer_reuses_verified_assets_without_network_access(tmp_path, monke
     def no_network(*_args, **_kwargs):
         raise AssertionError('La verificación offline no debe acceder a la red.')
     manifest = download_hand_model.install(tmp_path, opener=no_network, check_only=True)
-    assert manifest['model'] == 'YOLOv4-tiny Cross-Hands'
+    assert manifest['model'] == 'MediaPipe Hand Landmarker'
     assert not (tmp_path / 'provenance.json').exists()
+
+
+def test_async_closes_the_native_landmarker_on_shutdown():
+    class Detector:
+        def __init__(self): self.closed = False
+        def process(self, image): return []
+        def close(self): self.closed = True
+    native = Detector()
+    worker = AsyncHandDetector(lambda: native)
+    wait_until(lambda: worker.state()['ready'])
+    worker.close()
+    assert native.closed

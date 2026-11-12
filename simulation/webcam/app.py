@@ -322,7 +322,7 @@ class CaptureSession:
                             self._hand_frames.pop(next(iter(self._hand_frames)))
                 if hand_detector is not None:
                     # Copiar el último fotograma al trabajador; nunca inferir
-                    # YOLO en este hilo ni formar una cola de imágenes.
+                    # MediaPipe en este hilo ni formar una cola de imágenes.
                     hand_detector.submit(pixels, hand_sequence, received)
         except Exception as exc:
             LOGGER.warning("Captura detenida: %s", exc)

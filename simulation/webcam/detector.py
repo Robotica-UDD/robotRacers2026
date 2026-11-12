@@ -87,6 +87,15 @@ def annotate_frame(frame: np.ndarray, detection: Detection, robot_pose: dict | N
         cv2.rectangle(result, tuple(first), tuple(last), (75, 165, 255), 2, cv2.LINE_AA)
         cv2.putText(result, "MANO", (int(first[0]), max(14, int(first[1]) - 5)),
                     cv2.FONT_HERSHEY_SIMPLEX, .42, (75, 165, 255), 1, cv2.LINE_AA)
+        landmarks = np.asarray(hand.get("landmarks_px", []), dtype=float)
+        if landmarks.shape == (21, 2) and np.all(np.isfinite(landmarks)):
+            points = np.rint(landmarks).astype(int)
+            for chain in ((0, 1, 2, 3, 4), (0, 5, 6, 7, 8), (5, 9, 10, 11, 12),
+                          (9, 13, 14, 15, 16), (13, 17, 18, 19, 20), (0, 17)):
+                cv2.polylines(result, [points[list(chain)].astype(np.int32)], False,
+                              (115, 225, 180), 1, cv2.LINE_AA)
+            for point in points:
+                cv2.circle(result, tuple(point), 2, (75, 165, 255), -1, cv2.LINE_AA)
     if navigation_overlay:
         color = (205, 229, 108)
         path = navigation_overlay.get("path_px", [])

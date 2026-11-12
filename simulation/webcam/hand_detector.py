@@ -1,8 +1,7 @@
-"""Manos con YOLOv4-tiny Cross-Hands, usando OpenCV y archivos locales.
+"""MediaPipe Hand Landmarker local, separado de captura y control de ruedas.
 
-La inferencia vive fuera del hilo de cámara y del controlador del robot. No
-descarga recursos ni envía imágenes a otros servicios. El modelo se instala con
-``python -m simulation.tools.download_hand_model``.
+El modo VIDEO conserva seguimiento entre imágenes. No se filtra por altura,
+profundidad ni tamaño aparente; solo por los umbrales propios del modelo.
 """
 from __future__ import annotations
 
@@ -18,10 +17,9 @@ import cv2
 import numpy as np
 
 
-MODEL_NAME = "YOLOv4-tiny Cross-Hands"
+MODEL_NAME = "MediaPipe Hand Landmarker"
 MODEL_DIR = Path(__file__).resolve().parents[1] / ".runtime" / "hand-models"
-CONFIG_NAME = "cross-hands-yolov4-tiny.cfg"
-WEIGHTS_NAME = "cross-hands-yolov4-tiny.weights"
+MODEL_FILE = "hand_landmarker.task"
 
 
 def _frame(frame):
@@ -32,66 +30,86 @@ def _frame(frame):
     return frame
 
 
-class HandDetector:
-    """Detector de una sola clase (mano), con cajas en píxeles de la imagen.
+class _MediaPipeBackend:
+    def __init__(self, model, *, num_hands, confidence, presence_confidence, tracking_confidence):
+        import mediapipe as mp
+        self.mp = mp
+        options = mp.tasks.vision.HandLandmarkerOptions(
+            base_options=mp.tasks.BaseOptions(model_asset_path=str(model),
+                                              delegate=mp.tasks.BaseOptions.Delegate.CPU),
+            running_mode=mp.tasks.vision.RunningMode.VIDEO,
+            num_hands=num_hands, min_hand_detection_confidence=confidence,
+            min_hand_presence_confidence=presence_confidence,
+            min_tracking_confidence=tracking_confidence)
+        self.landmarker = mp.tasks.vision.HandLandmarker.create_from_options(options)
 
-    La salida Region de OpenCV ya entrega la confianza conjunta por clase;
-    como en la implementación del autor, se usa ``row[5]`` directamente.
-    https://github.com/cansik/yolo-hand-detection/blob/master/yolo.py
+    def detect(self, rgb, timestamp_ms):
+        image = self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb)
+        return self.landmarker.detect_for_video(image, timestamp_ms)
+
+    def close(self):
+        self.landmarker.close()
+
+
+class HandDetector:
+    """Cajas y 21 puntos de manos con seguimiento temporal de MediaPipe.
+
+    MediaPipe no publica el score de presencia por mano; los resultados ya
+    aprobaron min_hand_detection/presence_confidence. Por ello confidence=1
+    significa aceptación del modelo, nunca una probabilidad calibrada. La
+    confianza de izquierda/derecha se mantiene por separado.
     """
 
-    def __init__(self, model_dir=None, *, input_size=416, confidence=.5,
-                 nms_threshold=.3, net_factory=None):
-        if type(input_size) is not int or input_size not in (256, 320, 416):
-            raise ValueError("El tamaño de entrada debe ser 256, 320 o 416.")
-        for value in (confidence, nms_threshold):
-            if isinstance(value, bool) or not isinstance(value, Real) or not 0 < value < 1:
+    def __init__(self, model_dir=None, *, confidence=.35, presence_confidence=.35,
+                 tracking_confidence=.35, num_hands=4, backend_factory=None,
+                 clock=time.monotonic):
+        for value in (confidence, presence_confidence, tracking_confidence):
+            if (isinstance(value, bool) or not isinstance(value, Real) or
+                    not math.isfinite(value) or not 0 < value < 1):
                 raise ValueError("Los umbrales de detección deben estar entre 0 y 1.")
+        if type(num_hands) is not int or not 1 <= num_hands <= 8:
+            raise ValueError("El número de manos debe estar entre 1 y 8.")
         directory = MODEL_DIR if model_dir is None else Path(model_dir)
-        config, weights = directory / CONFIG_NAME, directory / WEIGHTS_NAME
-        if not config.is_file() or not weights.is_file():
-            raise FileNotFoundError("Falta el modelo de manos. Ejecuta python -m "
+        model = directory / MODEL_FILE
+        if not model.is_file():
+            raise FileNotFoundError("Falta el modelo MediaPipe de manos. Ejecuta python -m "
                                     "simulation.tools.download_hand_model.")
-        self.input_size, self.confidence, self.nms_threshold = input_size, float(confidence), float(nms_threshold)
-        factory = net_factory or cv2.dnn.readNetFromDarknet
-        self.net = factory(str(config), str(weights))
-        self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-        self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
-        self.output_names = self.net.getUnconnectedOutLayersNames()
+        factory = backend_factory or _MediaPipeBackend
+        self._backend = factory(model, num_hands=num_hands, confidence=float(confidence),
+            presence_confidence=float(presence_confidence), tracking_confidence=float(tracking_confidence))
+        self._clock, self._timestamp_ms = clock, -1
 
     def process(self, frame):
         image = _frame(frame)
         height, width = image.shape[:2]
-        blob = cv2.dnn.blobFromImage(image, 1 / 255.,
-                                    (self.input_size, self.input_size), swapRB=True, crop=False)
-        self.net.setInput(blob)
-        outputs = self.net.forward(self.output_names)
-        boxes, confidences = [], []
-        for output in outputs:
-            for row in output:
-                if len(row) < 6 or not np.all(np.isfinite(row[:6])):
-                    continue
-                score = float(row[5])
-                if not self.confidence <= score <= 1.:
-                    continue
-                cx, cy, box_width, box_height = row[:4] * [width, height, width, height]
-                if box_width <= 0 or box_height <= 0:
-                    continue
-                x1, y1 = max(0., float(cx - box_width / 2)), max(0., float(cy - box_height / 2))
-                x2, y2 = min(float(width), float(cx + box_width / 2)), min(float(height), float(cy + box_height / 2))
-                if x2 <= x1 or y2 <= y1:
-                    continue
-                boxes.append([x1, y1, x2 - x1, y2 - y1])
-                confidences.append(score)
-        if not boxes:
-            return []
-        kept = cv2.dnn.NMSBoxes(boxes, confidences, self.confidence, self.nms_threshold)
+        # VIDEO exige tiempos estrictamente crecientes, incluso al procesar
+        # dos imágenes en el mismo milisegundo en una prueba o tras reconexión.
+        stamp = max(self._timestamp_ms + 1, int(self._clock() * 1000.))
+        self._timestamp_ms = stamp
+        result = self._backend.detect(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), stamp)
         hands = []
-        for index in np.asarray(kept).reshape(-1):
-            x, y, box_width, box_height = boxes[int(index)]
-            hands.append({"bbox_px": [x, y, x + box_width, y + box_height],
-                          "confidence": confidences[int(index)]})
-        return sorted(hands, key=lambda hand: hand["confidence"], reverse=True)
+        for index, landmarks in enumerate(result.hand_landmarks):
+            if len(landmarks) != 21:
+                continue
+            points = np.asarray([(p.x * width, p.y * height) for p in landmarks], dtype=float)
+            if not np.all(np.isfinite(points)):
+                continue
+            low = np.maximum([0., 0.], np.min(points, axis=0))
+            high = np.minimum([float(width), float(height)], np.max(points, axis=0))
+            if np.any(high <= low):
+                continue
+            category = (result.handedness[index][0] if index < len(result.handedness)
+                        and result.handedness[index] else None)
+            palm = np.mean(points[[0, 5, 9, 13, 17]], axis=0)
+            hands.append({"bbox_px": [*low.tolist(), *high.tolist()],
+                "confidence": 1., "confidence_kind": "model_threshold_acceptance",
+                "landmarks_px": points.tolist(), "palm_px": palm.tolist(),
+                "handedness": getattr(category, "category_name", None),
+                "handedness_score": float(category.score) if category is not None else None})
+        return hands
+
+    def close(self):
+        self._backend.close()
 
 
 class AsyncHandDetector:
@@ -101,7 +119,7 @@ class AsyncHandDetector:
     se refiere a la imagen original, no al momento en que terminó la red.
     """
 
-    def __init__(self, detector_factory: Callable | None = None, *, max_fps=10.,
+    def __init__(self, detector_factory: Callable | None = None, *, max_fps=20.,
                  clock=time.monotonic):
         if (isinstance(max_fps, bool) or not isinstance(max_fps, Real) or
                 not math.isfinite(max_fps) or not 0 < max_fps <= 60):
@@ -116,7 +134,7 @@ class AsyncHandDetector:
                        "hands": [], "sequence": None, "captured_at": None,
                        "processing_ms": None, "frame_width": None, "frame_height": None,
                        "error": None}
-        self._worker = threading.Thread(target=self._run, name="yolo-manos", daemon=True)
+        self._worker = threading.Thread(target=self._run, name="mediapipe-manos", daemon=True)
         self._worker.start()
 
     def submit(self, frame, sequence, captured_at):
@@ -164,6 +182,14 @@ class AsyncHandDetector:
         except Exception:
             self._error("error", "No se pudo cargar el modelo local de manos.")
             return
+        try:
+            self._run_detector(detector)
+        finally:
+            close = getattr(detector, "close", None)
+            if close is not None:
+                close()
+
+    def _run_detector(self, detector):
         with self._condition:
             if self._closed:
                 return

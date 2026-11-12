@@ -1,6 +1,6 @@
 """Instala el modelo de manos local con procedencia y SHA-256 fijados.
 
-Descarga solo pesos, configuración y licencia desde el repositorio del autor.
+Descarga el paquete oficial MediaPipe y su licencia; no instala ejecutables.
 La cámara nunca ejecuta este instalador ni hace descargas durante la inferencia.
 """
 from __future__ import annotations
@@ -14,16 +14,14 @@ import urllib.request
 
 
 MODEL_DIR = Path(__file__).resolve().parents[1] / ".runtime" / "hand-models"
-SOURCE = "https://github.com/cansik/yolo-hand-detection"
-COMMIT = "42d038bbc5deed14b11b27a871ca4385b4d880a2"
-RELEASE = SOURCE + "/releases/download/pretrained/"
+SOURCE = "https://github.com/google-ai-edge/mediapipe"
+COMMIT = "1b9800ed7baddd397b888eaaaf0c841fe0358241"
 ASSETS = (
-    {"name": "cross-hands-yolov4-tiny.cfg", "url": RELEASE + "cross-hands-yolov4-tiny.cfg",
-     "sha256": "0effeeb1b14a67ea36fa8f4dcc6c3f9e0988401cbedcc4f543a09fb6697a8dd8"},
-    {"name": "cross-hands-yolov4-tiny.weights", "url": RELEASE + "cross-hands-yolov4-tiny.weights",
-     "sha256": "bcb27a5772a17d55f6c27b353639a5f5ed0f513ea1763d07ef818e5f786d7b06"},
-    {"name": "LICENSE", "url": f"https://raw.githubusercontent.com/cansik/yolo-hand-detection/{COMMIT}/LICENSE",
-     "sha256": "0b727f90bb0da0fdde54901c0cab678a0fba03d5b751d8574dfb425315a3198b"},
+    {"name": "hand_landmarker.task",
+     "url": "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+     "sha256": "fbc2a30080c3c557093b5ddfc334698132eb341044ccee322ccf8bcf3607cde1"},
+    {"name": "MediaPipe-LICENSE", "url": f"https://raw.githubusercontent.com/google-ai-edge/mediapipe/{COMMIT}/LICENSE",
+     "sha256": "8707eef0533987efc5b155d64761eeb6e20793f50b9bd1a68dad1cf4719d0ed8"},
 )
 
 
@@ -63,11 +61,12 @@ def install(model_dir=None, *, opener=urllib.request.urlopen, check_only=False):
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-    manifest = {"model": "YOLOv4-tiny Cross-Hands", "author": "Florian Bruggisser (cansik)",
+    manifest = {"model": "MediaPipe Hand Landmarker", "author": "Google MediaPipe",
                 "source": SOURCE, "source_commit": COMMIT, "assets": list(ASSETS),
-                "license": "MIT (repositorio del autor); EgoHands CC BY 4.0.",
-                "datasets": "CMU Hand DB, EgoHands e imágenes anotadas por el autor; consultar sus condiciones.",
-                "runtime": "OpenCV DNN CPU; archivos locales, sin descarga ni transmisión de imágenes."}
+                "model_version": "Hand Landmarker full float16 version1", "package": "mediapipe==0.10.31",
+                "license": "Apache-2.0; consultar la licencia y ficha del modelo oficial.",
+                "model_card": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Hand%20Tracking%20%28Lite_Full%29%20with%20Fairness%20Oct%202021.pdf",
+                "runtime": "MediaPipe Tasks VIDEO CPU; imágenes procesadas localmente, sin transmisión."}
     if not check_only:
         (directory / "provenance.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     return manifest

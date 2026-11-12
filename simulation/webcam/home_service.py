@@ -1,4 +1,4 @@
-"""Orquestación local de YOLO y regreso a Casa; sin inferencia en la captura."""
+"""Orquestación local de MediaPipe y regreso a Casa; sin inferencia en la captura."""
 from __future__ import annotations
 
 import asyncio
@@ -72,7 +72,7 @@ class HomeService:
             if enabled is not None:
                 if enabled:
                     if self.detector is None or self.detector.state().get("ready") is not True:
-                        raise HomeBehaviorError("Espera a que el detector YOLO esté listo.")
+                        raise HomeBehaviorError("Espera a que el detector MediaPipe esté listo.")
                     self.behavior.set_enabled(True)
                     try:
                         self.navigation.arm_home_watch(authorize=lambda: self.behavior.state()["enabled"])
