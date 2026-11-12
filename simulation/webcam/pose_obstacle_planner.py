@@ -17,7 +17,8 @@ import numpy as np
 
 from .navigation_geometry import Calibration, observe_robot, _project
 from .obstacle_planner import (_PlaneMap, _finite, _inside_polygon,
-                                _segment_distance, _grid, _grid_anchor, _astar, _simplify)
+                                _segment_distance, _point_segment_distance, _segments_intersect,
+                                _grid, _grid_anchor, _astar, _simplify)
 from .robot_footprint import ROBOT_FOOTPRINT_MM
 from .orthogonal_planner import orthogonal_route
 
@@ -228,6 +229,15 @@ class _Scene:
             t = i / intervals
             pose = _Pose(start.x + (end.x - start.x) * t,
                          start.y + (end.y - start.y) * t, start.yaw + angle * t)
+            # Liberar un contacto previo no da permiso para atravesar una
+            # barrera. Conservar también esta restricción sobre la trayectoria
+            # del centro, independientemente de la profundidad de la huella.
+            # Si el centro ya estaba exactamente en ella, se permite retirarlo.
+            if np.linalg.norm(pose.point - previous.point) > _DISTANCE_EPS_M:
+                for first, last in self.plane.line_segments:
+                    if (_point_segment_distance(previous.point, first, last) > _DISTANCE_EPS_M
+                            and _segments_intersect(previous.point, pose.point, first, last)):
+                        return False, maximum
             depths, marker, center = self.evaluate(pose)
             maximum = max(maximum, float(np.max(depths, initial=0.)))
             if not center or self.require_marker and not marker:

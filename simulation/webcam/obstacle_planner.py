@@ -20,7 +20,11 @@ import numpy as np
 from .navigation_geometry import Calibration, _homographies, _project
 from .robot_footprint import ROBOT_RADIUS_MM
 
-MAX_OBSTACLES = 32
+MAX_OBSTACLES = 512
+MAX_SOLID_OBSTACLES = 32
+# Espesor geométrico de una línea dibujada, independiente del margen del
+# usuario. La extensión de medio espesor en cada extremo cierra las juntas.
+LINE_BARRIER_WIDTH_M = .001
 MAX_GRID_NODES = 300_000
 MIN_GRID_M = .005
 MAX_PLANNING_SECONDS = 3.
@@ -94,19 +98,31 @@ def _inside_polygon(point, polygon):
 
 
 def validate_obstacles(polygons_px, width, height):
-    """Normaliza hasta 32 cuadriláteros simples, incluidos los cóncavos."""
+    """Normaliza paredes de dos puntos y los cuadriláteros sólidos anteriores.
+
+    Un perímetro se conserva como segmentos independientes: su interior sigue
+    libre. Hasta 512 entradas totales; como máximo 32 cuadriláteros sólidos.
+    """
     if (type(width) is not int or type(height) is not int
             or not 1 <= width <= 8192 or not 1 <= height <= 8192):
         raise ValueError("La resolución de la cámara no es válida.")
     if not isinstance(polygons_px, (list, tuple)) or len(polygons_px) > MAX_OBSTACLES:
-        raise ValueError("Puedes dibujar hasta 32 obstáculos de cuatro lados.")
-    result = []
+        raise ValueError("Puedes dibujar hasta 512 tramos de pared.")
+    result, solids = [], 0
     for value in polygons_px:
         if (not isinstance(value, (list, tuple, np.ndarray))
-                or isinstance(value, np.ndarray) and value.ndim != 2 or len(value) != 4):
-            raise ValueError("Cada obstáculo debe tener exactamente cuatro vértices.")
+                or isinstance(value, np.ndarray) and value.ndim != 2 or len(value) not in (2, 4)):
+            raise ValueError("Cada pared necesita dos extremos o cada obstáculo sólido cuatro vértices.")
         points = [_point(point, width, height, "El vértice") for point in value]
         polygon = np.asarray(points, dtype=float)
+        if len(points) == 2:
+            if float(np.linalg.norm(polygon[1] - polygon[0])) <= _EPS:
+                raise ValueError("Los extremos de la pared no pueden coincidir.")
+            result.append(points)
+            continue
+        solids += 1
+        if solids > MAX_SOLID_OBSTACLES:
+            raise ValueError("Puedes dibujar hasta 32 obstáculos sólidos de cuatro lados.")
         edges = np.roll(polygon, -1, axis=0) - polygon
         area = .5 * abs(float(np.sum(polygon[:, 0] * np.roll(polygon[:, 1], -1)
                                     - polygon[:, 1] * np.roll(polygon[:, 0], -1))))
@@ -130,6 +146,9 @@ class _PlaneMap:
     obstacles: list[np.ndarray]
     width: int
     height: int
+    # Líneas originales, antes de añadir el espesor de representación. Permiten
+    # comprobar el cambio de lado del centro también en escapes por contacto.
+    line_segments: tuple[np.ndarray, ...] = ()
 
     @classmethod
     def build(cls, corners, calibration, obstacles):
@@ -173,9 +192,23 @@ class _PlaneMap:
         turns = [_cross(frame[i - 1], frame[i], frame[(i + 1) % 4]) for i in range(4)]
         if not (all(value > _EPS for value in turns) or all(value < -_EPS for value in turns)):
             raise ValueError("El plano visible no permite un recorrido seguro. Ajusta la cámara cenital.")
-        return cls(forward, backward, reference, frame,
-                   [np.array([project(point) for point in polygon]) for polygon in values],
-                   calibration.width, calibration.height)
+        projected, line_segments = [], []
+        for value in values:
+            polygon = np.array([project(point) for point in value])
+            if len(polygon) == 2:
+                line_segments.append(polygon.copy())
+                delta = polygon[1] - polygon[0]
+                length = float(np.linalg.norm(delta))
+                if length <= _EPS:
+                    raise ValueError("La pared tiene longitud nula en el plano proyectado.")
+                along = delta / length * (LINE_BARRIER_WIDTH_M / 2.)
+                normal = np.array([-along[1], along[0]])
+                first, last = polygon[0] - along, polygon[1] + along
+                polygon = np.array([first + normal, last + normal,
+                                    last - normal, first - normal])
+            projected.append(polygon)
+        return cls(forward, backward, reference, frame, projected,
+                   calibration.width, calibration.height, tuple(line_segments))
 
     def world(self, point):
         value = _point(point, self.width, self.height, "El punto")
@@ -314,18 +347,31 @@ def _grid(plane, clearance, deadline, camera_clearance=None):
     pad = step / math.sqrt(2.) + 1e-7
     for polygon in plane.obstacles:
         _check_deadline(deadline)
-        inside = np.zeros_like(obstacle_mask)
-        squared_distance = np.full_like(x, math.inf)
+        # Centenares de tramos finos solo afectan una fracción del mapa.
+        # Recortar a su caja métrica ampliada conserva la misma geometría y
+        # evita recorrer toda la cuadrícula por cada arista del perímetro.
+        low = np.floor((np.min(polygon, axis=0) - clearance - pad - minimum) / step).astype(int)
+        high = np.ceil((np.max(polygon, axis=0) + clearance + pad - minimum) / step).astype(int) + 1
+        c0, r0 = max(0, int(low[0])), max(0, int(low[1]))
+        c1, r1 = min(columns, int(high[0])), min(rows, int(high[1]))
+        if c0 >= c1 or r0 >= r1:
+            continue
+        region = np.s_[r0:r1, c0:c1]
+        local_x, local_y = x[region], y[region]
+        inside = np.zeros(local_x.shape, dtype=bool)
+        squared_distance = np.full_like(local_x, math.inf)
         for i, a in enumerate(polygon):
             b = polygon[(i + 1) % len(polygon)]
             dx, dy = b - a
             denominator = dx * dx + dy * dy
-            t = np.clip(((x - a[0]) * dx + (y - a[1]) * dy) / denominator, 0., 1.)
-            squared_distance = np.minimum(squared_distance, (x - a[0] - t * dx) ** 2 + (y - a[1] - t * dy) ** 2)
+            t = np.clip(((local_x - a[0]) * dx + (local_y - a[1]) * dy) / denominator, 0., 1.)
+            squared_distance = np.minimum(squared_distance,
+                (local_x - a[0] - t * dx) ** 2 + (local_y - a[1] - t * dy) ** 2)
             if abs(dy) > _EPS:
-                inside ^= ((a[1] > y) != (b[1] > y)) & (x < (b[0] - a[0]) * (y - a[1]) / dy + a[0])
-        obstacle_mask |= inside | (squared_distance <= (clearance + _EPS) ** 2)
-        padded_obstacles |= inside | (squared_distance <= (clearance + pad) ** 2)
+                inside ^= ((a[1] > local_y) != (b[1] > local_y)) & (local_x <
+                    (b[0] - a[0]) * (local_y - a[1]) / dy + a[0])
+        obstacle_mask[region] |= inside | (squared_distance <= (clearance + _EPS) ** 2)
+        padded_obstacles[region] |= inside | (squared_distance <= (clearance + pad) ** 2)
     blocked = padded_obstacles.copy()
     area = sum(plane.frame[i, 0] * plane.frame[(i + 1) % 4, 1]
                - plane.frame[i, 1] * plane.frame[(i + 1) % 4, 0] for i in range(4))

@@ -2418,13 +2418,13 @@ class Navigation:
 def make_navigation_router(navigation: Navigation) -> APIRouter:
     router = APIRouter(prefix="/api/navigation")
 
-    async def action_body(request: Request, fields: set[str] | tuple[set[str], ...]) -> dict:
+    async def action_body(request: Request, fields: set[str] | tuple[set[str], ...], *, max_bytes=8192) -> dict:
         if request.headers.get("X-Requested-With") != "XMLHttpRequest":
             raise HTTPException(403, "La solicitud debe realizarse desde el panel local.")
         data = bytearray()
         async for part in request.stream():
             data.extend(part)
-            if len(data) > 8192:
+            if len(data) > max_bytes:
                 raise HTTPException(413, "La solicitud supera el tamaño permitido.")
         try:
             def reject_constant(_):
@@ -2479,7 +2479,8 @@ def make_navigation_router(navigation: Navigation) -> APIRouter:
 
     @router.post("/obstacles")
     async def obstacles(request: Request):
-        data = await action_body(request, {"polygons_px", "frame_width", "frame_height", "camera_id", "expected_route_revision"})
+        data = await action_body(request, {"polygons_px", "frame_width", "frame_height", "camera_id", "expected_route_revision"},
+                                 max_bytes=65536)
         return await asyncio.to_thread(perform, navigation.set_obstacles, data["polygons_px"],
                                        data["frame_width"], data["frame_height"], data["camera_id"],
                                        data["expected_route_revision"])
