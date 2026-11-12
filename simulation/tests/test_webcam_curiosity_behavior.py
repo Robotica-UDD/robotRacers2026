@@ -17,7 +17,7 @@ class CuriousNavigation(Navigation):
     def __init__(self, camera):
         super().__init__(camera)
         self.approaches = []
-        self.fixed_target = [810., 480.]
+        self.fixed_target = [930., 480.]
 
     def approach_hand(self, box, corners, source, *, stand_off_mm, authorize):
         assert authorize()
@@ -46,39 +46,39 @@ def distant(rig, sequence, **changes):
 
 def confirm(rig):
     distant(rig, 1)
-    for sequence in range(2, 22):
+    for sequence in range(2, 12):
         rig[3].advance(.2)
         state = distant(rig, sequence)
     return state
 
 
-def test_four_seconds_of_a_far_hand_choose_a_single_fixed_point(rig):
+def test_two_seconds_of_a_far_hand_choose_a_single_fixed_point(rig):
     first = distant(rig, 1)
     assert first['phase'] == 'observing_hand' and first['far_hand_seconds'] == 0
-    for sequence in range(2, 21):
+    for sequence in range(2, 11):
         rig[3].advance(.2)
         distant(rig, sequence)
     assert not rig[1].approaches
     rig[3].advance(.2)
-    state = distant(rig, 21)
+    state = distant(rig, 11)
     assert state['curious'] and state['phase'] == 'curious'
-    assert state['interest_target_px'] == [810., 480.]
-    assert state['curiosity_count'] == 1 and state['far_hand_seconds'] == 4.
+    assert state['interest_target_px'] == [930., 480.]
+    assert state['curiosity_count'] == 1 and state['far_hand_seconds'] == 2.
     assert len(rig[1].approaches) == 1
     box, corners, source, gap = rig[1].approaches[0]
     assert box == list(FAR) and corners == rig[0].state()['marker_corners']
     assert source == {'frame_width': 1280, 'frame_height': 960, 'camera_id': 'usb-camera'}
-    assert gap == 250. and not rig[1].returns
+    assert gap == 100. and not rig[1].returns
 
 
 def test_curiosity_wait_and_spacing_stay_outside_a_larger_fear_threshold(rig):
     state = rig[2].set_distance(450.)
-    assert state['curiosity_distance_mm'] == 650.
-    assert state['interest_stand_off_mm'] == 550.
-    assert state['curiosity_wait_seconds'] == 4.
+    assert state['curiosity_distance_mm'] == 550.
+    assert state['interest_stand_off_mm'] == 100.
+    assert state['curiosity_wait_seconds'] == 2.
 
 
-def test_repeated_reads_of_one_frame_cannot_create_four_seconds_of_presence(rig):
+def test_repeated_reads_of_one_frame_cannot_create_two_seconds_of_presence(rig):
     distant(rig, 1)
     for _ in range(25):
         rig[3].advance(.2)
@@ -90,13 +90,13 @@ def test_repeated_reads_of_one_frame_cannot_create_four_seconds_of_presence(rig)
 
 def test_a_different_hand_does_not_inherit_the_previous_hands_wait(rig):
     distant(rig, 1)
-    for sequence in range(2, 20):
+    for sequence in range(2, 10):
         rig[3].advance(.2)
         distant(rig, sequence)
     rig[3].advance(.2)
-    state = sample(rig, 20, box=OTHER)
+    state = sample(rig, 10, box=OTHER)
     assert state['far_hand_seconds'] == 0. and not rig[1].approaches
-    for sequence in range(21, 41):
+    for sequence in range(11, 21):
         rig[3].advance(.2)
         state = sample(rig, sequence, box=OTHER)
     assert state['curious'] and rig[1].approaches[0][0] == list(OTHER)
@@ -104,40 +104,97 @@ def test_a_different_hand_does_not_inherit_the_previous_hands_wait(rig):
 
 def test_gradual_hand_motion_keeps_one_episode_and_freezes_its_final_position(rig):
     distant(rig, 1)
-    for sequence in range(2, 22):
+    for sequence in range(2, 12):
         rig[3].advance(.2)
         shift = sequence * 1.
         state = sample(rig, sequence, box=tuple(value + (shift if index % 2 == 0 else 0)
                                                for index, value in enumerate(FAR)))
     assert state['curious'] and len(rig[1].approaches) == 1
-    assert rig[1].approaches[0][0] == [1101., 420., 1201., 500.]
+    assert rig[1].approaches[0][0] == [1091., 420., 1191., 500.]
     rig[3].advance(.2)
     sample(rig, 22, box=OTHER)
     assert len(rig[1].approaches) == 1
-    assert rig[2].state()['interest_target_px'] == [810., 480.]
+    assert rig[2].state()['interest_target_px'] == [930., 480.]
 
 
-def test_brief_missing_detection_does_not_reset_the_same_hand_episode(rig):
+def test_one_second_missing_detection_pauses_without_resetting_or_counting_absence(rig):
     distant(rig, 1)
-    for sequence in range(2, 12):
+    for sequence in range(2, 7):
         rig[3].advance(.2)
         distant(rig, sequence)
+    assert rig[2].state()['far_hand_seconds'] == 1.
+    for sequence in range(7, 11):
+        rig[3].advance(.2)
+        distant(rig, sequence, hands=[])
     rig[3].advance(.2)
-    distant(rig, 12, hands=[])
-    assert rig[2].state()['far_hand_seconds'] == 2.
-    for sequence in range(13, 22):
+    state = distant(rig, 11)
+    assert state['far_hand_seconds'] == 1. and not rig[1].approaches
+    for sequence in range(12, 17):
         rig[3].advance(.2)
         state = distant(rig, sequence)
-    assert state['curious']
+    assert state['curious'] and state['far_hand_seconds'] == 2.
 
 
-def test_a_long_missing_detection_requires_a_new_four_second_episode(rig):
+def test_a_long_missing_detection_requires_a_new_two_second_episode(rig):
     distant(rig, 1)
-    rig[3].advance(.6)
-    distant(rig, 2, hands=[])
     rig[3].advance(.2)
-    state = distant(rig, 3)
+    distant(rig, 2)
+    rig[3].advance(1.6)
+    distant(rig, 3, hands=[])
+    rig[3].advance(.2)
+    state = distant(rig, 4)
     assert state['far_hand_seconds'] == 0. and not rig[1].approaches
+
+
+def test_a_large_change_in_box_size_does_not_reset_the_same_hand(rig):
+    distant(rig, 1)
+    large = (1005., 335., 1255., 585.)
+    for sequence in range(2, 12):
+        rig[3].advance(.2)
+        state = sample(rig, sequence, box=large if sequence % 2 else FAR)
+    assert state['curious'] and state['far_hand_seconds'] == 2.
+    assert len(rig[1].approaches) == 1
+
+
+def test_palm_position_is_preferred_over_box_center_for_hand_continuity(rig):
+    # Los dedos cambian la caja; la palma conserva la misma posición.
+    boxes = ((920., 300., 1180., 620.), (1100., 420., 1180., 500.))
+    for sequence in range(1, 12):
+        state = distant(rig, sequence, hands=[{'bbox_px': list(boxes[sequence % 2]),
+                                             'palm_px': [1130., 460.], 'confidence': 1.}])
+        rig[3].advance(.2)
+    assert state['curious'] and state['far_hand_seconds'] == 2.
+    assert rig[2]._attractor_anchor == [1130., 460.]
+
+
+@pytest.mark.parametrize('failure', ['marker', 'detector'])
+def test_brief_frame_or_detector_loss_pauses_confirmation_without_counting_the_gap(rig, failure):
+    distant(rig, 1)
+    rig[3].advance(.2)
+    distant(rig, 2)
+    rig[3].advance(.2)
+    if failure == 'marker':
+        rig[0].update(visible=False)
+        distant(rig, 3)
+        rig[0].update(visible=True)
+    else:
+        distant(rig, 3, ready=False)
+    rig[3].advance(.6)
+    state = distant(rig, 4)
+    assert state['far_hand_seconds'] == .2 and not state['curious']
+    for sequence in range(5, 14):
+        rig[3].advance(.2)
+        state = distant(rig, sequence)
+    assert state['curious'] and state['far_hand_seconds'] == 2.
+
+
+def test_a_gap_without_any_results_does_not_invent_hand_presence(rig):
+    distant(rig, 1)
+    rig[3].advance(.2)
+    distant(rig, 2)
+    rig[3].advance(.8)
+    state = distant(rig, 3)
+    assert state['far_hand_seconds'] == .2 and not state['curious']
 
 
 def test_an_intermediate_distance_is_neither_fear_nor_curiosity(rig):
@@ -161,7 +218,7 @@ def test_disappearing_hand_never_cancels_the_committed_trip(rig):
         rig[3].advance(.2)
         state = distant(rig, sequence, hands=[])
     assert state['curious'] and state['phase'] == 'curious'
-    assert state['interest_target_px'] == [810., 480.]
+    assert state['interest_target_px'] == [930., 480.]
     assert len(rig[1].approaches) == 1 and rig[1].stops == 0
     assert rig[1].value['active']
 
@@ -175,7 +232,7 @@ def test_loss_of_marker_or_detector_does_not_discard_the_fixed_destination(rig, 
         state = distant(rig, 22)
     else:
         state = distant(rig, 22, ready=False, status='error')
-    assert state['curious'] and state['interest_target_px'] == [810., 480.]
+    assert state['curious'] and state['interest_target_px'] == [930., 480.]
     assert rig[1].stops == 0 and rig[1].value['active']
 
 
@@ -204,13 +261,64 @@ def test_curiosity_never_interrupts_a_return_home(rig):
 def test_arrival_waits_without_repeatedly_approaching_the_same_hand(rig):
     confirm(rig)
     rig[1].value.update(phase='arrived', active=False)
-    rig[0].pose(x=810., y=480., scale=800.)
+    rig[0].pose(x=930., y=480., scale=800.)
     for sequence in range(22, 55):
         rig[3].advance(.2)
         state = distant(rig, sequence)
     assert state['phase'] == 'interest_reached' and not state['curious']
     assert len(rig[1].approaches) == 1
-    assert state['interest_target_px'] == [810., 480.]
+    assert state['interest_target_px'] == [930., 480.]
+    assert 0. < state['nearest_hand_mm'] < state['distance_mm']
+    assert not state['near_hand'] and not rig[1].returns
+
+
+def test_approaching_the_stationary_attractor_does_not_trigger_fear(rig):
+    confirm(rig)
+    rig[0].pose(x=930., y=480., scale=800.)
+    for sequence in range(12, 24):
+        rig[3].advance(.2)
+        state = distant(rig, sequence)
+    assert state['curious'] and not state['returning']
+    assert 0. < state['nearest_hand_mm'] < state['distance_mm']
+    assert not state['near_hand'] and not rig[1].returns
+    assert len(rig[1].approaches) == 1
+
+
+@pytest.mark.parametrize('arrived', [False, True])
+def test_another_near_hand_can_interrupt_the_stationary_attractor_exemption(rig, arrived):
+    confirm(rig)
+    rig[0].pose(x=930., y=480., scale=800.)
+    if arrived:
+        rig[1].value.update(phase='arrived', active=False)
+    hands = [{'bbox_px': list(FAR), 'confidence': 1.},
+             {'bbox_px': list(NEAR), 'confidence': 1.}]
+    for sequence in (12, 13):
+        rig[3].advance(.2)
+        state = distant(rig, sequence, hands=hands)
+    assert state['returning'] and len(rig[1].returns) == 1
+
+
+def test_the_attractor_invading_the_footprint_triggers_home_even_if_the_palm_is_stationary(rig):
+    confirm(rig)
+    rig[0].pose(x=930., y=480., scale=800.)
+    # Una mano que ocupa la huella nunca recibe la excepción de curiosidad.
+    hands = [{'bbox_px': [980., 420., 1180., 500.],
+              'palm_px': [1130., 460.], 'confidence': 1.}]
+    for sequence in (12, 13):
+        rig[3].advance(.2)
+        state = distant(rig, sequence, hands=hands)
+    assert state['returning'] and state['nearest_hand_mm'] == 0.
+
+
+def test_an_attractor_that_moves_towards_the_robot_loses_its_exception(rig):
+    confirm(rig)
+    # La mano se desplaza más de 120 mm hacia el robot y ahora está cerca.
+    moved = (780., 420., 880., 500.)
+    for sequence in (12, 13):
+        rig[3].advance(.2)
+        state = sample(rig, sequence, box=moved)
+    assert state['returning'] and not state['curious']
+    assert len(rig[1].returns) == 1
 
 
 @pytest.mark.parametrize('reason', ['button_stop', 'driver_fault', 'encoder_stall', 'remote_stop'])
@@ -234,7 +342,7 @@ def test_adjusting_reaction_distance_does_not_retarget_a_committed_interest(rig)
     confirm(rig)
     generation = rig[2]._generation
     state = rig[2].set_distance(200.)
-    assert state['curious'] and state['interest_target_px'] == [810., 480.]
+    assert state['curious'] and state['interest_target_px'] == [930., 480.]
     assert rig[2]._generation == generation and rig[1].stops == 0
     assert len(rig[1].approaches) == 1
 
@@ -243,7 +351,7 @@ def test_enabling_an_already_enabled_reaction_keeps_its_curiosity_mission(rig):
     confirm(rig)
     generation = rig[2]._generation
     state = rig[2].set_enabled(True)
-    assert state['curious'] and state['interest_target_px'] == [810., 480.]
+    assert state['curious'] and state['interest_target_px'] == [930., 480.]
     assert rig[2]._generation == generation and len(rig[1].approaches) == 1
 
 
@@ -281,14 +389,14 @@ def test_manual_cancel_during_interest_planning_invalidates_the_late_authorizati
         if not authorize():
             raise HomeBehaviorError('Cancelado.')
         rig[1].starts += 1
-        return {'target_px': [810., 480.]}
+        return {'target_px': [930., 480.]}
     rig[1].approach_hand = delayed
     distant(rig, 1)
-    for sequence in range(2, 21):
+    for sequence in range(2, 11):
         rig[3].advance(.2)
         distant(rig, sequence)
     rig[3].advance(.2)
-    worker = threading.Thread(target=lambda: distant(rig, 21))
+    worker = threading.Thread(target=lambda: distant(rig, 11))
     worker.start()
     try:
         assert entered.wait(1.)

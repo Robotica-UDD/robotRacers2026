@@ -15,7 +15,7 @@ from simulation.webcam.navigation import NavigationError
 
 SOURCE = {"camera_id": CAMERA_ID, "frame_width": FRAME_WIDTH, "frame_height": FRAME_HEIGHT}
 HAND = [1136., 440., 1200., 520.]  # Rectángulo fijo a 620–700 mm del centro inicial.
-STAND_OFF_MM = 250.
+STAND_OFF_MM = 100.
 
 
 def approach(nav, camera, box=None, authorize=None):
@@ -99,8 +99,13 @@ def test_curiosity_keeps_its_point_after_the_hand_disappears_and_stops_with_clea
         # La curiosidad tiene llegada por centro, no la cobertura amplia de
         # los destinos normales que podía terminar 80–116 mm antes del punto.
         assert math.hypot(robot.x - expected[0], robot.y - expected[1]) <= .040
-        assert final_clearance(camera, nav) >= STAND_OFF_MM - .5
-        assert robot.x > .10
+        # Son distancias del plano ideal, no una medición de profundidad real.
+        # El radio que permite llegar en cualquier orientación reserva algo más
+        # que los 100 mm mínimos; la planta frontal termina cerca de 176 mm.
+        assert STAND_OFF_MM - .5 <= final_clearance(camera, nav) <= 185.
+        # La separación solicitada es 100 mm: no debe conservar el extremo
+        # anterior calculado para 250 mm ni terminar apenas inicia el avance.
+        assert robot.x > .30
         assert state["waypoints_px"] == original and state["waypoint_index"] == 0
         assert not state["active"] and not state["pending_mission"]
         assert robot.starts == 1 and robot.state()["control_session"] == session
@@ -120,7 +125,8 @@ def test_curiosity_plans_around_a_static_obstacle_without_entering_the_hand():
         result = approach(nav, camera)
         wait_for(lambda: not nav.state()["active"], timeout=15.)
         assert nav.state()["phase"] == "arrived", nav.state()["message"]
-        assert final_clearance(camera, nav) >= STAND_OFF_MM - .5
+        # Tras el rodeo, la llegada lateral queda aproximadamente a 125 mm.
+        assert STAND_OFF_MM - .5 <= final_clearance(camera, nav) <= 185.
         assert max(row["penetration_mm"] for row in robot.trace) <= .002
         hand_polygon = [[(.620, -.050), (.700, -.050), (.700, .050), (.620, .050)]]
         assert max(penetration_mm(*pose, barrier) for row in robot.trace

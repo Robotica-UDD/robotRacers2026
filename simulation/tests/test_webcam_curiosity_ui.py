@@ -5,9 +5,9 @@ from simulation.tests.test_webcam_home_ui import PAGE, run
 def test_far_hand_counter_and_curiosity_states_are_visible_without_extra_controls():
     run(r"""
 homeState.enabled=true;homeState.phase='observing_hand';
-homeState.far_hand_seconds=2.7;homeState.curiosity_wait_seconds=4;
+homeState.far_hand_seconds=1.7;homeState.curiosity_wait_seconds=2;
 renderHomeUI();
-assert.equal($('home-status').textContent,'Observando una mano · 2,7 / 4 s');
+assert.equal($('home-status').textContent,'Observando una mano · 1,7 / 2 s');
 assert.equal($('home-cancel').hidden,true);
 homeState.phase='curious';homeState.curious=true;
 homeState.message='Me acerco al punto que elegí.';
@@ -23,21 +23,43 @@ assert.equal($('home-status').textContent,'Punto de interés alcanzado');
 assert.equal($('home-cancel').hidden,true);
 """)
     html = PAGE.read_text()
-    assert 'Una mano lejana durante 4 s despierta curiosidad.' in html
-    assert 'Se acerca a un punto fijo y deja separación.' in html
+    assert 'Una mano lejana durante 2 s despierta curiosidad.' in html
+    assert 'Elige un punto a unos 10 cm y mantiene el destino aunque la mano desaparezca.' in html
     assert 'Configuración probada: avance 240 mm/s · giro máximo 90°/s.' in html
 
 
-def test_observation_counter_is_bounded_and_has_a_valid_four_second_default():
+def test_observation_counter_is_bounded_and_has_a_valid_two_second_default():
     run(r"""
 homeState.enabled=true;homeState.phase='observing_hand';
-homeState.far_hand_seconds=9;homeState.curiosity_wait_seconds=4;
+homeState.far_hand_seconds=9;homeState.curiosity_wait_seconds=2;
 renderHomeUI();
-assert.equal($('home-status').textContent,'Observando una mano · 4,0 / 4 s');
+assert.equal($('home-status').textContent,'Observando una mano · 2,0 / 2 s');
 homeState.far_hand_seconds=NaN;homeState.curiosity_wait_seconds=Infinity;
 renderHomeUI();
-assert.equal($('home-status').textContent,'Observando una mano · 0,0 / 4 s');
+assert.equal($('home-status').textContent,'Observando una mano · 0,0 / 2 s');
 """)
+
+
+def test_detector_labels_use_the_active_model_and_default_to_mediapipe():
+    run(r"""
+homeState.detector={status:'ready'};
+renderHomeUI();
+assert.equal($('home-model').textContent,'MediaPipe · detección de manos lista');
+homeState.detector.model=' MediaPipe Hand Landmarker ';
+renderHomeUI();
+assert.equal($('home-model').textContent,'MediaPipe Hand Landmarker · detección de manos lista');
+for(const [status,label] of Object.entries({loading:'cargando detección de manos…',missing_model:'falta instalar el modelo de manos',error:'detector no disponible',closed:'detección detenida'})){
+  homeState.detector.status=status;
+  renderHomeUI();
+  assert.equal($('home-model').textContent,`MediaPipe Hand Landmarker · ${label}`);
+}
+homeState.detector={status:'ready',model:' '};
+renderHomeUI();
+assert.equal($('home-model').textContent,'MediaPipe · detección de manos lista');
+homeAvailable=false;renderHomeUI();
+assert.equal($('home-model').textContent,'Esperando el servicio de casa y manos.');
+""")
+    assert 'YOLO ·' not in PAGE.read_text()
 
 
 def test_interest_marker_stays_fixed_when_the_hand_moves_or_disappears():

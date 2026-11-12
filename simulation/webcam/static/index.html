@@ -139,7 +139,7 @@
           <div class="home-actions"><button id="home-mark" class="button secondary" type="button" disabled>Marcar casa</button><button id="home-clear" class="button secondary" type="button" disabled>Borrar casa</button></div>
           <div class="obstacle-margin-row home-distance"><label for="home-distance">Mano cerca del robot</label><span class="obstacle-margin-value"><input id="home-distance" type="number" min="50" max="500" step="10" value="150" inputmode="numeric" aria-label="Distancia de reacción a una mano, en milímetros" disabled><small>mm aprox.</small></span></div>
           <button id="home-toggle" class="button secondary home-toggle" type="button" aria-pressed="false" disabled>Reaccionar a manos</button>
-          <p class="home-model">Una mano lejana durante 4 s despierta curiosidad. Se acerca a un punto fijo y deja separación.</p>
+          <p class="home-model">Una mano lejana durante 2 s despierta curiosidad. Elige un punto a unos 10 cm y mantiene el destino aunque la mano desaparezca.</p>
           <button id="home-cancel" class="button secondary robot-stop" type="button" hidden>Detener regreso a casa</button>
           <p id="home-model" class="home-model" role="status">Preparando detección de manos…</p>
           <p id="home-error" class="error" role="alert" hidden></p>
@@ -673,7 +673,7 @@
       const labels = {disabled: point ? 'Reacción desactivada' : 'Sin punto de casa', watching: 'Atento a las manos', near_hand: 'Mano cerca del robot', returning: 'Volviendo a casa', observing_hand: 'Observando una mano', curious: 'Acercándose por curiosidad', interest_reached: 'Punto de interés alcanzado', home: 'En casa', at_home: 'En casa', paused: 'Reacción en pausa', waiting_detector: 'Esperando detección de manos', waiting_vision: 'Esperando el marcador', waiting_connection: 'Esperando al robot', error: 'Revisar reacción a manos'};
       $('home-status').textContent = !homeAvailable ? 'Casa no disponible' : editing ? 'Marca la casa en la imagen' : labels[homeState?.phase] || (enabled ? 'Atento a las manos' : point ? 'Casa guardada' : 'Sin punto de casa');
       if (homeAvailable && !editing && homeState?.phase === 'observing_hand') {
-        const wait = Number.isFinite(homeState.curiosity_wait_seconds) && homeState.curiosity_wait_seconds > 0 ? homeState.curiosity_wait_seconds : 4;
+        const wait = Number.isFinite(homeState.curiosity_wait_seconds) && homeState.curiosity_wait_seconds > 0 ? homeState.curiosity_wait_seconds : 2;
         const seen = Math.max(0, Math.min(wait, Number.isFinite(homeState.far_hand_seconds) ? homeState.far_hand_seconds : 0));
         $('home-status').textContent = `Observando una mano · ${seen.toFixed(1).replace('.', ',')} / ${wait} s`;
       }
@@ -695,8 +695,9 @@
       $('home-cancel').textContent = curious && !returning ? 'Detener acercamiento' : 'Detener regreso a casa';
       $('home-cancel').disabled = !homeAvailable || !!homeBusy;
       const detector = homeState?.detector;
-      const detectorLabels = {ready: 'YOLO · detección de manos lista', loading: 'YOLO · cargando detección de manos…', missing: 'YOLO · falta instalar el modelo de manos', missing_model: 'YOLO · falta instalar el modelo de manos', error: 'YOLO · detector no disponible', closed: 'YOLO · detección detenida'};
-      $('home-model').textContent = !homeAvailable ? 'Esperando el servicio de casa y manos.' : detectorLabels[detector?.status] || 'Preparando detección de manos…';
+      const model = typeof detector?.model === 'string' && detector.model.trim() ? detector.model.trim() : 'MediaPipe';
+      const detectorLabels = {ready: 'detección de manos lista', loading: 'cargando detección de manos…', missing: 'falta instalar el modelo de manos', missing_model: 'falta instalar el modelo de manos', error: 'detector no disponible', closed: 'detección detenida'};
+      $('home-model').textContent = !homeAvailable ? 'Esperando el servicio de casa y manos.' : `${model} · ${detectorLabels[detector?.status] || 'preparando detección de manos…'}`;
     }
     function renderHome(next) {
       homeState = next; homeAvailable = true;

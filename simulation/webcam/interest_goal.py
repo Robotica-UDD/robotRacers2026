@@ -73,6 +73,9 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
                 depths, marker_visible, center_inside = scene.evaluate(scene.pose(image, heading + turn))
                 if marker_visible and center_inside and np.max(depths, initial=0.) <= .000002:
                     if obstacles:
+                        remaining = deadline - time.monotonic()
+                        if remaining < .05:
+                            raise ValueError("No encontré un acercamiento accesible manteniendo la separación.")
                         try:
                             # Un extremo libre puede estar encerrado por una
                             # barrera. Probar conectividad antes de fijarlo;
@@ -81,7 +84,7 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
                             plan_pose_path(corners, calibration, observed["center_px"], image.tolist(),
                                 obstacles, start_heading_rad=heading,
                                 allow_start_overlap=True,
-                                max_seconds=max(.01, min(.18, deadline - time.monotonic())))
+                                max_seconds=min(.18, remaining))
                         except ValueError:
                             break
                     return {"target_px": image.tolist(), "stand_off_mm": float(stand_off_mm)}
