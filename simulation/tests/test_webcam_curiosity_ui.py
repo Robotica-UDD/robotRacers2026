@@ -52,6 +52,40 @@ assert.equal($('home-hand-status').textContent,'Mano a 230 mm · 1,8 / 2 s');
 """)
 
 
+def test_far_hands_have_no_ui_distance_ceiling_or_a_false_too_close_state():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='confirming';
+homeState.curiosity_distance_mm=200;homeState.far_hand_seconds=1.6;homeState.curiosity_wait_seconds=2;
+for(const distance of [1001,1500,9000]){
+  homeState.nearest_hand_mm=distance;
+  renderHomeUI();
+  assert.equal($('home-hand-status').hidden,false);
+  assert.equal($('home-hand-status').textContent,`Mano a ${distance} mm · 1,6 / 2 s`);
+  assert.equal($('home-hand-reason').hidden,true);
+  assert.equal(homeState.curiosity_status,'confirming');
+}
+homeState.curiosity_status='planning';homeState.curiosity_attempt_count=1;renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Buscando acercamiento…');
+homeState.curiosity_status='curious';homeState.phase='curious';homeState.curious=true;
+renderHomeUI();
+assert.equal($('home-status').textContent,'Acercándose por curiosidad');
+assert.equal($('home-cancel').hidden,false);
+""")
+
+
+def test_a_perimeter_route_failure_is_shown_as_its_actual_reason_without_a_distance_excuse():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='retrying';
+homeState.nearest_hand_mm=1500;homeState.curiosity_retry_in_s=1;
+homeState.curiosity_blocked_reason='No hay una ruta libre dentro del perímetro hasta el punto de acercamiento.';
+renderHomeUI();
+assert.equal($('home-hand-reason').hidden,false);
+assert.equal($('home-hand-reason').textContent,'Acercamiento: No hay una ruta libre dentro del perímetro hasta el punto de acercamiento.');
+assert.equal($('home-hand-status').textContent,'Buscando acercamiento · reintento en 1,0 s');
+assert.equal($('home-hand-reason').textContent.includes('distancia máxima'),false);
+""")
+
+
 def test_hand_between_fear_and_curiosity_shows_the_actual_distance_and_required_distance():
     run(r"""
 homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='too_close';

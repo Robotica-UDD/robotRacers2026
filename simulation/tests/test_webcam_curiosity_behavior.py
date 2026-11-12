@@ -5,7 +5,7 @@ import pytest
 
 from simulation.tests.test_webcam_home_behavior import Clock, Navigation, sample
 from simulation.tests.test_webcam_point_navigation import FakeCamera
-from simulation.webcam.home_behavior import HomeBehavior, HomeBehaviorError
+from simulation.webcam.home_behavior import HomeBehavior, HomeBehaviorError, hand_clearance_mm
 
 
 FAR = (1080., 420., 1180., 500.)
@@ -76,6 +76,56 @@ def test_curiosity_wait_and_spacing_stay_outside_a_larger_fear_threshold(rig):
     assert state['curiosity_distance_mm'] == 500.
     assert state['interest_stand_off_mm'] == 100.
     assert state['curiosity_wait_seconds'] == 2.
+
+
+def test_a_stationary_hand_more_than_one_meter_away_still_confirms_curiosity_in_two_seconds(rig):
+    # La misma imagen cubre más suelo: la mano está a más de 1 m de la huella.
+    rig[0].pose(scale=300.)
+    first = distant(rig, 1)
+    assert first['nearest_hand_mm'] > 1000.
+    assert first['curiosity_status'] == 'confirming'
+    for sequence in range(2, 12):
+        rig[3].advance(.2)
+        state = distant(rig, sequence)
+    assert state['far_hand_seconds'] == 2. and state['curious']
+    assert state['curiosity_attempt_count'] == state['curiosity_count'] == 1
+    assert len(rig[1].approaches) == 1 and not rig[1].returns
+
+
+def test_a_farther_than_one_meter_hand_reports_route_retries_instead_of_missing_detection(rig):
+    rig[0].pose(scale=300.)
+    attempts = []
+    def blocked(*args, **kwargs):
+        attempts.append(1)
+        raise HomeBehaviorError('El punto de acercamiento no tiene un camino disponible.')
+    rig[1].approach_hand = blocked
+    state = confirm(rig)
+    assert state['nearest_hand_mm'] > 1000. and state['far_hand_seconds'] == 2.
+    assert state['curiosity_status'] == 'retrying'
+    assert state['curiosity_attempt_count'] == 1 and state['curiosity_count'] == 0
+    assert 'camino' in state['curiosity_blocked_reason']
+    for sequence in range(12, 22):
+        rig[3].advance(.2)
+        state = distant(rig, sequence)
+    assert state['curiosity_attempt_count'] == len(attempts) == 2
+    assert state['curiosity_status'] == 'retrying' and state['enabled']
+
+
+def test_a_hand_box_at_120mm_returns_home_even_when_its_palm_is_farther_than_200mm(rig):
+    # Caso observado: los dedos están cerca aunque la palma parezca lejana.
+    hands = [{'bbox_px': [803., 420., 1000., 520.],
+              'palm_px': [926., 460.], 'confidence': 1.}]
+    palm_gap = hand_clearance_mm([925.9, 459.9, 926.1, 460.1],
+                                rig[0].state()['marker_corners'], rig[1]._calibration)
+    assert 250. < palm_gap < 300.
+    state = distant(rig, 1, hands=hands)
+    assert 119. < state['nearest_hand_mm'] < 122.
+    assert state['near_hand'] and not state['curious']
+    rig[3].advance(.2)
+    state = distant(rig, 2, hands=hands)
+    assert state['returning'] and state['curiosity_status'] == 'returning'
+    assert state['far_hand_seconds'] == 0. and state['curiosity_attempt_count'] == 0
+    assert len(rig[1].returns) == 1 and not rig[1].approaches
 
 
 def test_repeated_reads_of_one_frame_cannot_create_two_seconds_of_presence(rig):

@@ -195,3 +195,23 @@ def test_revoked_curiosity_authorization_never_changes_the_mission():
         assert nav.state()["waypoints_px"] == original
         assert not nav.state()["active"]
         assert all(pair == (0, 0) for pair in robot.drives)
+
+
+def test_geometric_interest_endpoint_never_bypasses_the_full_navigation_plan(monkeypatch):
+    from simulation.webcam import navigation as navigation_source
+
+    barrier = [[(.100, -.060), (.140, -.060), (.140, .060), (.100, .060)]]
+    with synthetic_scene(start=(0., 0., 0.), polygons=barrier) as (camera, robot, nav):
+        original = original_route(nav)
+        nav.arm_home_watch()
+
+        def unavailable(*args, **kwargs):
+            raise ValueError("La trayectoria completa sigue bloqueada.")
+
+        monkeypatch.setattr(navigation_source, "plan_pose_path", unavailable)
+        with pytest.raises(NavigationError, match="trayectoria completa"):
+            approach(nav, camera)
+        assert nav.state()["waypoints_px"] == original
+        assert not nav.state()["active"]
+        assert robot.starts == 1
+        assert all(pair == (0, 0) for pair in robot.drives)

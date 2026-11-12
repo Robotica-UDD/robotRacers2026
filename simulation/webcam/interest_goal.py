@@ -10,16 +10,17 @@ import numpy as np
 
 from .navigation_geometry import _homographies, _project, observe_robot
 from .obstacle_planner import _grid, _grid_anchor
-from .pose_obstacle_planner import _Scene, plan_pose_path
+from .pose_obstacle_planner import _Scene
 from .robot_footprint import ROBOT_RADIUS_MM, ROBOT_FOOTPRINT_MM
 
 
 def _reachable_component(scene, center_px, deadline):
-    """Descarta regiones desconectadas antes de buscar maniobras de la huella.
+    """Descarta regiones desconectadas antes de seleccionar un destino.
 
     Es solo un rechazo preliminar. Cada candidato conservado todavía necesita
-    el plan continuo con la huella orientada. Si el centro o un candidato no
-    tienen ancla por la discretización, decide ese plan exacto, no la rejilla.
+    el plan continuo de Navigation con la huella orientada antes del movimiento.
+    Si el centro o un candidato no tienen ancla por la discretización, decide
+    ese plan exacto, no la rejilla.
     """
     try:
         blocked, minimum, step, _ = _grid(scene.plane, 0.,
@@ -48,6 +49,13 @@ def _reachable_component(scene, center_px, deadline):
 
 
 def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *, arrival_m=.025):
+    """Elige un extremo; no autoriza ni calcula la trayectoria de movimiento.
+
+    La navegación valida después el recorrido completo con la huella real.
+    La distancia al robot no limita la selección: se exploran separaciones
+    crecientes hasta la posición inicial, conservando la preferencia por la
+    más cercana a la mano que tenga un extremo geométricamente admisible.
+    """
     if (isinstance(stand_off_mm, bool) or not isinstance(stand_off_mm, Real)
             or not math.isfinite(stand_off_mm) or not 20 <= stand_off_mm <= 2000):
         raise ValueError("La separación de acercamiento no es válida.")
@@ -80,12 +88,17 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
     observed = observe_robot(corners, calibration)
     heading = math.radians(observed["heading_deg"])
     reachable = _reachable_component(scene, observed["center_px"], deadline) if obstacles else None
-    for extra in (0., .05, .10, .20, .35):
-        desired = required + extra
-        if desired >= initial_gap - .030:
-            continue
+    desired, oriented_fallback = required, None
+    # No limitar la búsqueda a 350 mm adicionales: una pared puede exigir
+    # observar la mano desde más lejos aunque su región sea alcanzable.
+    # La evaluación es perezosa y conserva un presupuesto de cálculo, sin
+    # construir listas cuyo tamaño dependa de la escala del plano visible.
+    step = .05
+    while desired < initial_gap - .030:
         for degrees in (0., -15., 15., -30., 30., -45., 45., -60., 60., -90., 90.):
             if time.monotonic() >= deadline:
+                if oriented_fallback is not None:
+                    return oriented_fallback
                 raise ValueError("No encontré un acercamiento accesible manteniendo la separación.")
             angle = math.radians(degrees)
             c, s = math.cos(angle), math.sin(angle)
@@ -109,20 +122,18 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
                          math.pi / 4., -math.pi / 4., 3 * math.pi / 4., -3 * math.pi / 4.):
                 depths, marker_visible, center_inside = scene.evaluate(scene.pose(image, heading + turn))
                 if marker_visible and center_inside and np.max(depths, initial=0.) <= .000002:
-                    if obstacles:
-                        remaining = deadline - time.monotonic()
-                        if remaining < .05:
-                            raise ValueError("No encontré un acercamiento accesible manteniendo la separación.")
-                        try:
-                            # Un extremo libre puede estar encerrado por una
-                            # barrera. Probar conectividad antes de fijarlo;
-                            # conservar un presupuesto global corto para no
-                            # retrasar la siguiente observación de la mano.
-                            plan_pose_path(corners, calibration, observed["center_px"], image.tolist(),
-                                obstacles, start_heading_rad=heading,
-                                allow_start_overlap=True,
-                                max_seconds=min(.18, remaining))
-                        except ValueError:
-                            break
-                    return {"target_px": image.tolist(), "stand_off_mm": float(stand_off_mm)}
+                    result = {"target_px": image.tolist(), "stand_off_mm": float(stand_off_mm)}
+                    if oriented_fallback is None:
+                        oriented_fallback = result
+                    # Preferir un extremo donde pueda orientar el cuerpo al
+                    # llegar, en lugar de un hueco que solo admite entrar de
+                    # espaldas. El círculo es una preferencia suficiente,
+                    # nunca un veto para pasillos que sí admitan la huella.
+                    point = scene.plane.world(image.tolist())
+                    if scene.plane.segment_clear(point, point, scene.radius, camera_clearance=0.):
+                        return result
+                    break
+        desired += step
+    if oriented_fallback is not None:
+        return oriented_fallback
     raise ValueError("No encontré un punto libre para acercarme manteniendo la separación.")
