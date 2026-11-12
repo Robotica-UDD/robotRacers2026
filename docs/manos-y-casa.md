@@ -104,6 +104,19 @@ solo elimina regiones desconectadas; el punto elegido todavía necesita una
 ruta válida con la huella orientada. Así no se agota el tiempo probando primero
 puntos que están fuera del recinto del robot.
 
+La curiosidad **no tiene distancia máxima entre la mano y el robot**. La mano
+puede estar al otro lado de una pared y requerir un rodeo. Se eliminó la
+preaprobación de ruta limitada a 180 ms en la elección del punto: ahora esa fase
+elige un extremo libre y la navegación calcula y valida la trayectoria completa
+antes de permitir movimiento. También se eliminó el máximo de 350 mm adicionales
+para elegir una posición de observación; la búsqueda se adapta al campo visible.
+Elegir un punto de interés no significa que exista paso para la huella: una C
+con un cuello menor que el ancho real del robot puede seguir sin ruta válida.
+El perímetro, la separación y las comprobaciones de las ruedas se conservan.
+Se prefieren extremos con espacio para orientarse. Si el círculo de giro no
+cabe, un extremo con la huella orientada libre sigue siendo candidato al
+planificador completo; esa preferencia no prohíbe los pasillos estrechos.
+
 Una detección no abre una sesión nueva en la ESP32: utiliza la sesión armada
 por el botón de vigilancia o la del recorrido en curso. D48 invalida esa sesión
 y la detección no puede volver a armarla automáticamente. Los latidos de la
@@ -150,3 +163,7 @@ con máximas de 600 mm/s y 1.600°/s no completó los cuatro destinos en su plaz
 de 35 s. El mismo fallo se reprodujo aislado en la versión anterior `eb246cf`,
 con fuentes de navegación y control idénticas. Queda pendiente revisar ese
 escenario de velocidad alta; este ajuste no cambia el controlador de movimiento.
+
+El ajuste de selección sin distancia máxima superó 132 pruebas específicas de
+curiosidad, interfaz, acercamiento y perímetros, incluidas manos a más de un
+metro y el rechazo de movimientos si la trayectoria completa no es válida.
