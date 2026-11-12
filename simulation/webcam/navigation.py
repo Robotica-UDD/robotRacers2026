@@ -25,6 +25,7 @@ from .path_follower import PathFollower
 from .pose_obstacle_planner import (plan_pose_path, check_pose, check_swept_motion,
                                     heading_error_rad, check_wheel_motion, _Scene)
 from .straight_control import StraightControl
+from .interest_goal import choose_interest_point
 from .obstacle_planner import (plan_path, segment_is_clear, point_clearances_mm,
                                camera_visibility_margin_mm, validate_obstacles)
 
@@ -150,6 +151,7 @@ class Navigation:
         self._home_cancel_callback = None
         self._home_redirect = False
         self._home_saved_route = None
+        self._behavior_purpose = None
         self._load_calibration()
         self._load_speeds()
         self._load_obstacles()
@@ -344,8 +346,12 @@ class Navigation:
                         if generation != self._route_generation or self._cancel.is_set() and self._active:
                             return {"status": "waiting", "message": "El recorrido cambió durante el cálculo.",
                                     "path": [], "inflated": [], "legs": [], "center": center}
-                    if at_initial_pose and point_under_robot(observe_robot(
-                            frame["marker_corners"], calibration, goal)["target_local_m"]):
+                    goal_pose = observe_robot(frame["marker_corners"], calibration, goal)
+                    with self._lock:
+                        centered_interest = self._behavior_purpose == "curiosity"
+                    covered = (goal_pose["distance_m"] <= self.ARRIVAL_M if centered_interest
+                               else point_under_robot(goal_pose["target_local_m"]))
+                    if at_initial_pose and covered:
                         # Ya está bajo el robot: no hace falta encontrar un
                         # giro ni trasladar su centro hasta este destino.
                         steps = [{"target_px": list(center), "heading_rad": heading,
@@ -897,6 +903,7 @@ class Navigation:
                     "pending_mission": self._pending_mission,
                     "home_watch_armed": self._home_watch_enabled,
                     "home_watch_idle": self._home_watch_session is not None and not self._active,
+                    "behavior_purpose": self._behavior_purpose,
                     "vision_grace_active": self._vision_hold, "vision_gap_ms": self._vision_gap_ms,
                     "vision_pauses": self._vision_pauses, "brief_vision_gaps": self._brief_vision_gaps,
                     "mode_switches": self._mode_switches,
@@ -1046,6 +1053,27 @@ class Navigation:
 
     def return_home(self, point_px, metadata, *, authorize=None):
         """Desvía la sesión existente; una detección nunca arma una sesión nueva."""
+        return self._redirect_behavior(point_px, metadata, purpose="home", authorize=authorize)
+
+    def approach_hand(self, box, corners, metadata, stand_off_mm, *, authorize=None):
+        """Fija una posición separada de la mano; no la persigue después."""
+        if authorize is not None and not authorize():
+            raise NavigationError("La curiosidad se canceló.")
+        with self._lock:
+            calibration = self._calibration
+            obstacles = [[list(p) for p in polygon] for polygon in self._obstacles]
+        if calibration is None:
+            raise NavigationError("Calibra el centro del robot antes de acercarlo.")
+        try:
+            result = choose_interest_point(corners, calibration, box, obstacles, stand_off_mm,
+                                           arrival_m=self.ARRIVAL_M)
+        except (ValueError, TypeError) as exc:
+            raise NavigationError(str(exc)) from None
+        ack = self._redirect_behavior(result["target_px"], metadata,
+                                      purpose="curiosity", authorize=authorize)
+        return {**ack, **result, "purpose": "curiosity"}
+
+    def _redirect_behavior(self, point_px, metadata, *, purpose, authorize=None):
         if authorize is not None and not authorize():
             raise NavigationError("La reacción a manos se desactivó.")
         frame = self._camera_state()
@@ -1058,6 +1086,7 @@ class Navigation:
                 raise NavigationError("La sesión de vigilancia terminó. Actívala de nuevo.")
             if self._home_saved_route is None:
                 self._home_saved_route = ([list(p) for p in self._waypoints], self._waypoint_index)
+            self._behavior_purpose = purpose
             self._waypoints, self._waypoint_index = [list(point_px)], 0
             self._sync_target_locked()
             self._route_generation += 1
@@ -1074,13 +1103,14 @@ class Navigation:
                     self._restore_home_route_locked()
                 self._save_calibration()
                 raise
-        return {"active": True, "returning_home": True}
+        return {"active": True, "returning_home": purpose == "home", "purpose": purpose}
 
     def _restore_home_route_locked(self):
         if self._home_saved_route is not None:
             self._home_redirect = False
             self._waypoints, self._waypoint_index = self._home_saved_route
             self._home_saved_route = None
+            self._behavior_purpose = None
             self._sync_target_locked()
             self._route_generation += 1
             self._invalidate_plan_locked()
@@ -1747,7 +1777,10 @@ class Navigation:
                     user_goal = list(self._waypoints[self._waypoint_index])
                     arrival_obstacles = [[list(p) for p in poly] for poly in self._obstacles]
                 goal_observation = self._observe(frame, calibration, user_goal)
-                if goal_observation is not None and point_under_robot(goal_observation["target_local_m"]):
+                with self._lock:
+                    centered_interest = self._behavior_purpose == "curiosity"
+                if goal_observation is not None and (goal_observation["distance_m"] <= self.ARRIVAL_M
+                    if centered_interest else point_under_robot(goal_observation["target_local_m"])):
                     waypoint_covered = True
                 with self._lock:
                     more_points = self._waypoint_index + 1 < len(self._waypoints)
@@ -2373,9 +2406,12 @@ class Navigation:
                 self._elapsed_ms = round((time.monotonic() - self._started_at) * 1000)
                 self._phase, self._message = final_phase, final_message
                 if self._home_saved_route is not None:
+                    purpose = self._behavior_purpose
                     self._restore_home_route_locked()
                     if final_phase == "arrived":
-                        self._message = "Casa alcanzada. El recorrido anterior se conserva para iniciarlo de nuevo."
+                        self._message = ("Punto de interés alcanzado. El recorrido anterior se conserva."
+                                         if purpose == "curiosity" else
+                                         "Casa alcanzada. El recorrido anterior se conserva para iniciarlo de nuevo.")
             self._save_calibration()
 
 
