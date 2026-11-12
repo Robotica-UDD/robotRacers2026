@@ -100,8 +100,10 @@ class HomeBehavior:
     RETRIGGER_SECONDS = 1.
     CURIOSITY_SECONDS = 2.
     CURIOSITY_GAP_SECONDS = 1.5
-    CURIOSITY_MIN_DISTANCE_MM = 250.
+    CURIOSITY_MIN_DISTANCE_MM = 200.
+    CURIOSITY_DISTANCE_HYSTERESIS_MM = 20.
     CURIOSITY_STAND_OFF_MM = 100.
+    CURIOSITY_RETRY_SECONDS = 2.
     HAND_ASSOCIATION_DISTANCE_MM = 160.
     ATTRACTOR_POSITION_TOLERANCE_MM = 120.
     FAULT_REASONS = {"driver_fault", "encoder_stall", "encoder_fault", "encoder_error"}
@@ -130,10 +132,15 @@ class HomeBehavior:
         self._interest_target = None
         self._interest_box = self._interest_since = self._interest_last_seen = None
         self._interest_position = self._attractor_anchor = None
+        self._interest_distance = self._interest_corners = None
         self._interest_was_visible = False
         self._interest_absent_since = None
         self._far_hand_seconds = 0.
         self._curiosity_count = 0
+        self._curiosity_attempt_count = 0
+        self._curiosity_status = "disabled"
+        self._curiosity_blocked_reason = None
+        self._curiosity_retry_at = 0.
         self._stop_signature = None
         self._detector = {"status": "loading", "ready": False, "error": None, "model": None}
         self._load()
@@ -148,7 +155,7 @@ class HomeBehavior:
         self._nearest = None
         self._near = False
         if preserve_interest:
-            self._pause_interest_confirmation(self.clock())
+            self._expire_interest_confirmation(self.clock())
         else:
             self._last_sequence = None
             self._reset_interest_confirmation()
@@ -157,6 +164,7 @@ class HomeBehavior:
     def _reset_interest_confirmation(self):
         self._interest_box = self._interest_since = self._interest_last_seen = None
         self._interest_position = None
+        self._interest_distance = self._interest_corners = None
         self._interest_was_visible = False
         self._far_hand_seconds = 0.
 
@@ -182,9 +190,62 @@ class HomeBehavior:
 
     def _pause_interest_confirmation(self, captured):
         self._interest_was_visible = False
+        self._expire_interest_confirmation(captured)
+
+    def _expire_interest_confirmation(self, captured):
         if (self._interest_last_seen is not None and
                 captured - self._interest_last_seen > self.CURIOSITY_GAP_SECONDS + 1e-9):
             self._reset_interest_confirmation()
+
+    def _clear_curiosity_retry(self):
+        self._curiosity_blocked_reason = None
+        self._curiosity_retry_at = 0.
+
+    @staticmethod
+    def _valid_hand_observation(hand_state, frame, now):
+        captured = hand_state.get("captured_at") if isinstance(hand_state, dict) else None
+        sequence = hand_state.get("sequence") if isinstance(hand_state, dict) else None
+        return (isinstance(hand_state, dict) and hand_state.get("ready") is True
+                and isinstance(captured, Real) and not isinstance(captured, bool)
+                and math.isfinite(captured) and 0 <= now - captured <= HomeBehavior.MAX_DETECTION_AGE_SECONDS
+                and type(sequence) is int and sequence >= 0
+                and all(hand_state.get(key) == frame.get(key) for key in ("frame_width", "frame_height"))
+                and hand_state.get("camera_id", frame.get("camera_id")) == frame.get("camera_id"))
+
+    def _observe_hand_without_pose(self, hand_state, frame, calibration, now):
+        """La pérdida del marcador no demuestra que la mano haya desaparecido.
+
+        Solo conserva una mano ya asociada con una pose válida. La geometría
+        anterior sirve para asociar su palma en la cámara fija, nunca para
+        iniciar el viaje ni calcular un destino sin una pose actual.
+        """
+        if not self._valid_hand_observation(hand_state, frame, now):
+            self._expire_interest_confirmation(now)
+            return
+        sequence, captured = hand_state["sequence"], hand_state["captured_at"]
+        if sequence == self._last_sequence:
+            return
+        self._last_sequence = sequence
+        if self._interest_position is None or self._interest_corners is None or calibration is None:
+            return
+        matching = []
+        hands = hand_state.get("hands", [])
+        for hand in hands if isinstance(hands, list) else []:
+            if not isinstance(hand, dict):
+                continue
+            try:
+                box = [_finite(value, "La caja de la mano") for value in hand["bbox_px"]]
+                if (len(box) != 4 or not 0 <= box[0] < box[2] <= calibration.width
+                        or not 0 <= box[1] < box[3] <= calibration.height
+                        or _finite(hand.get("confidence"), "La confianza") < .5):
+                    continue
+                position = self._hand_position(hand, box)
+                if self._position_distance_mm(self._interest_position, position,
+                        self._interest_corners, calibration) <= self.HAND_ASSOCIATION_DISTANCE_MM:
+                    matching.append((self._interest_distance, box, position))
+            except (ValueError, TypeError, KeyError, HomeBehaviorError, cv2.error):
+                continue
+        self._interest_presence(matching, captured, self._interest_corners, calibration)
 
     def _fear_candidates(self, hands, corners, calibration):
         # Acercarse a la mano elegida no equivale a que esa mano se acerque al
@@ -218,8 +279,12 @@ class HomeBehavior:
             self._reset_interest_confirmation()
         if self._curious or self._returning or self._interest_latched:
             return None
-        minimum = max(self.CURIOSITY_MIN_DISTANCE_MM, self._distance + 100.)
-        distant = [hand for hand in hands if hand[0] >= minimum]
+        minimum = max(self.CURIOSITY_MIN_DISTANCE_MM, self._distance + 50.)
+        distant = [hand for hand in hands if hand[0] >= minimum or (
+            self._interest_position is not None
+            and hand[0] >= max(self._distance, minimum - self.CURIOSITY_DISTANCE_HYSTERESIS_MM)
+            and self._position_distance_mm(self._interest_position, hand[2], corners, calibration)
+                <= self.HAND_ASSOCIATION_DISTANCE_MM)]
         if not distant:
             if hands:
                 self._reset_interest_confirmation()
@@ -240,9 +305,11 @@ class HomeBehavior:
             # Un resultado fresco no demuestra que la mano permaneció visible
             # durante un hueco sin resultados. Esos intervalos no suman espera.
             if 0 <= elapsed <= self.MAX_DETECTION_AGE_SECONDS:
-                self._far_hand_seconds += elapsed
+                self._far_hand_seconds = min(self.CURIOSITY_SECONDS, self._far_hand_seconds + elapsed)
         self._interest_box = list(chosen[1])
         self._interest_position = list(chosen[2])
+        self._interest_distance = chosen[0]
+        self._interest_corners = [list(point) for point in corners]
         self._interest_last_seen = captured
         self._interest_was_visible = True
         if self._far_hand_seconds + 1e-9 >= self.CURIOSITY_SECONDS:
@@ -292,8 +359,12 @@ class HomeBehavior:
                 "interest_target_px": list(self._interest_target) if self._interest_target is not None else None,
                 "far_hand_seconds": round(self._far_hand_seconds, 2),
                 "curiosity_wait_seconds": self.CURIOSITY_SECONDS,
-                "curiosity_distance_mm": max(self.CURIOSITY_MIN_DISTANCE_MM, self._distance + 100.),
+                "curiosity_distance_mm": max(self.CURIOSITY_MIN_DISTANCE_MM, self._distance + 50.),
                 "interest_stand_off_mm": self.CURIOSITY_STAND_OFF_MM,
+                "curiosity_status": self._curiosity_status if self._enabled else "disabled",
+                "curiosity_attempt_count": self._curiosity_attempt_count,
+                "curiosity_blocked_reason": self._curiosity_blocked_reason,
+                "curiosity_retry_in_s": round(max(0., self._curiosity_retry_at - self.clock()), 2),
                 "curiosity_count": self._curiosity_count,
                 "trigger_count": self._trigger_count, "detector": dict(self._detector)}
 
@@ -317,6 +388,8 @@ class HomeBehavior:
             self._curious = self._interest_reached = self._interest_latched = False
             self._interest_target = None
             self._attractor_anchor = None
+            self._curiosity_status = "disabled"
+            self._clear_curiosity_retry()
             self._phase, self._message = "disabled", "Casa guardada. Activa la reacción para vigilar las manos."
             self._reset_observations()
         self._save()
@@ -365,6 +438,8 @@ class HomeBehavior:
             self._curious = self._interest_reached = self._interest_latched = False
             self._interest_target = None
             self._attractor_anchor = None
+            self._curiosity_status = "no_hand" if enabled else "disabled"
+            self._clear_curiosity_retry()
             self._stop_signature = self._stop_key(remote) if enabled else None
             self._reset_observations()
             self._phase = "watching" if enabled else "disabled"
@@ -381,6 +456,8 @@ class HomeBehavior:
             self._curious = self._interest_reached = self._interest_latched = False
             self._interest_target = None
             self._attractor_anchor = None
+            self._curiosity_status = "disabled"
+            self._clear_curiosity_retry()
             self._phase, self._message = "disabled", str(reason)
             self._reset_observations()
 
@@ -435,6 +512,7 @@ class HomeBehavior:
                     return self.state()
                 else:
                     self._phase, self._message = "returning", "Me asusté. Volviendo a Casa…"
+                    self._curiosity_status = "returning"
                     return self.state()
             if self._changed_source(frame, self._source):
                 self.cancel("La cámara cambió. Marca Casa de nuevo en esta vista.")
@@ -444,6 +522,7 @@ class HomeBehavior:
                     self._curious = False
                     self._interest_reached = True
                     self._phase, self._message = "interest_reached", "Llegué al punto de interés."
+                    self._curiosity_status = "reached"
                 elif navigation.get("phase") in {"error", "stopped", "stopping"}:
                     self.cancel("Acercamiento cancelado. Activa la reacción de nuevo para continuar.")
                     return self.state()
@@ -453,6 +532,7 @@ class HomeBehavior:
                 self._interest_reached = False
                 self._interest_target = None
                 self._attractor_anchor = None
+                self._curiosity_status = "no_hand"
             age = frame.get("frame_age_ms")
             if (not self._matches(frame, self._source) or calibration is None
                     or frame.get("visible") is not True or frame.get("running") is False
@@ -460,23 +540,23 @@ class HomeBehavior:
                     or isinstance(age, bool) or not math.isfinite(age) or not 0 <= age <= self.MAX_FRAME_AGE_MS):
                 self._phase, self._message = (("curious", "Voy al punto de interés que elegí.") if self._curious else
                     ("waiting_vision", "Esperando ver el centro del robot. Casa sigue guardada."))
+                self._curiosity_status = "curious" if self._curious else "waiting_vision"
+                self._observe_hand_without_pose(hand_state, frame, calibration, now)
                 self._reset_observations(preserve_interest=True)
                 return self.state()
             if self.robot is not None and (remote.get("connected") is not True or remote.get("ready") is not True):
                 self._phase, self._message = (("curious", "Voy al punto de interés que elegí.") if self._curious else
                     ("waiting_connection", "Esperando conexión con el robot."))
+                self._curiosity_status = "curious" if self._curious else "waiting_connection"
+                self._observe_hand_without_pose(hand_state, frame, calibration, now)
                 self._reset_observations(preserve_interest=True)
                 return self.state()
             captured = hand_state.get("captured_at") if isinstance(hand_state, dict) else None
             sequence = hand_state.get("sequence") if isinstance(hand_state, dict) else None
-            if (not isinstance(hand_state, dict) or hand_state.get("ready") is not True
-                    or not isinstance(captured, Real) or isinstance(captured, bool)
-                    or not math.isfinite(captured) or not 0 <= now - captured <= self.MAX_DETECTION_AGE_SECONDS
-                    or type(sequence) is not int or sequence < 0
-                    or any(hand_state.get(key) != frame.get(key) for key in ("frame_width", "frame_height"))
-                    or hand_state.get("camera_id", frame.get("camera_id")) != frame.get("camera_id")):
+            if not self._valid_hand_observation(hand_state, frame, now):
                 self._phase, self._message = (("curious", "Voy al punto de interés que elegí.") if self._curious else
                     ("waiting_detector", "Esperando una detección reciente de manos."))
+                self._curiosity_status = "curious" if self._curious else "no_hand"
                 self._reset_observations(preserve_interest=True)
                 return self.state()
             if sequence == self._last_sequence:
@@ -511,25 +591,43 @@ class HomeBehavior:
                 interest = self._interest_presence(detected, captured, frame["marker_corners"], calibration)
                 if self._curious:
                     self._phase, self._message = "curious", "Voy al punto de interés que elegí."
+                    self._curiosity_status = "curious"
                     return self.state()
                 if interest is None:
-                    if self._interest_since is not None and not self._interest_latched:
+                    if self._curiosity_blocked_reason and now + 1e-9 < self._curiosity_retry_at:
+                        self._curiosity_status = "retrying"
+                        self._phase, self._message = "watching", "No pude acercarme todavía. Volveré a calcular el camino."
+                    elif self._interest_since is not None and not self._interest_latched:
                         self._phase, self._message = "observing_hand", "Observo una mano lejana…"
+                        self._curiosity_status = "confirming"
                     elif self._interest_reached:
                         self._phase, self._message = "interest_reached", "Llegué al punto de interés."
+                        self._curiosity_status = "reached"
                     else:
                         self._phase = "at_home" if at_home else "watching"
                         self._message = "En Casa." if at_home else "Vigilando las manos cerca del robot."
+                        self._curiosity_status = "too_close" if detected else "no_hand"
+                        if detected:
+                            minimum = max(self.CURIOSITY_MIN_DISTANCE_MM, self._distance + 50.)
+                            self._message = f"Mano a {self._nearest:.0f} mm. La curiosidad comienza desde {minimum:.0f} mm."
+                    return self.state()
+                if now + 1e-9 < self._curiosity_retry_at:
+                    self._curiosity_status = "retrying"
+                    self._phase, self._message = "watching", "No pude acercarme todavía. Volveré a calcular el camino."
                     return self.state()
                 action = "curiosity"
-                self._curious = self._interest_latched = True
+                self._curious = True
+                self._interest_latched = False
                 self._interest_reached = False
                 self._interest_target = None
                 self._attractor_anchor = list(self._interest_position)
                 self._phase, self._message = "curious", "Me da curiosidad. Voy a acercarme."
+                self._curiosity_status = "planning"
+                self._curiosity_attempt_count += 1
                 corners = [list(point) for point in frame["marker_corners"]]
                 stand_off = self.CURIOSITY_STAND_OFF_MM
             else:
+                self._curiosity_status = "curious" if self._curious else "too_close"
                 self._reset_interest_confirmation()
                 self._interest_absent_since = None
                 self._far_since = None
@@ -552,6 +650,8 @@ class HomeBehavior:
                 self._interest_target = None
                 self._attractor_anchor = None
                 self._returning = self._latched = True
+                self._curiosity_status = "returning"
+                self._clear_curiosity_retry()
                 self._last_trigger = now
                 self._phase, self._message = "returning", "Me asusté. Volviendo a Casa…"
             self._generation += 1
@@ -574,19 +674,27 @@ class HomeBehavior:
                         self._phase = "error"
                         self._message = str(exc) if isinstance(exc, RuntimeError) else "No se pudo calcular el regreso a Casa."
                     else:
-                        # Una mano puede estar junto a un borde o dentro del
-                        # obstáculo dibujado. No perder por ello la reacción de
-                        # refugio ni recalcular el mismo episodio cada imagen.
+                        # Un cálculo fallido no consume el gesto para siempre.
+                        # Se conserva la reacción y se reintenta con la mano
+                        # todavía visible, con una pausa entre intentos.
                         self._curious = False
+                        self._interest_latched = False
                         self._attractor_anchor = None
                         self._phase = "watching"
-                        self._message = "No encontré espacio para acercarme. Sigo atento a las manos."
+                        self._curiosity_status = "retrying"
+                        self._curiosity_blocked_reason = (str(exc) if isinstance(exc, RuntimeError)
+                            else "No se pudo calcular el acercamiento a la mano.")
+                        self._curiosity_retry_at = self.clock() + self.CURIOSITY_RETRY_SECONDS
+                        self._message = "No pude acercarme todavía. Volveré a calcular el camino."
         else:
             with self._lock:
                 if generation == self._generation and self._enabled:
                     if action == "home":
                         self._trigger_count += 1
                     else:
+                        self._interest_latched = True
+                        self._curiosity_status = "curious"
+                        self._clear_curiosity_retry()
                         target = result.get("target_px") if isinstance(result, dict) else None
                         self._interest_target = list(target) if isinstance(target, (list, tuple)) and len(target) == 2 else None
                         self._curiosity_count += 1

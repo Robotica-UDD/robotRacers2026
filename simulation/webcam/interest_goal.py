@@ -9,8 +9,42 @@ import cv2
 import numpy as np
 
 from .navigation_geometry import _homographies, _project, observe_robot
+from .obstacle_planner import _grid, _grid_anchor
 from .pose_obstacle_planner import _Scene, plan_pose_path
 from .robot_footprint import ROBOT_RADIUS_MM, ROBOT_FOOTPRINT_MM
+
+
+def _reachable_component(scene, center_px, deadline):
+    """Descarta regiones desconectadas antes de buscar maniobras de la huella.
+
+    Es solo un rechazo preliminar. Cada candidato conservado todavía necesita
+    el plan continuo con la huella orientada. Si el centro o un candidato no
+    tienen ancla por la discretización, decide ese plan exacto, no la rejilla.
+    """
+    try:
+        blocked, minimum, step, _ = _grid(scene.plane, 0.,
+            min(deadline, time.monotonic() + .12), camera_clearance=0.)
+        # En campos muy extensos la rejilla adaptativa puede cerrar pasos
+        # físicos por cuantización. Conservar entonces el buscador de poses.
+        if step > .01:
+            return None
+        first = _grid_anchor(scene.plane.world(center_px), blocked, minimum,
+                             step, scene.plane, 0., camera_clearance=0.)
+        _, labels = cv2.connectedComponents((~blocked).astype(np.uint8), connectivity=4)
+        labels = labels.reshape(-1)
+        component = labels[first]
+    except ValueError:
+        return None
+
+    def reachable(point_px):
+        try:
+            index = _grid_anchor(scene.plane.world(point_px), blocked, minimum,
+                                 step, scene.plane, 0., camera_clearance=0.)
+        except ValueError:
+            return True
+        return labels[index] == component
+
+    return reachable
 
 
 def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *, arrival_m=.025):
@@ -41,10 +75,11 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
         raise ValueError("La mano ya está a la distancia de observación.")
     away = center - midpoint
     away /= np.linalg.norm(away)
+    deadline = time.monotonic() + .8
     scene = _Scene(corners, calibration, obstacles, ROBOT_FOOTPRINT_MM)
     observed = observe_robot(corners, calibration)
     heading = math.radians(observed["heading_deg"])
-    deadline = time.monotonic() + .8
+    reachable = _reachable_component(scene, observed["center_px"], deadline) if obstacles else None
     for extra in (0., .05, .10, .20, .35):
         desired = required + extra
         if desired >= initial_gap - .030:
@@ -67,6 +102,8 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
             candidate = midpoint + direction * high
             image = _project(backward, candidate, [0., 0.])
             if not (0 <= image[0] < calibration.width and 0 <= image[1] < calibration.height):
+                continue
+            if reachable is not None and not reachable(image.tolist()):
                 continue
             for turn in (0., math.pi / 2., -math.pi / 2., math.pi,
                          math.pi / 4., -math.pi / 4., 3 * math.pi / 4., -3 * math.pi / 4.):

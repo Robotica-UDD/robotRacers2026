@@ -73,7 +73,7 @@ def test_two_seconds_of_a_far_hand_choose_a_single_fixed_point(rig):
 
 def test_curiosity_wait_and_spacing_stay_outside_a_larger_fear_threshold(rig):
     state = rig[2].set_distance(450.)
-    assert state['curiosity_distance_mm'] == 550.
+    assert state['curiosity_distance_mm'] == 500.
     assert state['interest_stand_off_mm'] == 100.
     assert state['curiosity_wait_seconds'] == 2.
 
@@ -168,7 +168,7 @@ def test_palm_position_is_preferred_over_box_center_for_hand_continuity(rig):
 
 
 @pytest.mark.parametrize('failure', ['marker', 'detector'])
-def test_brief_frame_or_detector_loss_pauses_confirmation_without_counting_the_gap(rig, failure):
+def test_brief_loss_counts_only_fresh_visible_hands_even_when_the_marker_is_missing(rig, failure):
     distant(rig, 1)
     rig[3].advance(.2)
     distant(rig, 2)
@@ -181,7 +181,8 @@ def test_brief_frame_or_detector_loss_pauses_confirmation_without_counting_the_g
         distant(rig, 3, ready=False)
     rig[3].advance(.6)
     state = distant(rig, 4)
-    assert state['far_hand_seconds'] == .2 and not state['curious']
+    expected = .4 if failure == 'marker' else .2
+    assert state['far_hand_seconds'] == expected and not state['curious']
     for sequence in range(5, 14):
         rig[3].advance(.2)
         state = distant(rig, sequence)
@@ -203,6 +204,76 @@ def test_an_intermediate_distance_is_neither_fear_nor_curiosity(rig):
         rig[3].advance(.2)
     assert not rig[1].approaches and not rig[1].returns
     assert not rig[2].state()['curious']
+
+
+def test_the_gap_between_fear_and_curiosity_is_reported_instead_of_silently_watching(rig):
+    state = sample(rig, 1, box=(850., 420., 930., 500.))
+    assert state['curiosity_status'] == 'too_close'
+    assert state['curiosity_distance_mm'] == 200.
+    assert 150. < state['nearest_hand_mm'] < 200.
+    assert '200' in state['message'] and state['far_hand_seconds'] == 0.
+
+
+def test_threshold_jitter_does_not_reset_a_hand_already_being_confirmed(rig):
+    for sequence in range(1, 12):
+        # Comienza por encima de 200 mm y oscila a 192 mm, dentro de la histéresis.
+        left = 870. if sequence % 2 else 860.
+        state = sample(rig, sequence, box=(left, 420., left + 80., 500.))
+        rig[3].advance(.2)
+    assert state['curious'] and state['far_hand_seconds'] == 2.
+    assert len(rig[1].approaches) == 1
+
+
+def test_apriltag_flicker_does_not_freeze_the_counter_of_a_continuously_visible_hand(rig):
+    distant(rig, 1)
+    for sequence in range(2, 22):
+        rig[3].advance(.1)
+        rig[0].update(visible=bool(sequence % 2))
+        state = distant(rig, sequence)
+        if sequence % 2 == 0:
+            assert state['curiosity_status'] == 'waiting_vision'
+            assert not rig[1].approaches
+    assert state['curious'] and state['far_hand_seconds'] == 2.
+    assert len(rig[1].approaches) == 1
+
+
+def test_visible_hand_can_finish_confirmation_without_marker_but_trip_waits_for_a_current_pose(rig):
+    distant(rig, 1)
+    rig[0].update(visible=False, marker_corners=None)
+    for sequence in range(2, 22):
+        rig[3].advance(.1)
+        state = distant(rig, sequence)
+    assert state['far_hand_seconds'] == 2. and state['curiosity_status'] == 'waiting_vision'
+    assert not rig[1].approaches
+    rig[0].pose(scale=800.)
+    rig[0].update(visible=True)
+    rig[3].advance(.1)
+    state = distant(rig, 22)
+    assert state['curious'] and len(rig[1].approaches) == 1
+
+
+def test_hand_absence_during_marker_loss_does_not_count_as_visible_presence(rig):
+    distant(rig, 1)
+    rig[3].advance(.2)
+    distant(rig, 2)
+    rig[0].update(visible=False, marker_corners=None)
+    for sequence in range(3, 7):
+        rig[3].advance(.2)
+        distant(rig, sequence, hands=[])
+    rig[0].pose(scale=800.)
+    rig[0].update(visible=True)
+    rig[3].advance(.2)
+    state = distant(rig, 7)
+    assert state['far_hand_seconds'] == .2 and not rig[1].approaches
+
+
+def test_invalid_detector_polls_between_fresh_results_do_not_freeze_visible_presence(rig):
+    distant(rig, 1)
+    for sequence in range(2, 22):
+        rig[3].advance(.1)
+        state = distant(rig, sequence, ready=bool(sequence % 2))
+    assert state['curious'] and state['far_hand_seconds'] == 2.
+    assert len(rig[1].approaches) == 1
 
 
 def test_low_confidence_cannot_accumulate_curiosity(rig):
@@ -363,22 +434,73 @@ def test_camera_change_cancels_curiosity_and_forgets_its_target(rig):
     assert not state['enabled'] and state['interest_target_px'] is None
 
 
-def test_unreachable_interest_keeps_the_home_reaction_and_does_not_retry_the_same_hand(rig):
+def test_unreachable_interest_keeps_home_available_and_limits_retries_without_hiding_the_reason(rig):
+    attempts = []
     def blocked(*args, **kwargs):
+        attempts.append(rig[3].now)
         raise HomeBehaviorError('No hay espacio para acercarse.')
     rig[1].approach_hand = blocked
     state = confirm(rig)
     assert state['enabled'] and not state['curious']
-    assert 'espacio' in state['message']
-    for sequence in range(22, 50):
+    assert 'espacio' in state['curiosity_blocked_reason']
+    assert state['curiosity_status'] == 'retrying' and state['curiosity_retry_in_s'] == 2.
+    assert not rig[2]._interest_latched
+    for sequence in range(12, 41):
         rig[3].advance(.2)
-        distant(rig, sequence)
+        state = distant(rig, sequence)
+        assert state['curiosity_status'] == 'retrying'
+        assert state['curiosity_blocked_reason'] == 'No hay espacio para acercarse.'
+    assert len(attempts) == 3 and all(b - a >= 1.99 for a, b in zip(attempts, attempts[1:]))
     assert rig[2].state()['curiosity_count'] == 0
     rig[3].advance(.2)
     sample(rig, 50, box=NEAR)
     rig[3].advance(.2)
     state = sample(rig, 51, box=NEAR)
     assert state['returning'] and rig[1].starts == 1
+
+
+def test_the_same_stationary_hand_retries_after_a_transient_failure_and_then_uses_one_fixed_goal(rig):
+    original = rig[1].approach_hand
+    attempts = []
+    def transient(*args, **kwargs):
+        attempts.append(rig[3].now)
+        if len(attempts) == 1:
+            raise HomeBehaviorError('El cálculo anterior agotó el tiempo disponible.')
+        return original(*args, **kwargs)
+    rig[1].approach_hand = transient
+    state = confirm(rig)
+    assert state['curiosity_status'] == 'retrying' and state['curiosity_attempt_count'] == 1
+    assert state['curiosity_blocked_reason']
+    for sequence in range(12, 21):
+        rig[3].advance(.2)
+        state = distant(rig, sequence)
+        assert len(attempts) == 1 and state['curiosity_blocked_reason']
+    rig[3].advance(.2)
+    state = distant(rig, 21)
+    assert state['curious'] and state['curiosity_attempt_count'] == 2
+    assert state['curiosity_count'] == 1 and state['curiosity_blocked_reason'] is None
+    assert state['curiosity_retry_in_s'] == 0. and state['interest_target_px'] == [930., 480.]
+    for sequence in range(22, 50):
+        rig[3].advance(.2)
+        distant(rig, sequence)
+    assert len(attempts) == 2 and len(rig[1].approaches) == 1
+
+
+def test_a_manual_stop_during_retry_cancels_the_pending_approach_and_does_not_rearm(rig):
+    attempts = []
+    def blocked(*args, **kwargs):
+        attempts.append(1)
+        raise HomeBehaviorError('No hay espacio.')
+    rig[1].approach_hand = blocked
+    confirm(rig)
+    rig[1].robot.update(stop_reason='button_stop', resume_blocked=True)
+    rig[3].advance(.2)
+    state = distant(rig, 12)
+    assert not state['enabled'] and state['curiosity_status'] == 'disabled'
+    for sequence in range(13, 35):
+        rig[3].advance(.2)
+        distant(rig, sequence)
+    assert len(attempts) == 1 and rig[1].stops == 0
 
 
 def test_manual_cancel_during_interest_planning_invalidates_the_late_authorization(rig):

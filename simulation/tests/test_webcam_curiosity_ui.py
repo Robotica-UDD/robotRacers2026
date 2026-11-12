@@ -40,6 +40,86 @@ assert.equal($('home-status').textContent,'Observando una mano · 0,0 / 2 s');
 """)
 
 
+def test_hand_confirmation_is_visible_even_when_the_main_phase_is_watching():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='confirming';
+homeState.nearest_hand_mm=230.4;homeState.far_hand_seconds=1.3;homeState.curiosity_wait_seconds=2;
+renderHomeUI();
+assert.equal($('home-hand-status').hidden,false);
+assert.equal($('home-hand-status').textContent,'Mano a 230 mm · 1,3 / 2 s');
+homeState.far_hand_seconds=1.8;renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Mano a 230 mm · 1,8 / 2 s');
+""")
+
+
+def test_hand_between_fear_and_curiosity_shows_the_actual_distance_and_required_distance():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='too_close';
+homeState.nearest_hand_mm=180;homeState.curiosity_distance_mm=200;
+renderHomeUI();
+assert.equal($('home-hand-status').hidden,false);
+assert.equal($('home-hand-status').textContent,'Mano a 180 mm · Curiosidad desde 200 mm');
+homeState.curiosity_distance_mm=300;renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Mano a 180 mm · Curiosidad desde 300 mm');
+""")
+
+
+def test_real_planning_failure_and_retry_remain_visible_after_the_generic_message_changes():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='retrying';
+homeState.curiosity_retry_in_s=1.2;homeState.curiosity_attempt_count=2;
+homeState.curiosity_blocked_reason='No hay paso desde el centro del robot al punto de acercamiento.';
+homeState.message='No encontré espacio para acercarme.';
+renderHomeUI();
+assert.equal($('home-hand-status').hidden,false);
+assert.equal($('home-hand-status').textContent,'Buscando acercamiento · reintento en 1,2 s');
+assert.equal($('home-hand-reason').hidden,false);
+const reason=$('home-hand-reason').textContent;
+assert.equal(reason,'Acercamiento: No hay paso desde el centro del robot al punto de acercamiento.');
+homeState.message='Vigilando las manos cerca del robot.';
+homeState.curiosity_status='no_hand';renderHomeUI();
+assert.equal($('home-message').textContent,'Vigilando las manos cerca del robot.');
+assert.equal($('home-hand-reason').textContent,reason);
+assert.equal($('home-hand-reason').hidden,false);
+homeState.curiosity_status='planning';renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Buscando acercamiento · intento 2');
+homeState.curiosity_blocked_reason=null;renderHomeUI();
+assert.equal($('home-hand-reason').hidden,true);
+assert.equal($('home-hand-reason').textContent,'');
+""")
+
+
+def test_a_brief_detection_or_marker_loss_shows_the_preserved_progress_without_claiming_motion():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.far_hand_seconds=.9;
+homeState.curiosity_wait_seconds=2;homeState.curiosity_status='no_hand';
+renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Sin mano detectada · 0,9 / 2 s');
+homeState.curiosity_status='waiting_vision';renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Esperando el marcador · 0,9 / 2 s');
+homeState.curiosity_status='waiting_connection';renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Esperando al robot · 0,9 / 2 s');
+homeState.enabled=false;renderHomeUI();
+assert.equal($('home-hand-status').hidden,true);
+""")
+
+
+def test_missing_or_invalid_diagnostic_values_do_not_produce_nan_or_a_false_failure():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='too_close';
+homeState.nearest_hand_mm=NaN;homeState.curiosity_distance_mm=Infinity;homeState.distance_mm=NaN;
+homeState.curiosity_blocked_reason='   ';renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Mano detectada · Curiosidad desde 200 mm');
+assert.equal($('home-hand-reason').hidden,true);
+homeState.curiosity_status='retrying';homeState.curiosity_retry_in_s=NaN;renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Buscando acercamiento · preparando reintento…');
+homeState.curiosity_status='confirming';homeState.far_hand_seconds=9;homeState.curiosity_wait_seconds=2;renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Mano detectada · 2,0 / 2 s');
+navigationTool='home';renderHomeUI();
+assert.equal($('home-hand-status').hidden,true);
+""")
+
+
 def test_detector_labels_use_the_active_model_and_default_to_mediapipe():
     run(r"""
 homeState.detector={status:'ready'};

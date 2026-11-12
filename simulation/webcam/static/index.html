@@ -139,6 +139,8 @@
           <h2 id="home-title" class="section-label">Casa</h2>
           <p id="home-status" class="navigation-status" data-mode="idle" role="status">Sin punto de casa</p>
           <p id="home-message" class="navigation-instruction">Marca Casa para activar las reacciones a manos.</p>
+          <p id="home-hand-status" class="home-model" role="status" hidden></p>
+          <p id="home-hand-reason" class="home-model error" role="status" hidden></p>
           <div class="home-actions"><button id="home-mark" class="button secondary" type="button" disabled>Marcar casa</button><button id="home-clear" class="button secondary" type="button" disabled>Borrar casa</button></div>
           <div class="obstacle-margin-row home-distance"><label for="home-distance">Mano cerca del robot</label><span class="obstacle-margin-value"><input id="home-distance" type="number" min="50" max="500" step="10" value="150" inputmode="numeric" aria-label="Distancia de reacción a una mano, en milímetros" disabled><small>mm aprox.</small></span></div>
           <button id="home-toggle" class="button secondary home-toggle" type="button" aria-pressed="false" disabled>Reaccionar a manos</button>
@@ -696,6 +698,29 @@
       }
       $('home-status').dataset.mode = homeState?.phase === 'error' ? 'error' : enabled || reacting ? 'active' : 'idle';
       $('home-message').textContent = editing ? 'Haz clic en el punto de inicio. Marcarlo no mueve el robot.' : homeState?.message || 'Marca Casa para activar las reacciones a manos.';
+      const handStatus = $('home-hand-status'), handReason = $('home-hand-reason');
+      const curiosityStatus = homeState?.curiosity_status;
+      const wait = Number.isFinite(homeState?.curiosity_wait_seconds) && homeState.curiosity_wait_seconds > 0 ? homeState.curiosity_wait_seconds : 2;
+      const seen = Math.max(0, Math.min(wait, Number.isFinite(homeState?.far_hand_seconds) ? homeState.far_hand_seconds : 0));
+      const progress = `${seen.toFixed(1).replace('.', ',')} / ${wait} s`;
+      const nearest = Number.isFinite(homeState?.nearest_hand_mm) && homeState.nearest_hand_mm >= 0 ? `Mano a ${Math.round(homeState.nearest_hand_mm)} mm` : '';
+      const minimum = Number.isFinite(homeState?.curiosity_distance_mm) && homeState.curiosity_distance_mm > 0 ? homeState.curiosity_distance_mm : Math.max(200, (Number.isFinite(homeState?.distance_mm) ? homeState.distance_mm : 150) + 50);
+      const retry = Number.isFinite(homeState?.curiosity_retry_in_s) ? Math.max(0, homeState.curiosity_retry_in_s) : 0;
+      const attempts = Number.isInteger(homeState?.curiosity_attempt_count) ? Math.max(0, homeState.curiosity_attempt_count) : 0;
+      let handDetail = '';
+      if (curiosityStatus === 'too_close') handDetail = `${nearest || 'Mano detectada'} · Curiosidad desde ${Math.round(minimum)} mm`;
+      else if (curiosityStatus === 'confirming') handDetail = `${nearest || 'Mano detectada'} · ${progress}`;
+      else if (curiosityStatus === 'planning') handDetail = `Buscando acercamiento${attempts > 1 ? ` · intento ${attempts}` : '…'}`;
+      else if (curiosityStatus === 'retrying') handDetail = `Buscando acercamiento · ${retry > 0 ? `reintento en ${retry.toFixed(1).replace('.', ',')} s` : 'preparando reintento…'}`;
+      else if (curiosityStatus === 'no_hand') handDetail = `Sin mano detectada${seen > 0 ? ` · ${progress}` : ''}`;
+      else if (curiosityStatus === 'waiting_vision') handDetail = `Esperando el marcador${seen > 0 ? ` · ${progress}` : ''}`;
+      else if (curiosityStatus === 'waiting_connection') handDetail = `Esperando al robot${seen > 0 ? ` · ${progress}` : ''}`;
+      else if (!curiosityStatus && nearest && !reacting) handDetail = `${nearest} · ${progress}`;
+      handStatus.textContent = handDetail;
+      handStatus.hidden = !homeAvailable || editing || !enabled || !handDetail;
+      const blockedReason = typeof homeState?.curiosity_blocked_reason === 'string' ? homeState.curiosity_blocked_reason.trim() : '';
+      handReason.textContent = blockedReason ? `Acercamiento: ${blockedReason}` : '';
+      handReason.hidden = !homeAvailable || editing || !blockedReason;
       $('navigation-home-mode').setAttribute('aria-pressed', String(editing));
       $('navigation-home-mode').disabled = !canMarkHome();
       $('home-mark').disabled = !canMarkHome();
