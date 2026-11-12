@@ -137,23 +137,29 @@ No puedes añadir puntos ni recalibrar mientras un recorrido esté activo.
 **Borrar puntos** sí está disponible durante el movimiento y lo detiene.
 La prueba de **Avanzar 1 segundo** también queda bloqueada durante la navegación.
 
-## Dibujar obstáculos y rodearlos
+## Dibujar un perímetro de barrera
 
-1. Deja el robot detenido y la cámara fija. Pulsa **Dibujar obstáculo**.
-2. Marca las cuatro esquinas siguiendo el borde del objeto en orden, por ejemplo
-   superior izquierda, superior derecha, inferior derecha e inferior izquierda.
-   El cuarto clic cierra y guarda el polígono. No cruces sus lados. Puedes
-   cancelar un dibujo incompleto o pulsar Escape.
-3. Repite para los demás obstáculos. Los polígonos rojos representan los objetos;
-   la zona amarilla representa el espacio reservado para rodearlos.
-4. El **Margen de seguridad** admite de **0 a 200 mm**. Actualmente empieza en
-   **0 mm**, sin separación adicional; puedes aumentar el valor para recuperarla.
-5. Marca tus destinos y revisa el camino verde antes de pulsar
-   **Iniciar recorrido**. El planificador introduce puntos intermedios para
-   rodear los obstáculos y mantiene el orden de tus destinos numerados.
-6. **Borrar obstáculos** detiene el recorrido y elimina solamente los obstáculos.
+1. Deja el robot detenido y la cámara fija. Pulsa **Dibujar perímetro**.
+2. Marca el punto **A** y después tantos vértices como necesites, siguiendo
+   el borde en orden. Admite contornos cóncavos; no está limitado a rectángulos.
+3. Después de marcar al menos tres vértices, haz clic de nuevo sobre **A** para
+   cerrar y guardar. El cuarto clic no cierra el dibujo automáticamente.
+   El tramo de regreso al inicio también es una barrera.
+4. Las líneas rojas representan las barreras; **el interior queda libre**.
+   El robot puede recorrerlo y calcular desvíos dentro del perímetro, pero
+   no atravesar sus lados. Si se dibuja un contorno cerrado a su alrededor,
+   un destino al otro lado no pertenece al mismo espacio accesible.
+5. Puedes deshacer el último vértice o cancelar un dibujo incompleto con
+   **Cancelar dibujo** o Escape. Solo se guarda al cerrar en A. Admite hasta
+   128 vértices por dibujo y 512 tramos guardados en total.
+6. El **Margen de seguridad** conserva su valor de **0 a 200 mm**. En **0 mm**
+   no añade separación adicional; sigue comprobando el tamaño real del robot
+   para evitar que sus ruedas o carrocería atraviesen la línea.
+7. Marca tus destinos y revisa el camino verde antes de pulsar
+   **Iniciar recorrido**. Los destinos se conservan en el orden marcado.
+8. **Borrar perímetros** detiene el recorrido y elimina el mapa de barreras.
    Conserva tus destinos, la calibración y las velocidades. **Borrar puntos**
-   conserva el mapa de obstáculos.
+   conserva las barreras.
 
 Con **0 mm**, la planificación usa el **contorno orientado del robot**: carrocería,
 ruedas y portador del marcador, proyectados desde el centro entre ruedas según
@@ -490,6 +496,11 @@ local `X-Requested-With: XMLHttpRequest`, igual que los controles anteriores.
 
 El mapa se edita mediante `POST /api/navigation/obstacles`, con la lista completa
 `polygons_px`, la identidad y resolución de cámara y `expected_route_revision`.
+Cada tramo nuevo contiene dos puntos: `[[x1, y1], [x2, y2]]`. El panel convierte
+el contorno cerrado en sus segmentos consecutivos y añade el último hacia A;
+no envía ni rellena su área interior. El nombre del campo se conserva por
+compatibilidad con clientes antiguos, cuyos cuadriláteros siguen siendo sólidos.
+El límite de esta petición es 64 KiB para admitir el mapa completo.
 `POST /api/navigation/clear-obstacles` detiene y vacía solo el mapa;
 `POST /api/navigation/obstacle-settings` recibe `safety_margin_mm` y la revisión
 esperada. Cada edición invalida las órdenes anteriores y obliga a comprobar el
@@ -588,8 +599,10 @@ la captura de imagen hasta la aplicación de una consigna.
   todo el paso. Se verifican las velocidades firmadas, el barrido orientado y
   el arco diferencial de las correcciones, además de Stop, D48 y recuperación
   de visión sin perder los destinos.
-- Se comprobó visualmente el dibujo de cuatro esquinas y el camino calculado
-  en un navegador con captura sintética y movimiento deshabilitado.
+- Las pruebas del dibujo comprueban el cierre manual en A, más de cuatro
+  vértices, concavidad, deshacer, cancelación y guardado de segmentos sin área
+  interior. La geometría verifica que el interior queda transitable y que no
+  se cruza el tramo de cierre; el movimiento se valida con ruedas simuladas.
 - Catorce pruebas C++ del controlador real, compilado sin Arduino, cubren fricción
   estática, pulsos cuantizados, arranque, regulación, saturación, parada,
   inversión con inercia y el límite de cinco segundos sin respuesta.
