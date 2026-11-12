@@ -84,7 +84,7 @@ los valores elegidos en los controles.
 
 La tarjeta **Casa** permite marcar un refugio y activar las reacciones a manos:
 regresar cuando una se acerca o visitar un punto fijo de interés si permanece
-lejos durante 4 segundos. El uso y las comprobaciones están en
+lejos durante 2 segundos. El uso y las comprobaciones están en
 [Detección de manos, curiosidad y regreso a Casa](manos-y-casa.md).
 
 1. Con el robot detenido, haz clic en los destinos sobre zonas despejadas de la
