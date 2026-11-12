@@ -1,4 +1,4 @@
-# Detección de manos y regreso a Casa
+# Detección de manos, curiosidad y regreso a Casa
 
 Configuración confirmada por el usuario en el robot real: **240 mm/s de avance
 máximo y 90°/s de giro máximo**. El panel conserva esa referencia escrita sin
@@ -15,13 +15,36 @@ sobrescribir los controles de velocidad.
 4. Una mano cercana confirmada en al menos dos imágenes y durante 150 ms
    interrumpe el recorrido y activa el regreso a Casa. Se usa la ruta calculada
    alrededor de los obstáculos dibujados y el control por encoders existente.
-5. Al llegar, el robot se queda en Casa. Conserva el recorrido anterior para
-   que puedas iniciarlo manualmente; no lo reanuda por su cuenta.
+5. Si una mano permanece lejos durante **4 segundos**, el robot fija un
+   **punto de interés** para acercarse. Se considera lejana a partir de
+   **400 mm** desde la huella del robot; si aumentas la distancia de reacción,
+   ese umbral será como mínimo la distancia de reacción más 200 mm.
+6. El punto de interés deja al menos **250 mm entre la huella del robot y el
+   recuadro de la mano**. Si la distancia de reacción es mayor de 150 mm, la
+   separación será esa distancia más 100 mm. Se comprueba que el punto sea
+   accesible alrededor de los obstáculos dibujados. Aparece como **INTERÉS**
+   en la imagen y queda fijo: mover o retirar la mano no cambia ni cancela
+   ese viaje.
+7. Una mano cercana tiene prioridad y puede interrumpir el acercamiento para
+   regresar a Casa. Al llegar a Casa o al punto de interés, conserva el recorrido
+   anterior para que puedas iniciarlo manualmente; no lo reanuda por su cuenta.
 
-**Cancelar regreso**, **Detener** y **D48** tienen prioridad. Desactivar o borrar
+La confirmación de curiosidad sigue la misma mano entre imágenes y tolera
+ausencias de hasta medio segundo. No repite el acercamiento al mismo gesto:
+la mano debe desaparecer durante un segundo antes de iniciar otra confirmación.
+No se intenta atraer al robot mientras está regresando a Casa. Si no hay un
+punto de acercamiento accesible, la vigilancia y la reacción de refugio siguen
+activas.
+
+**Cancelar regreso**, **Cancelar acercamiento**, **Detener** y **D48** tienen prioridad. Desactivar o borrar
 Casa invalida también una orden pendiente durante el cálculo de ruta. Al
 reiniciar el programa se recuperan Casa y la distancia, con la reacción
 **desactivada** hasta volver a pulsar su botón.
+
+El destino de curiosidad se alcanza con el **centro calibrado** a no más de
+25 mm del punto elegido. Esto reserva la separación solicitada al detenerse;
+la llegada habitual a los puntos del recorrido y a Casa conserva su criterio
+de cobertura por la huella del robot.
 
 La distancia es una estimación en el plano del marcador. La altura de la mano
 y la perspectiva influyen en ella. La mano inicia la reacción; los obstáculos
@@ -72,6 +95,9 @@ local inicial midió alrededor de 11 ms de inferencia media en CPU sobre ocho
 fotogramas; no es una medición de la latencia completa de reacción.
 
 Las pruebas sin hardware verifican la proximidad con el centro calibrado, la
-confirmación temporal, la persistencia desarmada, el desvío a Casa, la restauración
-del recorrido anterior y la prioridad de las paradas incluso durante planificación
-o armado. La reacción completa en el suelo debe probarse con el robot real.
+confirmación temporal, el destino fijo tras desaparecer la mano, la separación
+final, el desvío alrededor de un obstáculo, la prioridad de Casa y la restauración
+inactiva del recorrido anterior. También comprueban la prioridad de las paradas
+incluso durante planificación o armado. La reacción completa en el suelo debe
+probarse con el robot real; la separación depende de la calibración y de la altura
+de la mano respecto al plano usado.
