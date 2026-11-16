@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from contextlib import asynccontextmanager
+from dataclasses import asdict, replace
+import json
 import logging
 from pathlib import Path
 import re
@@ -24,6 +26,7 @@ from .devices import discover_cameras, _manual_options
 from .robot_link import RobotLink, make_robot_router
 from .navigation import Navigation, make_navigation_router
 from .home_service import HomeService, make_home_router
+from .illumination import IlluminationSettings, enhance_frame
 
 LOGGER = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -50,7 +53,8 @@ class CaptureSession:
                  clock: Callable = time.monotonic, stale_after_s: float = 0.75,
                  startup_timeout_s: float = 5.0, *, autoreconnect: bool | None = None,
                  reconnect_interval_s: float = 1.0, frame_gap_timeout_s: float = 0.4,
-                 camera_discovery: Callable | None = None):
+                 camera_discovery: Callable | None = None,
+                 illumination_path: Path | None = None):
         self.capture_factory = capture_factory or open_camera
         self._uses_default_capture = capture_factory is None
         # Las cámaras falsas existentes conservan el comportamiento terminal.
@@ -87,6 +91,59 @@ class CaptureSession:
         self._detection = Detection(False)
         self._jpeg: bytes | None = None
         self._placeholder_cache: dict[str, bytes] = {}
+        self._illumination = IlluminationSettings()
+        self._illumination_revision = 0
+        self._illumination_diagnostics: dict = {}
+        self._illumination_frame_revision: int | None = None
+        self._illumination_path = Path(illumination_path) if illumination_path is not None else None
+        if self._illumination_path is not None and self._illumination_path.exists():
+            try:
+                saved = json.loads(self._illumination_path.read_text(encoding="utf-8"))
+                if not isinstance(saved, dict) or saved.get("version") != 1:
+                    raise ValueError("Formato de iluminación desconocido.")
+                settings = IlluminationSettings(**saved["settings"])
+                revision = saved.get("revision", 0)
+                if type(revision) is not int or revision < 0:
+                    raise ValueError("Revisión de iluminación incorrecta.")
+                self._illumination, self._illumination_revision = settings, revision
+            except (OSError, ValueError, TypeError, KeyError):
+                LOGGER.warning("No se pudieron recuperar los ajustes de iluminación; se usa la imagen original.")
+
+    def _illumination_state_locked(self) -> dict:
+        settings = asdict(self._illumination)
+        settings.update({
+            "revision": self._illumination_revision,
+            "frame_revision": self._illumination_frame_revision,
+            "diagnostics": dict(self._illumination_diagnostics),
+            "hardware_controls": False,
+            "message": ("Imagen original." if not self._illumination.enabled else
+                        "Compensación automática activa." if self._illumination.automatic else
+                        "Ajuste manual activo."),
+        })
+        return settings
+
+    def illumination_state(self) -> dict:
+        with self._lock:
+            return self._illumination_state_locked()
+
+    def configure_illumination(self, changes: dict, expected_revision: int | None = None) -> dict:
+        """Solo cambia píxeles: no reabre cámara, modifica pose ni arma motores."""
+        with self._lock:
+            if expected_revision is not None and expected_revision != self._illumination_revision:
+                raise RuntimeError("Los ajustes de iluminación cambiaron. Vuelve a intentarlo.")
+            candidate = replace(self._illumination, **changes)
+            if self._illumination_path is not None:
+                self._illumination_path.parent.mkdir(parents=True, exist_ok=True)
+                temporary = self._illumination_path.with_name(self._illumination_path.name + ".tmp")
+                temporary.write_text(json.dumps({"version": 1, "settings": asdict(candidate),
+                                                "revision": self._illumination_revision + 1},
+                                                allow_nan=False), encoding="utf-8")
+                temporary.replace(self._illumination_path)
+            self._illumination = candidate
+            self._illumination_revision += 1
+            self._illumination_diagnostics = {}
+            self._illumination_frame_revision = None
+            return self._illumination_state_locked()
 
     def start(self, camera_index: int = 0, camera_id: str | None = None,
               camera_label: str | None = None, *, logical_camera_id: str | None = None) -> dict:
@@ -107,6 +164,8 @@ class CaptureSession:
             self._message = "Abriendo cámara…"
             self._last_frame_at = None
             self._hand_frames.clear()
+            self._illumination_diagnostics = {}
+            self._illumination_frame_revision = None
             self._jpeg = None
             self._detection = Detection(False)
             self._fps = 0.0
@@ -128,6 +187,8 @@ class CaptureSession:
             self._jpeg = None
             self._last_frame_at = None
             self._hand_frames.clear()
+            self._illumination_diagnostics = {}
+            self._illumination_frame_revision = None
             self._fps = 0.0
             self._message = "Cámara detenida."
             self._version += 1
@@ -280,7 +341,20 @@ class CaptureSession:
                     pixels = cv2.cvtColor(pixels, cv2.COLOR_GRAY2BGR)
                 elif pixels.shape[2] == 4:
                     pixels = cv2.cvtColor(pixels, cv2.COLOR_BGRA2BGR)
-                detection = self.detector.process(pixels)
+                with self._lock:
+                    illumination = self._illumination
+                    illumination_revision = self._illumination_revision
+                processing_started = time.monotonic()
+                adjusted, illumination_diagnostics = enhance_frame(pixels, illumination)
+                # Las dos imágenes tienen los mismos píxeles geométricos. El
+                # original sigue siendo candidato para no degradar un tag que
+                # ya se lee bien. Nunca se rellena información de un reflejo.
+                if illumination.enabled and hasattr(self.detector, "process_with_lighting"):
+                    detection = self.detector.process_with_lighting(pixels, adjusted)
+                else:
+                    detection = self.detector.process(adjusted)
+                if illumination.enabled:
+                    detection = replace(detection, processing_ms=(time.monotonic() - processing_started) * 1000.)
                 pose = self.overlay_provider(detection) if self.overlay_provider else None
                 route = (self.navigation_overlay_provider(detection, pose)
                          if self.navigation_overlay_provider else None)
@@ -290,7 +364,7 @@ class CaptureSession:
                          hand_frame.get("frame_width") == pixels.shape[1] and
                          hand_frame.get("frame_height") == pixels.shape[0] and
                          hand_frame.get("frame_age_ms", float("inf")) <= 250 else [])
-                display = annotate_frame(pixels, detection, pose, navigation_overlay=route, hands=hands)
+                display = annotate_frame(adjusted, detection, pose, navigation_overlay=route, hands=hands)
                 encoded, jpeg = cv2.imencode(".jpg", display, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 if not encoded:
                     raise RuntimeError("No se pudo preparar la imagen de cámara.")
@@ -308,6 +382,9 @@ class CaptureSession:
                     self._width, self._height = pixels.shape[1], pixels.shape[0]
                     self._fps = fps
                     self._jpeg = jpeg.tobytes()
+                    if illumination_revision == self._illumination_revision:
+                        self._illumination_diagnostics = illumination_diagnostics
+                        self._illumination_frame_revision = illumination_revision
                     self._message = "Robot detectado." if detection.visible else "Buscando AprilTag 0…"
                     hand_detector = self.hand_detector
                     if hand_detector is not None:
@@ -385,6 +462,7 @@ class CaptureSession:
             "marker_id": 0, "frame_age_ms": None if age is None else round(age * 1000, 1),
             "navigation_overlay_in_frame": self.navigation_overlay_provider is not None,
             "heading_convention": "0° derecha, 90° arriba; ángulo en la imagen sin espejo.",
+            "illumination": self._illumination_state_locked(),
         }
 
     def state(self) -> dict:
@@ -425,7 +503,9 @@ class StartRequest(BaseModel):
 def create_app(capture_factory: Callable | None = None, detector=None,
                clock: Callable = time.monotonic, stale_after_s: float = 0.75,
                camera_discovery: Callable | None = None, robot_link=None, hand_detector=None) -> FastAPI:
-    camera = CaptureSession(capture_factory, detector, clock, stale_after_s)
+    camera = CaptureSession(capture_factory, detector, clock, stale_after_s,
+        illumination_path=Path(__file__).resolve().parents[1] / ".runtime/camera-illumination.json"
+        if capture_factory is None else None)
     # Una cámara inyectada no corresponde al hardware del equipo de pruebas.
     choices = camera_discovery or (discover_cameras if capture_factory is None
                                   else lambda force=False: _manual_options())
@@ -476,6 +556,42 @@ def create_app(capture_factory: Callable | None = None, detector=None,
     @application.get("/api/state")
     def state():
         return camera.state()
+
+    @application.get("/api/illumination")
+    def illumination_state():
+        return camera.illumination_state()
+
+    @application.post("/api/illumination")
+    async def illumination_settings(request: Request):
+        if request.headers.get("X-Requested-With") != "XMLHttpRequest":
+            raise HTTPException(403, "La solicitud debe realizarse desde el panel local.")
+        data = bytearray()
+        async for chunk in request.stream():
+            data.extend(chunk)
+            if len(data) > 2048:
+                raise HTTPException(413, "La solicitud supera el tamaño permitido.")
+        try:
+            def reject_constant(_):
+                raise ValueError()
+            value = json.loads(data, parse_constant=reject_constant)
+        except (ValueError, UnicodeError):
+            raise HTTPException(422, "La solicitud no es válida.") from None
+        fields = set(asdict(IlluminationSettings()))
+        if (not isinstance(value, dict) or not set(value) <= fields | {"expected_revision"}
+                or not (set(value) & fields)):
+            raise HTTPException(422, "La solicitud contiene campos incorrectos.")
+        has_revision = "expected_revision" in value
+        revision = value.pop("expected_revision", None)
+        if has_revision and (type(revision) is not int or revision < 0):
+            raise HTTPException(422, "La revisión de iluminación no es válida.")
+        try:
+            return await asyncio.to_thread(camera.configure_illumination, value, revision)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Usa brillo de -60 a 60, contraste de 0,5 a 2,5 y gamma de 0,5 a 2.") from None
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from None
+        except OSError:
+            raise HTTPException(503, "No se pudieron guardar los ajustes de iluminación.") from None
 
     @application.get("/api/cameras")
     def cameras(refresh: bool = False):

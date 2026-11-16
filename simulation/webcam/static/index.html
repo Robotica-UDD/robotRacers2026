@@ -14,6 +14,7 @@
     .navigation-controls{padding:23px}.navigation-controls .section-label{margin-bottom:16px}.navigation-status{font-size:12px;font-weight:600;margin:0 0 8px;color:#365d50}.navigation-status[data-mode="error"]{color:#a23e35}.navigation-status[data-mode="active"]{color:#916015}.navigation-instruction{font-size:12px;color:var(--muted);line-height:1.65;margin:0 0 16px;min-height:39px}.navigation-calibration{font-size:10px;color:var(--muted);margin:0 0 13px;display:flex;align-items:center;justify-content:space-between;gap:8px}.navigation-distance{font-variant-numeric:tabular-nums;white-space:nowrap}.navigation-controls .calibrate-button{margin:0 0 11px;font-size:11px;padding:10px 12px}.navigation-note{font-size:10px;color:var(--muted);margin:14px 0 0;text-align:center;line-height:1.6}.navigation-overlay{position:absolute;pointer-events:none;overflow:visible}.navigation-overlay[hidden],.navigation-overlay [hidden]{display:none}.viewport[data-selectable="true"]{cursor:crosshair}.calibration-dot{fill:#ffc96b;stroke:#142321;stroke-width:2}.navigation-target{fill:#9af1e12b;stroke:#6ce5ce;stroke-width:2}.navigation-tether{stroke:#6ce5ce;stroke-width:2;stroke-linecap:round;stroke-dasharray:6 5}.navigation-center{fill:#bcfff0;stroke:#0a6654;stroke-width:1.5}.navigation-cross{stroke:#bcfff0;stroke-width:1.5;stroke-linecap:round}@media(max-width:1050px){.navigation-controls{padding:19px}}
     .speed-controls{margin:0 0 17px;padding:14px 13px 11px;border:1px solid var(--line);border-radius:14px;background:#ffffff64}.speed-control+.speed-control{margin-top:17px}.speed-heading{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:10px}.speed-heading label{font-size:10px;line-height:1.5;color:#547367;margin:0;max-width:122px}.speed-heading output{font-size:23px;font-weight:550;letter-spacing:-.045em;white-space:nowrap;font-variant-numeric:tabular-nums}.speed-heading output small{font-size:10px;font-weight:400;letter-spacing:0;color:var(--muted);margin-left:4px}.speed-range{display:block;width:100%;height:5px;appearance:none;-webkit-appearance:none;border:0;border-radius:99px;padding:0;margin:8px 0 9px;background:linear-gradient(to right,#2d8b74 0%,#2d8b74 var(--fill,20%),#dce7e1 var(--fill,20%),#dce7e1 100%);cursor:pointer;accent-color:var(--accent);touch-action:pan-y}.speed-range::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;border:3px solid white;background:#207d68;box-shadow:0 1px 5px #1e443b33}.speed-range::-moz-range-thumb{width:12px;height:12px;border-radius:50%;border:3px solid white;background:#207d68;box-shadow:0 1px 5px #1e443b33}.speed-range:focus-visible{outline:3px solid #4b9e9066;outline-offset:7px}.speed-range:disabled{opacity:.45;cursor:default}.speed-bounds{display:flex;justify-content:space-between;font-size:9px;color:#87988f;font-variant-numeric:tabular-nums}.speed-note{font-size:10px;line-height:1.6;color:var(--muted);margin:14px 0 0}.speed-status{min-height:14px;font-size:9px;color:var(--accent);margin:4px 0 0}.speed-controls .error{margin-top:8px;font-size:11px;padding:9px}
     .navigation-obstacle-draft,.navigation-obstacle.navigation-barrier{fill:none;stroke-linecap:round;stroke-linejoin:round}.navigation-obstacle-close-radius{fill:#ffba8d0d;stroke:#ffceab;stroke-width:1.5;stroke-dasharray:3 3}.navigation-obstacle-close-radius[data-near="true"]{fill:#6ce5ce40;stroke:#6ce5ce;stroke-dasharray:none}.navigation-obstacle-start-label{font-family:inherit;font-weight:700;fill:#fff0df;stroke:#563828;stroke-width:2.5;paint-order:stroke}
+    .illumination-panel{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}.illumination-panel .button{margin-top:0}.illumination-copy,.illumination-status,.illumination-diagnostics{font-size:10px;line-height:1.6;color:var(--muted);margin:9px 0 0}.illumination-status{color:var(--accent)}.illumination-panel details{margin-top:11px}.illumination-panel summary{font-size:11px;color:#36584e;cursor:pointer}.illumination-field{margin-top:15px}.illumination-label{display:flex;justify-content:space-between;align-items:center;gap:10px}.illumination-label label{margin:0;font-size:11px}.illumination-label output{font-size:11px;font-variant-numeric:tabular-nums;color:#36584e}.illumination-field input[type=range]{display:block;width:100%;margin:11px 0 0;accent-color:var(--accent)}.illumination-check{display:flex;align-items:center;gap:8px;font-size:11px;color:#4f6c62;margin:13px 0 0}.illumination-check input{margin:0;accent-color:var(--accent)}.illumination-panel .illumination-reset{margin-top:15px;font-size:11px;padding:10px}.illumination-warning{font-size:10px;line-height:1.6;color:#916015;margin:9px 0 0}.illumination-panel .error{font-size:11px;padding:9px;margin-top:9px}
   </style>
   <style>
     .speed-heading label{flex:1;min-width:0;max-width:none}.speed-value-edit{display:flex;align-items:baseline;gap:4px;flex:0 1 64%;min-width:0}.speed-value-edit small{font-size:10px;color:var(--muted);white-space:nowrap}.speed-number{font:inherit;font-size:23px;font-weight:550;letter-spacing:-.045em;font-variant-numeric:tabular-nums;min-width:0;width:100%;padding:2px 0;border:0;border-bottom:1px solid transparent;border-radius:0;background:transparent;color:inherit;text-align:right;appearance:textfield;-moz-appearance:textfield}.speed-number::-webkit-inner-spin-button,.speed-number::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.speed-number:hover{border-bottom-color:#5b9e8155}.speed-number:focus-visible{outline:2px solid #4b9e9066;outline-offset:3px;border-radius:3px}.speed-number[aria-invalid="true"]{border-bottom-color:#bc6656}.speed-number:disabled{opacity:.45}.speed-scale-action{display:block;border:0;background:transparent;color:var(--accent);font:inherit;font-size:10px;padding:6px 0 0;margin-left:auto;cursor:pointer}.speed-scale-action:hover:not(:disabled){text-decoration:underline}.speed-scale-action:disabled{opacity:.4;cursor:default}
@@ -82,6 +83,23 @@
           <p id="camera-hint" class="hint">Selecciona la webcam conectada por USB.</p>
           <button id="start" class="button primary" type="button"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="start-label">Iniciar cámara</span></button>
           <button id="stop" class="button secondary" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Detener cámara</button>
+          <div class="illumination-panel">
+            <button id="illumination-optimize" class="button secondary" type="button" disabled>Optimizar iluminación</button>
+            <p class="illumination-copy">Ajuste digital de brillo y contraste. No cambia la calibración.</p>
+            <p id="illumination-status" class="illumination-status" role="status">Esperando ajustes de imagen…</p>
+            <p id="illumination-diagnostics" class="illumination-diagnostics" hidden></p>
+            <p id="illumination-warning" class="illumination-warning" hidden>Hay zonas sobreexpuestas; reduce el reflejo sobre el marcador.</p>
+            <details>
+              <summary>Ajustes de imagen</summary>
+              <label class="illumination-check"><input id="illumination-automatic" type="checkbox" checked disabled> Luminosidad automática</label>
+              <div class="illumination-field"><div class="illumination-label"><label for="illumination-brightness">Brillo</label><output id="illumination-brightness-value" for="illumination-brightness">0</output></div><input id="illumination-brightness" type="range" min="-60" max="60" step="2" value="0" disabled></div>
+              <div class="illumination-field"><div class="illumination-label"><label for="illumination-contrast">Contraste</label><output id="illumination-contrast-value" for="illumination-contrast">1</output></div><input id="illumination-contrast" type="range" min="0.5" max="2.5" step="0.05" value="1" disabled></div>
+              <div class="illumination-field"><div class="illumination-label"><label for="illumination-gamma">Gamma</label><output id="illumination-gamma-value" for="illumination-gamma">1</output></div><input id="illumination-gamma" type="range" min="0.5" max="2" step="0.05" value="1" disabled></div>
+              <label class="illumination-check"><input id="illumination-local-contrast" type="checkbox" checked disabled> Mejorar contraste local</label>
+              <button id="illumination-reset" class="button secondary illumination-reset" type="button" disabled>Restablecer imagen original</button>
+            </details>
+            <p id="illumination-error" class="error" role="alert" hidden></p>
+          </div>
           <p id="error" class="error" role="alert" hidden></p>
         </section>
         <section class="glass navigation-controls" aria-labelledby="navigation-title">
@@ -213,6 +231,9 @@
     let calibrationStage = '', calibrationCenter = null, calibrationAnchor = null;
     let calibrationCenterTag = null, calibrationProjectionReady = false, calibrationSourceKey = '';
     let cameraStateReceivedAt = 0;
+    const illuminationDefaults = {enabled: false, automatic: true, brightness: 0, contrast: 1, gamma: 1, local_contrast: true};
+    let illuminationState = null, illuminationPending = null, illuminationSending = null;
+    let illuminationInFlight = false, illuminationDebounce = null, illuminationAckGeneration = 0, illuminationError = '';
     let confirmedSpeeds = {forward_mm_s: 100, turn_deg_s: 32}, draftSpeeds = {...confirmedSpeeds};
     let confirmedSpeedRevision = -1;
     let speedLimits = {forward_min_mm_s: 50, forward_max_mm_s: 300, turn_min_deg_s: 12, turn_max_deg_s: 100};
@@ -243,6 +264,108 @@
       return result;
     }
     function setError(text) { $('error').textContent = text; $('error').hidden = !text; }
+    function illuminationValues() {
+      const confirmed = illuminationState || illuminationDefaults;
+      return Object.fromEntries(Object.keys(illuminationDefaults).map(key => [key,
+        illuminationPending && key in illuminationPending ? illuminationPending[key] :
+        illuminationSending && key in illuminationSending ? illuminationSending[key] : confirmed[key]]));
+    }
+    function renderIlluminationUI() {
+      const values = illuminationValues(), available = connected && illuminationState !== null;
+      for (const key of ['brightness', 'contrast', 'gamma']) {
+        const input = $(`illumination-${key}`);
+        input.value = String(values[key]); input.disabled = !available;
+        $(`illumination-${key}-value`).textContent = new Intl.NumberFormat('es-CL', {maximumFractionDigits: 2}).format(values[key]);
+      }
+      $('illumination-automatic').checked = values.automatic;
+      $('illumination-local-contrast').checked = values.local_contrast;
+      for (const id of ['illumination-optimize', 'illumination-reset', 'illumination-automatic', 'illumination-local-contrast']) $(id).disabled = !available;
+      $('illumination-optimize').textContent = illuminationInFlight ? 'Aplicando iluminación…' : 'Optimizar iluminación';
+      $('illumination-status').textContent = illuminationInFlight || illuminationPending ? 'Guardando ajuste…' : illuminationState ?
+        (illuminationState.enabled ? illuminationState.message || 'Ajuste de imagen activo.' : 'Imagen original.') : 'Esperando ajustes de imagen…';
+      const diagnostic = illuminationState?.diagnostics;
+      const overexposed = diagnostic?.overexposed_pct;
+      $('illumination-warning').hidden = !Number.isFinite(overexposed) || overexposed < 5;
+      const details = [];
+      if (Number.isFinite(diagnostic?.mean)) details.push(`Luminosidad media ${Math.round(diagnostic.mean)}/255`);
+      if (Number.isFinite(overexposed)) details.push(`Sobreexposición ${number.format(overexposed)} %`);
+      $('illumination-diagnostics').textContent = details.join(' · ');
+      $('illumination-diagnostics').hidden = details.length === 0;
+      $('illumination-error').textContent = illuminationError;
+      $('illumination-error').hidden = !illuminationError;
+    }
+    function renderIllumination(next, source = 'state', generation = illuminationAckGeneration) {
+      if (!next || typeof next !== 'object' || !Number.isInteger(next.revision) || next.revision < 0 ||
+          ['enabled', 'automatic', 'local_contrast'].some(key => typeof next[key] !== 'boolean') ||
+          !Number.isFinite(next.brightness) || next.brightness < -60 || next.brightness > 60 ||
+          !Number.isFinite(next.contrast) || next.contrast < .5 || next.contrast > 2.5 ||
+          !Number.isFinite(next.gamma) || next.gamma < .5 || next.gamma > 2) return false;
+      if (source === 'state' && generation !== illuminationAckGeneration) return false;
+      if (illuminationState && next.revision < illuminationState.revision) return source === 'ack';
+      illuminationState = {...next, diagnostics: {...next.diagnostics}};
+      if (connected && illuminationPending && !illuminationInFlight && illuminationDebounce === null) scheduleIllumination();
+      renderIlluminationUI();
+      return true;
+    }
+    function scheduleIllumination() {
+      if (illuminationDebounce !== null) clearTimeout(illuminationDebounce);
+      illuminationDebounce = setTimeout(() => { illuminationDebounce = null; return saveIllumination(); }, 160);
+    }
+    function queueIllumination(patch, immediate = false) {
+      if (!connected || !illuminationState) return Promise.resolve(false);
+      const values = {...illuminationValues(), ...patch};
+      if (Object.keys(patch).some(key => !(key in illuminationDefaults)) ||
+          ['enabled', 'automatic', 'local_contrast'].some(key => typeof values[key] !== 'boolean') ||
+          !Number.isFinite(values.brightness) || values.brightness < -60 || values.brightness > 60 ||
+          !Number.isFinite(values.contrast) || values.contrast < .5 || values.contrast > 2.5 ||
+          !Number.isFinite(values.gamma) || values.gamma < .5 || values.gamma > 2) {
+        illuminationError = 'Revisa los valores de brillo, contraste y gamma.'; renderIlluminationUI();
+        return Promise.resolve(false);
+      }
+      illuminationPending = {...illuminationPending, ...patch}; illuminationError = '';
+      if (illuminationDebounce !== null) clearTimeout(illuminationDebounce);
+      illuminationDebounce = null;
+      renderIlluminationUI();
+      if (immediate) return saveIllumination();
+      scheduleIllumination();
+      return Promise.resolve(true);
+    }
+    async function saveIllumination() {
+      if (illuminationInFlight || !illuminationPending || !connected || !illuminationState) return false;
+      if (illuminationDebounce !== null) clearTimeout(illuminationDebounce);
+      illuminationDebounce = null;
+      const patch = illuminationPending, revision = illuminationState.revision;
+      illuminationPending = null; illuminationSending = patch; illuminationInFlight = true;
+      renderIlluminationUI();
+      let accepted = false;
+      try {
+        const next = await api('/api/illumination', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body: JSON.stringify({...patch, expected_revision: revision})});
+        if (!renderIllumination(next, 'ack')) throw new Error('No se pudo confirmar el ajuste de imagen.');
+        illuminationAckGeneration++; illuminationError = ''; accepted = true;
+      } catch (error) {
+        illuminationPending = null;
+        if (illuminationDebounce !== null) clearTimeout(illuminationDebounce);
+        illuminationDebounce = null;
+        illuminationError = error.message || 'No se pudo guardar el ajuste. Se conserva la imagen anterior.';
+      } finally {
+        illuminationInFlight = false; illuminationSending = null;
+        if (accepted && illuminationPending) {
+          scheduleIllumination();
+        }
+        renderIlluminationUI();
+      }
+      return accepted;
+    }
+    function optimizeIllumination() {
+      return queueIllumination({...illuminationDefaults, enabled: true, automatic: true}, true);
+    }
+    function resetIllumination() {
+      return queueIllumination({...illuminationDefaults}, true);
+    }
+    function illuminationInput(event, field) {
+      if (event.currentTarget.disabled) return Promise.resolve(false);
+      return queueIllumination({enabled: true, automatic: false, [field]: Number(event.currentTarget.value)});
+    }
     function updateButtons() {
       const active = !!state?.running || !!state?.opening;
       const hasCamera = $('camera-select').value !== '';
@@ -251,6 +374,7 @@
       $('camera-select').disabled = busy || active || camerasLoading;
       $('refresh-cameras').disabled = busy || active || camerasLoading;
       $('start-label').textContent = state?.opening ? 'Abriendo cámara…' : busy ? 'Un momento…' : 'Iniciar cámara';
+      renderIlluminationUI();
     }
     function clearStream() {
       streamActive = false;
@@ -279,8 +403,9 @@
         if (state?.running && connected) startStream();
       }, 2000);
     });
-    function render(next) {
+    function render(next, illuminationGeneration = illuminationAckGeneration) {
       state = next;
+      renderIllumination(next.illumination, 'state', illuminationGeneration);
       cameraStateReceivedAt = performance.now();
       const running = !!next.running;
       const opening = !!next.opening;
@@ -315,10 +440,11 @@
       updateNavigationUI();
     }
     async function refresh() {
+      const illuminationGeneration = illuminationAckGeneration;
       try {
         const next = await api('/api/state');
         connected = true;
-        render(next);
+        render(next, illuminationGeneration);
       } catch {
         connected = false;
         cameraStateReceivedAt = 0;
@@ -349,12 +475,18 @@
             ...(selected.id ? {camera_id: selected.id} : {})
           })} : {})
         });
+        const illuminationGeneration = illuminationAckGeneration;
         const next = await api('/api/state');
-        connected = true; render(next);
+        connected = true; render(next, illuminationGeneration);
       } catch (error) { setError(error.message || 'No se pudo cambiar la captura.'); }
       finally { busy = false; updateButtons(); }
     }
     $('start').addEventListener('click', () => command('start'));
+    $('illumination-optimize').addEventListener('click', optimizeIllumination);
+    $('illumination-reset').addEventListener('click', resetIllumination);
+    for (const field of ['brightness', 'contrast', 'gamma']) $(`illumination-${field}`).addEventListener('input', event => illuminationInput(event, field));
+    $('illumination-automatic').addEventListener('change', event => queueIllumination({enabled: true, automatic: event.currentTarget.checked}, true));
+    $('illumination-local-contrast').addEventListener('change', event => queueIllumination({enabled: true, local_contrast: event.currentTarget.checked}, true));
     $('stop').addEventListener('click', () => command('stop'));
     function selectActiveCamera(current) {
       if (!Number.isInteger(current.camera_index)) return;

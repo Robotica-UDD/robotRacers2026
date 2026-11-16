@@ -46,13 +46,30 @@ class AprilTagDetector:
         self.intermediate_detector = cv2.aruco.ArucoDetector(dictionary, intermediate_parameters)
 
     def process(self, frame: np.ndarray) -> Detection:
-        started = time.monotonic()
         gray = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        return self._process_attempts(((self.detector, gray, 1.0), (self.contour_detector, gray, 1.0),
+                                      (self.intermediate_detector, gray, 1.0),
+                                      (self.detector, gray, 1.5), (self.detector, gray, 3.0)))
+
+    def process_with_lighting(self, frame: np.ndarray, adjusted: np.ndarray) -> Detection:
+        """Prueba luz original y compensada sin relajar identidad ni geometría."""
+        original = frame if frame.ndim == 2 else cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        enhanced = adjusted if adjusted.ndim == 2 else cv2.cvtColor(adjusted, cv2.COLOR_BGR2GRAY)
+        attempts = ((self.detector, original, 1.0), (self.detector, enhanced, 1.0),
+                    (self.contour_detector, enhanced, 1.0),
+                    (self.intermediate_detector, enhanced, 1.0),
+                    (self.contour_detector, original, 1.0),
+                    (self.intermediate_detector, original, 1.0),
+                    (self.detector, enhanced, 1.5), (self.detector, original, 1.5),
+                    (self.detector, enhanced, 3.0), (self.detector, original, 3.0))
+        return self._process_attempts(attempts, budget_s=.12)
+
+    def _process_attempts(self, attempts, *, budget_s: float | None = None) -> Detection:
+        started = time.monotonic()
         found: dict[int, np.ndarray] = {}
-        attempts = ((self.detector, 1.0), (self.contour_detector, 1.0),
-                    (self.intermediate_detector, 1.0),
-                    (self.detector, 1.5), (self.detector, 3.0))
-        for detector, scale in attempts:
+        for detector, gray, scale in attempts:
+            if budget_s is not None and time.monotonic() - started >= budget_s:
+                break
             pixels = gray if scale == 1.0 else cv2.resize(
                 gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC
             )

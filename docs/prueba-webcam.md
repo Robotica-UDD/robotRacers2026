@@ -61,6 +61,50 @@ La página y sus recursos funcionan sin Internet después de instalar dependenci
 No se guardan fotografías ni vídeos. La captura se hace con OpenCV en Python,
 no con la cámara del navegador. Un permiso del navegador no reemplaza el de macOS.
 
+## Iluminación, sombras y reflejos
+
+En **Captura**, pulsa **Optimizar iluminación** para activar la compensación
+digital automática y el contraste local. El cambio se aplica al vídeo y a las
+imágenes candidatas del detector AprilTag, sin reiniciar la webcam, recortar,
+girar ni desplazar la imagen. El detector conserva también el original como
+candidato y sigue exigiendo el identificador 0: un reflejo o un cuadrado no se
+aceptan como un marcador. La captura original, con su secuencia y tiempo,
+permanece como entrada del trabajador de manos.
+
+Dentro de **Ajustes de imagen** puedes cambiar:
+
+- **Brillo:** de -60 a 60 niveles de luminancia.
+- **Contraste:** de 0,5 a 2,5, alrededor del nivel medio.
+- **Gamma:** de 0,5 a 2; en esta interfaz, valores mayores que 1 aclaran.
+- **Luminosidad automática** y **Mejorar contraste local**.
+
+Mover un slider activa el ajuste manual; el botón de optimización recupera los
+valores automáticos. **Restablecer imagen original** desactiva las correcciones.
+Los ajustes se guardan en `simulation/.runtime/camera-illumination.json` y se
+conservan al detener o reconectar la cámara y al reiniciar el servicio. No se
+borran los puntos, los perímetros ni la calibración, y este control no inicia
+movimiento ni rearma una sesión del robot.
+
+Son ajustes de píxeles, no un control físico de exposición. OpenCV AVFoundation
+en macOS no implementa los controles numéricos de brillo, ganancia o exposición
+para esta captura. La compensación utiliza el canal de luminancia, un contraste
+local moderado y curvas gamma, conservando resolución y crominancia. El panel
+muestra la luminosidad y el porcentaje de altas luces de la captura original,
+sin ocultar el recorte que ya produjo la cámara.
+
+Si el reflejo deja el papel completamente blanco, no hay detalle que el filtro
+pueda recuperar: cambia el ángulo de cámara o de luz y evita acabados brillantes
+en el marcador. El contraste mejora la información disponible; no reconstruye
+las celdas perdidas. Tampoco puede reparar desenfoque u oclusión.
+
+La revisión de noviembre de 2026 añade pruebas sin hardware de rangos y
+persistencia, ajuste durante captura sin reapertura, geometría y datos originales
+para manos, identidad del tag, serialización de sliders y respuestas atrasadas.
+
+Referencias técnicas: [backend AVFoundation de OpenCV](https://github.com/opencv/opencv/blob/4.14.0/modules/videoio/src/cap_avfoundation_mac.mm),
+[transformaciones de brillo y contraste](https://docs.opencv.org/4.x/d3/dc1/tutorial_basic_linear_transform.html)
+y [contraste local CLAHE](https://docs.opencv.org/4.x/d5/daf/tutorial_py_histogram_equalization.html).
+
 ## Qué se mide
 
 - Centro **del marcador**, en píxeles; no es el centro entre las ruedas.
