@@ -4,7 +4,8 @@ La selección y la calibración nunca envían órdenes. El inicio es explícito;
 una misión activa tolera una pérdida breve de visión conservando el mando;
 si se prolonga o pierde el enlace, espera y continúa al recuperarlos.
 D48, una parada manual o un fallo de driver cancelan la misión.
-Las distancias se estiman en el plano horizontal del marcador de 40 mm.
+Las distancias se estiman en el plano horizontal del marcador calibrado
+(40 mm de lado por defecto).
 """
 from __future__ import annotations
 
@@ -726,7 +727,13 @@ class Navigation:
                 or (self._arm_thread is not None and self._arm_thread.is_alive())):
             raise NavigationError("Detén el robot antes de modificar el destino o la calibración.")
 
-    def calibrate(self, center_px, front_px, frame_width, frame_height, camera_id):
+    def calibrate(self, center_px, front_px, frame_width, frame_height, camera_id,
+                  marker_size_mm=40.):
+        # El lado es el patrón negro, sin el margen blanco de la tarjeta.
+        # Los clientes anteriores conservan explícitamente la escala de 40 mm.
+        size_mm = _finite(marker_size_mm, "El lado del marcador")
+        if not 5. <= size_mm <= 250.:
+            raise NavigationError("El lado del marcador debe estar entre 5 y 250 mm.", 422)
         with self._lock:
             generation = self._route_generation
         frame = self._camera_state()
@@ -736,7 +743,8 @@ class Navigation:
             raise NavigationError("Se necesita el marcador visible en una imagen reciente.")
         try:
             calibration = calibrate_robot(frame["marker_corners"], center_px, front_px,
-                                          camera_id=camera_id, width=frame_width, height=frame_height)
+                                          camera_id=camera_id, width=frame_width, height=frame_height,
+                                          marker_size_m=size_mm / 1000.)
         except ValueError as exc:
             raise NavigationError(str(exc), 422) from None
         with self._lock:
@@ -2449,9 +2457,11 @@ def make_navigation_router(navigation: Navigation) -> APIRouter:
 
     @router.post("/calibrate")
     async def calibrate(request: Request):
-        data = await action_body(request, {"center_px", "front_px", "frame_width", "frame_height", "camera_id"})
+        required = {"center_px", "front_px", "frame_width", "frame_height", "camera_id"}
+        data = await action_body(request, (required, required | {"marker_size_mm"}))
         return await asyncio.to_thread(perform, navigation.calibrate, data["center_px"], data["front_px"],
-                                       data["frame_width"], data["frame_height"], data["camera_id"])
+                                       data["frame_width"], data["frame_height"], data["camera_id"],
+                                       data.get("marker_size_mm", 40.))
 
     @router.post("/target")
     async def target(request: Request):
