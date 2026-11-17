@@ -20,9 +20,10 @@ del soporte ni el archivo que se debe imprimir.
 La tarjeta nueva mide **65 × 65 mm en total**, con un patrón negro de
 **52 × 52 mm** y **6,5 mm blancos por cada lado**. Imprime
 [el PDF A4 de 65 mm](../simulation/webcam/assets/apriltag-0-65mm-a4.pdf)
-al **100 %, tamaño real**, sin ajustar a página. Comprueba su barra de 50 mm
-con una regla. Recorta sin reducir el margen blanco; la flecha de orientación
-queda fuera de la tarjeta y solo indica qué borde debe apuntar al frente.
+al **100 %, tamaño real**, sin ajustar a página. El PDF contiene únicamente
+el marcador sobre fondo blanco. Comprueba que el patrón negro mida 52 mm por
+lado; para una tarjeta de 65 mm conserva 6,5 mm blancos por cada lado al recortar.
+El borde derecho del patrón en esta hoja debe apuntar al frente del robot.
 Usa una impresión mate, sin reflejos ni curvaturas.
 
 En **Cámara → Marcador y escala**, selecciona **Nueva: tarjeta de 65 mm**
