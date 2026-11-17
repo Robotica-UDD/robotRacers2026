@@ -23,23 +23,34 @@
     .navigation-robot-footprint{fill:#6ce5ce08;stroke:#83dfd0;stroke-width:1.5;stroke-linejoin:round;opacity:.85}.navigation-robot-front{fill:none;stroke:#a5eee0;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
     .map-modes{grid-template-columns:repeat(3,minmax(0,1fr))}.home-controls{padding:23px}.home-controls [hidden]{display:none}.home-controls .section-label{margin-bottom:16px}.home-controls .navigation-instruction{min-height:0}.home-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.home-actions .button{font-size:10px;padding:10px 6px}.home-distance{margin:14px 0}.home-controls .home-toggle[aria-pressed="true"]{background:#e3f2e9;border-color:#90b6a1;color:#176044}.home-model{font-size:10px;color:var(--muted);line-height:1.6;margin:9px 0 0}.home-baseline{padding-top:11px;border-top:1px solid var(--line);color:#466e5f}.navigation-home-marker{fill:#f6e7bce8;stroke:#7a692f;stroke-width:1.5}.navigation-home-icon{fill:none;stroke:#665722;stroke-width:1.3;stroke-linecap:round;stroke-linejoin:round}.navigation-home-label{font-family:inherit;font-weight:700;fill:#304e3e;stroke:#f7fff8;stroke-width:2.5;paint-order:stroke;text-anchor:middle}.navigation-interest-marker{fill:#d7e3ffe0;stroke:#6179ba;stroke-width:1.5}.navigation-interest-cross{fill:none;stroke:#5267a1;stroke-width:1.3;stroke-linecap:round}.navigation-interest-label{font-family:inherit;font-weight:700;fill:#3a4b83;stroke:#f7fbff;stroke-width:2.5;paint-order:stroke;text-anchor:middle}@media(max-width:1050px){.home-controls{padding:19px}}
   </style>
+  <link rel="stylesheet" href="/assets/workspace.css">
 </head>
 <body>
-  <main class="app">
-    <header class="topbar">
-      <div class="brand">
+  <a class="skip-link" href="#workspace">Ir al área de trabajo</a>
+  <header class="commandbar glass">
+    <div class="brand">
         <div class="brand-mark" aria-hidden="true"><svg width="23" height="23" viewBox="0 0 24 24" fill="none"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><rect x="8" y="8" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M11 11h2v2h-2z" fill="currentColor"/></svg></div>
         <div><div class="brand-name">RobotRacers</div><div class="brand-caption">Visión por cámara</div></div>
       </div>
-      <div class="local">Conexión local</div>
-    </header>
-    <div class="heading">
-      <div><h1>Visión del robot</h1><p class="lead">Comprueba su posición y orientación desde arriba.</p></div>
-      <div id="badge" class="badge" data-mode="idle" role="status"><span class="dot"></span><span id="badge-label">Cámara detenida</span></div>
-    </div>
+    <div class="command-status" aria-label="Estado del sistema"><div id="badge" class="badge" data-mode="idle" role="status"><span class="dot"></span><span id="badge-label">Cámara detenida</span></div><div id="robot-status" class="robot-status" data-mode="idle" role="status">Sin conexión</div></div>
+    <div class="command-actions" aria-label="Movimiento del robot"><button id="navigation-start" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="navigation-start-label">Iniciar recorrido</span></button><button id="robot-stop" class="button danger robot-stop" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg><span id="robot-stop-label">Detener robot</span></button></div>
+  </header>
+  <p id="workspace-stop-feedback" class="global-feedback error" role="alert" hidden></p>
+  <main class="app" id="workspace" tabindex="-1">
     <div class="layout">
-      <section aria-label="Vista de cámara y mediciones">
-        <div class="glass viewport-card">
+      <section class="vision-column" aria-labelledby="workspace-title">
+        <div class="workspace-heading"><div><h1 id="workspace-title">Control del robot</h1><p class="lead">Dibuja el recorrido sobre la imagen.</p></div></div>
+<div class="workspace-readiness" aria-live="polite"><span id="workspace-next-step">Preparando el panel…</span><button id="workspace-setup-action" class="button secondary setup-action" type="button" hidden>Preparar cámara</button></div>
+<div class="glass map-toolbar" aria-label="Herramientas de la imagen"><div class="map-modes" role="group" aria-label="Herramienta de dibujo">
+              <button id="navigation-point-mode" class="map-mode" type="button" aria-pressed="true" disabled>Puntos</button>
+              <button id="navigation-obstacle-mode" class="map-mode" type="button" aria-label="Dibujar perímetro" aria-pressed="false" disabled>Perímetro</button>
+              <button id="navigation-home-mode" class="map-mode" type="button" aria-pressed="false" disabled>Casa</button>
+            </div><button id="navigation-calibrate" class="button secondary calibrate-button" type="button" disabled>Calibrar robot</button></div>
+<div class="map-guidance"><p id="navigation-obstacle-hint" class="obstacle-draft-status" role="status">Dibuja los vértices del perímetro y vuelve a A para cerrar. El interior queda libre.</p><div id="navigation-obstacle-draft-actions" class="obstacle-draft-actions" hidden>
+              <button id="navigation-obstacle-undo" class="obstacle-link" type="button">Deshacer vértice</button>
+              <button id="navigation-obstacle-cancel" class="obstacle-link" type="button">Cancelar dibujo</button>
+            </div></div>
+<div class="glass viewport-card">
           <div class="viewport-head"><div class="viewport-label"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="14" height="12" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="m17 10 4-2v8l-4-2" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="10" cy="12" r="2.5" stroke="currentColor" stroke-width="1.5"/></svg><span id="active-camera-name">Cámara cenital</span></div><span class="view-mode">Imagen sin espejo</span></div>
           <div id="viewport" class="viewport">
             <img id="camera-image" alt="Imagen en directo con recuadro del marcador y flecha hacia el frente del robot">
@@ -69,15 +80,84 @@
           </div>
           <div class="viewport-foot"><span class="status-icon" aria-hidden="true"></span><span id="view-message">El marcador debe quedar plano y completamente visible.</span></div>
         </div>
-        <div class="metrics" aria-label="Mediciones en la imagen">
+        <div class="glass mission-summary" aria-label="Estado del recorrido">
+  <div class="mission-line"><p id="navigation-status" class="navigation-status" data-mode="idle" role="status">Preparando navegación</p><p id="navigation-progress" class="navigation-progress" role="status">Sin puntos</p></div>
+  <p id="navigation-instruction" class="navigation-instruction">Calibra el centro y el frente del robot antes de añadir puntos.</p><div class="navigation-calibration"><span id="navigation-calibration-label">Calibración pendiente</span><span id="navigation-distance" class="navigation-distance"></span></div></div>
+<div class="metrics" aria-label="Mediciones en la imagen">
           <div class="metric"><div class="metric-label">Frecuencia</div><div class="metric-value"><span id="fps">—</span><small>imágenes/s</small></div></div>
           <div class="metric"><div class="metric-label">Orientación en imagen</div><div class="metric-value"><span id="heading">—</span><small>°</small></div></div>
           <div class="metric"><div id="center-label" class="metric-label">Centro del marcador</div><div class="metric-value metric-center"><span id="center">—</span><small>px</small></div></div>
         </div>
       </section>
-      <aside class="sidebar">
-        <section class="glass controls" aria-labelledby="camera-title">
-          <h2 id="camera-title" class="section-label">Captura</h2>
+      <aside class="sidebar glass control-panel" id="control-panel" aria-label="Controles del robot">
+        <div class="panel-tabs" role="tablist" aria-label="Panel de control">
+          <button id="workspace-tab-route" class="panel-tab" type="button" role="tab" aria-selected="true" aria-controls="workspace-panel-route" tabindex="0">Recorrido</button>
+          <button id="workspace-tab-camera" class="panel-tab" type="button" role="tab" aria-selected="false" aria-controls="workspace-panel-camera" tabindex="-1">Cámara</button>
+          <button id="workspace-tab-connection" class="panel-tab" type="button" role="tab" aria-selected="false" aria-controls="workspace-panel-connection" tabindex="-1">Conexión</button>
+        </div>
+        <div class="panel-body">
+          <section class="control-tab" id="workspace-panel-route" role="tabpanel" aria-labelledby="workspace-tab-route" tabindex="-1">
+            <section class="navigation-controls" aria-labelledby="navigation-title">
+          <h2 id="navigation-title" class="section-label">Velocidad y recorrido</h2>
+
+
+
+
+          <details class="map-settings"><summary>Perímetros y separación</summary><div class="obstacle-tools" aria-label="Herramientas del mapa">
+
+
+
+            <div class="obstacle-margin-row">
+              <label for="navigation-obstacle-margin">Margen de seguridad</label>
+              <span class="obstacle-margin-value"><input id="navigation-obstacle-margin" type="number" min="0" max="200" step="1" value="0" inputmode="numeric" aria-label="Margen de seguridad, en milímetros" title="Espacio extra alrededor del robot; 0 desactiva la separación adicional" disabled><small>mm</small></span>
+            </div>
+            <p id="navigation-planning-status" class="planning-status" role="status"></p>
+            <button id="navigation-obstacle-clear" class="button secondary" type="button" disabled>Borrar perímetros</button>
+          </div></details>
+          <div class="speed-controls" aria-label="Velocidades máximas">
+            <div class="speed-control">
+              <div class="speed-heading"><label for="navigation-forward-speed">Velocidad máxima de avance</label><div class="speed-value-edit"><input id="navigation-forward-number" class="speed-number" type="number" min="50" step="1" value="100" inputmode="numeric" autocomplete="off" aria-label="Velocidad máxima de avance, en milímetros por segundo" aria-describedby="navigation-speed-note navigation-speed-error" disabled><small>mm/s</small></div></div>
+              <input id="navigation-forward-speed" class="speed-range" type="range" min="50" max="300" step="10" value="100" aria-describedby="navigation-speed-note" aria-valuetext="100 milímetros por segundo" disabled>
+              <div class="speed-bounds" aria-hidden="true"><span id="navigation-forward-min">50</span><span id="navigation-forward-max">300</span></div>
+              <button id="navigation-forward-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
+            </div>
+            <div class="speed-control">
+              <div class="speed-heading"><label for="navigation-turn-speed">Velocidad máxima de giro</label><div class="speed-value-edit"><input id="navigation-turn-number" class="speed-number" type="number" min="12" step="1" value="32" inputmode="numeric" autocomplete="off" aria-label="Velocidad máxima de giro, en grados por segundo" aria-describedby="navigation-speed-note navigation-speed-error" disabled><small>°/s</small></div></div>
+              <input id="navigation-turn-speed" class="speed-range" type="range" min="12" max="100" step="1" value="32" aria-describedby="navigation-speed-note" aria-valuetext="32 grados por segundo" disabled>
+              <div class="speed-bounds" aria-hidden="true"><span id="navigation-turn-min">12</span><span id="navigation-turn-max">100</span></div>
+              <button id="navigation-turn-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
+            </div>
+            <p id="navigation-speed-note" class="speed-note">Máximas: el robot reduce al acercarse al destino.</p>
+            <p id="navigation-tested-settings" class="speed-note home-baseline">Configuración probada: avance 240 mm/s · giro máximo 90°/s.</p>
+            <p id="navigation-speed-status" class="speed-status" role="status"></p>
+            <p id="navigation-speed-error" class="error" role="alert" hidden></p>
+          </div>
+
+
+          <div class="navigation-route-actions">
+            <button id="navigation-stop" class="button secondary robot-stop" type="button" aria-label="Cancelar recorrido" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Cancelar recorrido</button>
+            <button id="navigation-clear" class="button secondary" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M6 2h4M5 6v7h6V6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="navigation-clear-label">Borrar puntos</span></button>
+          </div>
+          <p id="navigation-error" class="error" role="alert" hidden></p>
+
+        </section>
+            <details class="home-disclosure"><summary>Casa y manos <span id="workspace-hand-status">Desactivadas</span></summary><section class="home-controls" aria-labelledby="home-title">
+          <h2 id="home-title" class="section-label">Reacción a manos</h2>
+          <p id="home-status" class="navigation-status" data-mode="idle" role="status">Sin punto de casa</p>
+          <p id="home-message" class="navigation-instruction">Marca Casa para activar las reacciones a manos.</p>
+          <p id="home-hand-status" class="home-model" role="status" hidden></p>
+          <p id="home-hand-reason" class="home-model error" role="status" hidden></p>
+          <div class="home-actions"><button id="home-mark" class="button secondary" type="button" disabled>Marcar casa</button><button id="home-clear" class="button secondary" type="button" disabled>Borrar casa</button></div>
+          <div class="obstacle-margin-row home-distance"><label for="home-distance">Mano cerca del robot</label><span class="obstacle-margin-value"><input id="home-distance" type="number" min="50" max="500" step="10" value="150" inputmode="numeric" aria-label="Distancia de reacción a una mano, en milímetros" disabled><small>mm aprox.</small></span></div>
+          <button id="home-toggle" class="button secondary home-toggle" type="button" aria-pressed="false" disabled>Reaccionar a manos</button>
+          <p class="home-model">Una mano lejana durante 2 s despierta curiosidad. Elige un punto a unos 10 cm y mantiene el destino aunque la mano desaparezca. Sin distancia máxima; el acercamiento respeta el perímetro.</p>
+          <button id="home-cancel" class="button secondary robot-stop" type="button" hidden>Detener regreso a casa</button>
+          <p id="home-model" class="home-model" role="status">Preparando detección de manos…</p>
+          <p id="home-error" class="error" role="alert" hidden></p>
+        </section></details>
+          </section>
+          <section class="control-tab" id="workspace-panel-camera" role="tabpanel" aria-labelledby="workspace-tab-camera" tabindex="-1" hidden><section class="controls" aria-labelledby="camera-title">
+          <h2 id="camera-title" class="section-label">Cámara e imagen</h2>
           <div class="camera-label-row"><label for="camera-select">Cámara</label><button id="refresh-cameras" class="refresh-cameras" type="button"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M13.2 7A5.3 5.3 0 1 0 13 10M13.2 7V3.5M13.2 7H9.7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Actualizar cámaras</button></div>
           <div class="select-wrap"><select id="camera-select" aria-describedby="camera-hint"><option value="" disabled selected>Buscando cámaras…</option></select><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <p id="camera-hint" class="hint">Selecciona la webcam conectada por USB.</p>
@@ -100,80 +180,21 @@
             </details>
             <p id="illumination-error" class="error" role="alert" hidden></p>
           </div>
+          <details class="marker-settings"><summary>Marcador y escala</summary>
+            <label for="marker-size">Tarjeta instalada</label>
+            <div class="select-wrap"><select id="marker-size" aria-describedby="marker-size-note"><option value="40">Anterior: patrón de 40 mm</option><option value="52">Nueva: tarjeta de 65 mm</option></select></div>
+            <p id="marker-size-note" class="hint">La tarjeta nueva incluye un patrón de 52 mm y 6,5 mm blancos por lado. El tamaño se aplica al volver a calibrar el robot; la calibración actual se conserva.</p>
+            <a class="marker-download" href="/assets/apriltag-0-65mm-a4.pdf" target="_blank" rel="noopener">Descargar tarjeta de 65 mm en A4</a>
+          </details>
           <p id="error" class="error" role="alert" hidden></p>
-        </section>
-        <section class="glass navigation-controls" aria-labelledby="navigation-title">
-          <h2 id="navigation-title" class="section-label">Navegación</h2>
-          <p id="navigation-status" class="navigation-status" data-mode="idle" role="status">Preparando navegación</p>
-          <p id="navigation-instruction" class="navigation-instruction">Calibra el centro y el frente del robot antes de añadir puntos.</p>
-          <p id="navigation-progress" class="navigation-progress" role="status">Sin puntos</p>
-          <div class="navigation-calibration"><span id="navigation-calibration-label">Calibración pendiente</span><span id="navigation-distance" class="navigation-distance"></span></div>
-          <div class="obstacle-tools" aria-label="Herramientas del mapa">
-            <div class="map-modes" role="group" aria-label="Herramienta de dibujo">
-              <button id="navigation-point-mode" class="map-mode" type="button" aria-pressed="true" disabled>Marcar puntos</button>
-              <button id="navigation-obstacle-mode" class="map-mode" type="button" aria-pressed="false" disabled>Dibujar perímetro</button>
-              <button id="navigation-home-mode" class="map-mode" type="button" aria-pressed="false" disabled>Marcar casa</button>
-            </div>
-            <p id="navigation-obstacle-hint" class="obstacle-draft-status" role="status">Dibuja los vértices del perímetro y vuelve a A para cerrar. El interior queda libre.</p>
-            <div id="navigation-obstacle-draft-actions" class="obstacle-draft-actions" hidden>
-              <button id="navigation-obstacle-undo" class="obstacle-link" type="button">Deshacer vértice</button>
-              <button id="navigation-obstacle-cancel" class="obstacle-link" type="button">Cancelar dibujo</button>
-            </div>
-            <div class="obstacle-margin-row">
-              <label for="navigation-obstacle-margin">Margen de seguridad</label>
-              <span class="obstacle-margin-value"><input id="navigation-obstacle-margin" type="number" min="0" max="200" step="1" value="0" inputmode="numeric" aria-label="Margen de seguridad, en milímetros" title="Espacio extra alrededor del robot; 0 desactiva la separación adicional" disabled><small>mm</small></span>
-            </div>
-            <p id="navigation-planning-status" class="planning-status" role="status"></p>
-            <button id="navigation-obstacle-clear" class="button secondary" type="button" disabled>Borrar perímetros</button>
-          </div>
-          <div class="speed-controls" aria-label="Velocidades máximas">
-            <div class="speed-control">
-              <div class="speed-heading"><label for="navigation-forward-speed">Velocidad máxima de avance</label><div class="speed-value-edit"><input id="navigation-forward-number" class="speed-number" type="number" min="50" step="1" value="100" inputmode="numeric" autocomplete="off" aria-label="Velocidad máxima de avance, en milímetros por segundo" aria-describedby="navigation-speed-note navigation-speed-error" disabled><small>mm/s</small></div></div>
-              <input id="navigation-forward-speed" class="speed-range" type="range" min="50" max="300" step="10" value="100" aria-describedby="navigation-speed-note" aria-valuetext="100 milímetros por segundo" disabled>
-              <div class="speed-bounds" aria-hidden="true"><span id="navigation-forward-min">50</span><span id="navigation-forward-max">300</span></div>
-              <button id="navigation-forward-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
-            </div>
-            <div class="speed-control">
-              <div class="speed-heading"><label for="navigation-turn-speed">Velocidad máxima de giro</label><div class="speed-value-edit"><input id="navigation-turn-number" class="speed-number" type="number" min="12" step="1" value="32" inputmode="numeric" autocomplete="off" aria-label="Velocidad máxima de giro, en grados por segundo" aria-describedby="navigation-speed-note navigation-speed-error" disabled><small>°/s</small></div></div>
-              <input id="navigation-turn-speed" class="speed-range" type="range" min="12" max="100" step="1" value="32" aria-describedby="navigation-speed-note" aria-valuetext="32 grados por segundo" disabled>
-              <div class="speed-bounds" aria-hidden="true"><span id="navigation-turn-min">12</span><span id="navigation-turn-max">100</span></div>
-              <button id="navigation-turn-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
-            </div>
-            <p id="navigation-speed-note" class="speed-note">Máximas: el robot reduce al acercarse al destino.</p>
-            <p id="navigation-tested-settings" class="speed-note home-baseline">Configuración probada: avance 240 mm/s · giro máximo 90°/s.</p>
-            <p id="navigation-speed-status" class="speed-status" role="status"></p>
-            <p id="navigation-speed-error" class="error" role="alert" hidden></p>
-          </div>
-          <button id="navigation-calibrate" class="button secondary calibrate-button" type="button" disabled>Calibrar robot</button>
-          <button id="navigation-start" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="navigation-start-label">Iniciar recorrido</span></button>
-          <div class="navigation-route-actions">
-            <button id="navigation-stop" class="button secondary robot-stop" type="button" aria-label="Detener recorrido" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg>Detener</button>
-            <button id="navigation-clear" class="button secondary" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 4h10M6 2h4M5 6v7h6V6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="navigation-clear-label">Borrar puntos</span></button>
-          </div>
-          <p id="navigation-error" class="error" role="alert" hidden></p>
-          <p class="navigation-note">Área despejada · cámara fija</p>
-        </section>
-        <section class="glass home-controls" aria-labelledby="home-title">
-          <h2 id="home-title" class="section-label">Casa</h2>
-          <p id="home-status" class="navigation-status" data-mode="idle" role="status">Sin punto de casa</p>
-          <p id="home-message" class="navigation-instruction">Marca Casa para activar las reacciones a manos.</p>
-          <p id="home-hand-status" class="home-model" role="status" hidden></p>
-          <p id="home-hand-reason" class="home-model error" role="status" hidden></p>
-          <div class="home-actions"><button id="home-mark" class="button secondary" type="button" disabled>Marcar casa</button><button id="home-clear" class="button secondary" type="button" disabled>Borrar casa</button></div>
-          <div class="obstacle-margin-row home-distance"><label for="home-distance">Mano cerca del robot</label><span class="obstacle-margin-value"><input id="home-distance" type="number" min="50" max="500" step="10" value="150" inputmode="numeric" aria-label="Distancia de reacción a una mano, en milímetros" disabled><small>mm aprox.</small></span></div>
-          <button id="home-toggle" class="button secondary home-toggle" type="button" aria-pressed="false" disabled>Reaccionar a manos</button>
-          <p class="home-model">Una mano lejana durante 2 s despierta curiosidad. Elige un punto a unos 10 cm y mantiene el destino aunque la mano desaparezca. Sin distancia máxima; el acercamiento respeta el perímetro.</p>
-          <button id="home-cancel" class="button secondary robot-stop" type="button" hidden>Detener regreso a casa</button>
-          <p id="home-model" class="home-model" role="status">Preparando detección de manos…</p>
-          <p id="home-error" class="error" role="alert" hidden></p>
-        </section>
-        <section class="glass robot-controls" aria-labelledby="robot-title">
-          <h2 id="robot-title" class="section-label">Robot</h2>
-          <div id="robot-status" class="robot-status" data-mode="idle" role="status">Sin conexión</div>
+        </section></section>
+          <section class="control-tab" id="workspace-panel-connection" role="tabpanel" aria-labelledby="workspace-tab-connection" tabindex="-1" hidden><section class="robot-controls" aria-labelledby="robot-title">
+          <h2 id="robot-title" class="section-label">Conexión del robot</h2>
+
           <div id="robot-address" class="robot-address"></div>
           <p id="robot-message" class="robot-message">Conecta el robot a tu red Wi-Fi para hacer la prueba.</p>
           <p id="robot-wheel-speed" class="pulse-detail" hidden></p>
-          <button id="robot-stop" class="button secondary robot-stop" type="button" disabled><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="2" fill="currentColor"/></svg><span id="robot-stop-label">Detener</span></button>
+
           <p id="robot-error" class="error" role="alert" hidden></p>
           <details id="wifi-config" class="wifi-config">
             <summary>Configurar Wi-Fi por USB</summary>
@@ -191,17 +212,18 @@
             <p class="robot-note">USB para cargar y configurar. Batería encendida para alimentar los motores.</p>
           </details>
           <details class="robot-help"><summary>Prueba manual de motores</summary>
-          <button id="robot-pulse" class="button primary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="robot-pulse-label">Avanzar 1 segundo</span></button>
+          <button id="robot-pulse" class="button secondary" type="button" disabled><svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m5 3 8 5-8 5V3Z" fill="currentColor"/></svg><span id="robot-pulse-label">Avanzar 1 segundo</span></button>
           <p class="pulse-detail">Izquierdo 100 · Derecho 100 · 1000 ms</p>
-            <p>Prueba fija de comunicación: PWM 100 de 255 durante 1 segundo. Para desplazarte con correcciones y velocidad gradual, utiliza Ir al punto.</p>
+            <p>Prueba fija de comunicación: PWM 100 de 255 durante 1 segundo. Para seguir la ruta con encoders, utiliza Iniciar recorrido.</p>
           </details>
         </section>
-        <section class="glass guide" aria-labelledby="guide-title">
+            <details class="workspace-help"><summary>Ayuda y marcador</summary><section class="guide" aria-labelledby="guide-title">
           <h2 id="guide-title" class="section-label">Prueba de orientación</h2>
-          <ol class="steps"><li>Coloca el AprilTag plano, con 5 mm de margen blanco y la flecha hacia el frente.</li><li>Gira el robot a mano una vuelta completa. La flecha debe seguir su dirección.</li><li>Tapa el marcador: el seguimiento debe desaparecer.</li></ol>
+          <ol class="steps"><li>Coloca el AprilTag plano y conserva todo el margen blanco.</li><li>Al cambiar la tarjeta, selecciona su tamaño en Cámara y vuelve a calibrar el robot.</li><li>Gira el robot a mano una vuelta completa. La flecha debe seguir su dirección.</li><li>Tapa el marcador: el seguimiento debe desaparecer.</li></ol>
           <div class="resource-links"><a href="/assets/apriltag-0-40mm.pdf" target="_blank" rel="noopener">Marcador para imprimir<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a><a href="/assets/ubicacion-apriltag.png" target="_blank" rel="noopener">Dónde colocarlo<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5 3h8v8M13 3 3 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></a></div>
-        </section>
-        <details class="details"><summary>Acerca de las mediciones</summary><p>El centro de la medición corresponde al marcador. La calibración define el centro entre las ruedas y el frente para la navegación. La orientación se mide en la imagen: 0° hacia la derecha y 90° hacia arriba. La distancia indicada es una aproximación en el plano del marcador.</p></details>
+        </section><details class="details"><summary>Acerca de las mediciones</summary><p>El centro de la medición corresponde al marcador. La calibración define el centro entre las ruedas y el frente para la navegación. La orientación se mide en la imagen: 0° hacia la derecha y 90° hacia arriba. La distancia indicada es una aproximación en el plano del marcador.</p></details></details>
+          </section>
+        </div>
       </aside>
     </div>
     <footer class="bottom-note"><span>AprilTag · identificador 0</span><span id="capture-detail">Python + OpenCV</span></footer>
@@ -213,6 +235,7 @@
     const image = $('camera-image'), viewport = $('viewport');
     const number = new Intl.NumberFormat('es-CL', {maximumFractionDigits: 1});
     let state = null, busy = false, connected = false, streamActive = false;
+    let workspacePanel = 'route', markerSizeTouched = false;
     let camerasLoaded = false, camerasLoading = false, cameraSelectionTouched = false;
     let retryStream = null, lastAnnouncement = '';
     let robotState = null, robotAvailable = false, robotPortsLoading = false;
@@ -250,6 +273,76 @@
 
     function announce(text) {
       if (lastAnnouncement !== text) { $('screen-reader-status').textContent = text; lastAnnouncement = text; }
+    }
+    function setWorkspacePanel(name, focus = false) {
+      const names = ['route', 'camera', 'connection'];
+      if (!names.includes(name)) return false;
+      workspacePanel = name;
+      for (const key of names) {
+        const active = key === name, tab = $(`workspace-tab-${key}`);
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+        $(`workspace-panel-${key}`).hidden = !active;
+      }
+      if (focus) $(`workspace-tab-${name}`).focus();
+      return true;
+    }
+    function handleWorkspaceTabKeydown(event) {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      const names = ['route', 'camera', 'connection'];
+      const current = names.indexOf(event.currentTarget.id.replace('workspace-tab-', ''));
+      if (current < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + names.length) % names.length;
+      event.preventDefault();
+      setWorkspacePanel(names[next], true);
+    }
+    function updateWorkspaceChrome() {
+      const handLabel = homeState?.returning || homeState?.phase === 'returning' ? 'Volviendo a casa' : homeState?.curious || homeState?.phase === 'curious' ? 'Curiosidad' : homeState?.enabled ? 'Activadas' : 'Desactivadas';
+      if ($('workspace-hand-status').textContent !== handLabel) $('workspace-hand-status').textContent = handLabel;
+      let text = '', action = '', label = '';
+      if (robotStopBusy) text = 'Deteniendo el movimiento y cancelando las reacciones a manos…';
+      else if (navigationOwnsRobot()) text = 'Recorrido en curso. Puedes ajustar las velocidades o detener el robot.';
+      else if (calibrationStage) text = calibrationStage === 'center' ? 'Calibración 1 de 2: marca el centro entre las ruedas.' : 'Calibración 2 de 2: marca hacia dónde mira el frente.';
+      else if (!connected) text = 'Conectando con el servicio local de cámara…';
+      else if (!state?.running) { text = state?.opening ? 'Abriendo la cámara…' : 'Inicia la cámara para preparar el recorrido.'; action = 'camera'; label = 'Preparar cámara'; }
+      else if (!cameraVisionFresh()) { text = 'Encuadra el marcador completo. Si hay reflejos, ajusta la iluminación.'; action = 'camera'; label = 'Ajustar imagen'; }
+      else if (!navigationCalibrated()) { text = 'El marcador está visible. Calibra el centro y el frente del robot.'; action = 'calibrate'; label = 'Calibrar robot'; }
+      else if (!robotState?.connected || !robotState?.ready) { text = 'Puedes preparar el mapa. Conecta el robot para iniciar el movimiento.'; action = 'connection'; label = 'Ver conexión'; }
+      else if (homeState?.enabled) text = 'Reacción a manos activada. Detener robot también cancela esta reacción.';
+      else if (!navigationWaypoints().length) { text = 'Añade los puntos en la imagen, en el orden del recorrido.'; action = 'points'; label = 'Marcar puntos'; }
+      else if (!canStartNavigation()) {
+        if (robotState?.encoder_ready !== true || robotState?.velocity_control !== true) { text = 'Revisa el control de velocidad y los encoders en la conexión del robot.'; action = 'connection'; label = 'Ver conexión'; }
+        else if (speedPending || speedInFlight) text = 'Guardando las velocidades del recorrido…';
+        else if (navigationState?.planning_status === 'blocked') text = 'Revisa el perímetro y la posición de los puntos para preparar un paso.';
+        else if (obstacleDraft.length) text = 'Cierra el perímetro en A o cancela el dibujo para continuar.';
+        else if (navigationTool !== 'points') { text = 'Vuelve a Puntos para iniciar el recorrido.'; action = 'points'; label = 'Seleccionar puntos'; }
+        else text = 'Preparando el recorrido. Conserva el marcador visible mientras se confirma el mapa.';
+      }
+      else text = 'Recorrido preparado. Revisa las velocidades y pulsa Iniciar recorrido.';
+      const next = $('workspace-next-step'), button = $('workspace-setup-action');
+      if (next.textContent !== text) next.textContent = text;
+      button.hidden = !action;
+      button.dataset.action = action;
+      if (button.textContent !== label) button.textContent = label;
+      button.disabled = action === 'calibrate' && $('navigation-calibrate').disabled;
+    }
+    function workspaceSetupAction() {
+      const action = $('workspace-setup-action').dataset.action;
+      if (action === 'camera' || action === 'connection') {
+        setWorkspacePanel(action, true);
+        $('control-panel').scrollIntoView({block: 'start', behavior: 'auto'});
+      } else if (action === 'calibrate') beginCalibration();
+      else if (action === 'points') { setNavigationTool('points'); $('navigation-point-mode').focus(); }
+    }
+    function selectedMarkerSizeMm() {
+      const value = Number($('marker-size').value);
+      return [40, 52].includes(value) ? value : 40;
+    }
+    function renderMarkerSize() {
+      const select = $('marker-size');
+      select.disabled = !!calibrationStage || navigationOwnsRobot() || homeState?.enabled === true;
+      const calibratedMm = Math.round((navigationState?.calibration_geometry?.marker_size_m || .04) * 1000);
+      if (!markerSizeTouched && [40, 52].includes(calibratedMm)) select.value = String(calibratedMm);
     }
     function errorMessage(value) {
       if (typeof value === 'string') return value;
@@ -305,6 +398,7 @@
       illuminationState = {...next, diagnostics: {...next.diagnostics}};
       if (connected && illuminationPending && !illuminationInFlight && illuminationDebounce === null) scheduleIllumination();
       renderIlluminationUI();
+      if (typeof updateWorkspaceChrome === 'function') updateWorkspaceChrome();
       return true;
     }
     function scheduleIllumination() {
@@ -595,15 +689,17 @@
       const watchingHands = navigationState?.home_watch_armed === true || homeState?.enabled === true;
       const configurationBlocked = (navigating && !navigationAllowsReconnect()) || watchingHands;
       $('robot-pulse').disabled = !linked || !robotState?.ready || moving || robotPulsePending || actionBusy || configuring || navigating || watchingHands || !!calibrationStage || navigationTool !== 'points' || obstacleDraft.length > 0 || ['calibrate', 'obstacles', 'obstacle-settings'].includes(navigationBusy);
-      $('robot-stop').disabled = !linked || !(moving || navigating || watchingHands || robotState?.navigation_active) || robotStopBusy;
+      const canRequestStop = robotAvailable || navigationAvailable || homeAvailable || moving || navigating || watchingHands || robotPulsePending;
+      $('robot-stop').disabled = !canRequestStop || robotStopBusy;
       $('robot-pulse-label').textContent = moving ? 'Avanzando…' : robotPulsePending ? 'Confirmando parada…' : 'Avanzar 1 segundo';
-      $('robot-stop-label').textContent = robotStopBusy ? 'Deteniendo…' : 'Detener';
+      $('robot-stop-label').textContent = robotStopBusy ? 'Deteniendo…' : 'Detener robot';
       $('robot-connect').disabled = !robotAvailable || actionBusy || configuring || moving || configurationBlocked || !$('robot-port').value;
       $('robot-connect-label').textContent = robotConnectBusy || configuring ? 'Conectando…' : 'Conectar robot';
       const editingDisabled = actionBusy || configuring || moving || configurationBlocked;
       $('robot-port').disabled = editingDisabled || robotPortsLoading;
       $('robot-ssid').disabled = $('robot-password').disabled = editingDisabled;
       $('robot-refresh-ports').disabled = editingDisabled || robotPortsLoading;
+      if (typeof updateWorkspaceChrome === 'function') updateWorkspaceChrome();
     }
     function renderRobot(next, confirmed = false) {
       const previouslyLinked = !!robotState?.connected;
@@ -727,25 +823,41 @@
       } finally { robotPulseSubmitting = false; updateRobotButtons(); }
     }
     async function stopRobot() {
-      if ($('robot-stop').disabled) return;
+      if ($('robot-stop').disabled || robotStopBusy) return;
       robotStopBusy = true;
       routeEditGeneration++; routePointQueue = []; cancelObstacleDraft(false);
       navigationActionVersion++; navigationAppliedVersion = ++navigationReadVersion;
       robotAppliedVersion = ++robotReadVersion;
+      homeActionVersion++; homeAppliedVersion = ++homeReadVersion;
+      navigationStartPending = false;
+      navigationBusy = '';
       setRobotError('');
+      $('workspace-stop-feedback').hidden = true;
       updateRobotButtons();
       try {
-        const result = await api('/api/robot/stop', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body: '{}'});
-        robotAppliedVersion = ++robotReadVersion;
-        robotPulseExpectedId = null;
-        robotPulseResponseReceived = true;
-        renderRobot(result, true);
-        navigationActionVersion++;
-        navigationBusy = '';
-        navigationStartPending = false;
-        readNavigationState();
-      } catch (error) { setRobotError(error.message || 'No se pudo confirmar la parada.'); }
-      finally { robotStopBusy = false; updateRobotButtons(); }
+        const options = () => ({method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'}, body: '{}'});
+        const [route, robot] = await Promise.allSettled([
+          api('/api/navigation/stop', options()), api('/api/robot/stop', options())
+        ]);
+        const failures = [];
+        if (route.status === 'fulfilled') { navigationAppliedVersion = ++navigationReadVersion; renderNavigation(route.value, true); }
+        else failures.push('No se pudo confirmar la cancelación del recorrido.');
+        if (robot.status === 'fulfilled') {
+          robotAppliedVersion = ++robotReadVersion;
+          robotPulsePending = false; robotPulseExpectedId = null; robotPulseResponseReceived = true;
+          renderRobot(robot.value, true);
+        } else failures.push('No se pudo confirmar la parada física. Revisa la conexión o utiliza D48.');
+        if (failures.length) {
+          const message = failures.join(' ');
+          setRobotError(message);
+          $('workspace-stop-feedback').textContent = message;
+          $('workspace-stop-feedback').hidden = false;
+        }
+      } finally {
+        robotStopBusy = false;
+        updateRobotButtons();
+        readNavigationState(); readHomeState();
+      }
     }
     $('robot-connect-form').addEventListener('submit', connectRobot);
     $('robot-refresh-ports').addEventListener('click', loadRobotPorts);
@@ -872,6 +984,7 @@
       const model = typeof detector?.model === 'string' && detector.model.trim() ? detector.model.trim() : 'MediaPipe';
       const detectorLabels = {ready: 'detección de manos lista', loading: 'cargando detección de manos…', missing: 'falta instalar el modelo de manos', missing_model: 'falta instalar el modelo de manos', error: 'detector no disponible', closed: 'detección detenida'};
       $('home-model').textContent = !homeAvailable ? 'Esperando el servicio de casa y manos.' : `${model} · ${detectorLabels[detector?.status] || 'preparando detección de manos…'}`;
+      if (typeof updateWorkspaceChrome === 'function') updateWorkspaceChrome();
     }
     function renderHome(next) {
       homeState = next; homeAvailable = true;
@@ -1256,6 +1369,7 @@
       cancelObstacleDraft(false); navigationTool = 'points';
       calibrationAnchor = markerPose();
       if (!calibrationAnchor) return;
+      if (typeof selectedMarkerSizeMm === 'function') calibrationAnchor.metadata.marker_size_mm = selectedMarkerSizeMm();
       calibrationSourceKey = calibrationAnchor.key;
       calibrationCenter = null; calibrationCenterTag = null; calibrationProjectionReady = true; calibrationStage = 'center';
       persistCalibrationDraft();
@@ -1577,6 +1691,7 @@
       renderSpeedControls();
     }
     function updateNavigationUI() {
+      if (typeof renderMarkerSize === 'function') renderMarkerSize();
       renderCenterMeasurement();
       const active = navigationOwnsRobot();
       const calibrationPaused = !!calibrationStage && (!cameraVisionFresh() || !navigationAvailable || active || !calibrationProjectionReady);
@@ -1614,6 +1729,7 @@
     }
     function renderNavigation(next, confirmed = false, speedGeneration = speedAckGeneration) {
       navigationState = next; navigationAvailable = true;
+      if (typeof renderMarkerSize === 'function') renderMarkerSize();
       acceptSpeedState(next, 'state', speedGeneration);
       if (state?.frame_width > 0 && state?.frame_height > 0) navigationCameraKey = cameraKey();
       if (confirmed && !next.active && navigationBusy !== 'start') navigationStartPending = false;
@@ -1797,6 +1913,13 @@
     viewport.addEventListener('pointerleave', () => { obstaclePointer = null; drawNavigationOverlay(); });
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(drawNavigationOverlay).observe(viewport);
     window.addEventListener('resize', drawNavigationOverlay);
+    for (const key of ['route', 'camera', 'connection']) {
+      $(`workspace-tab-${key}`).addEventListener('click', () => setWorkspacePanel(key));
+      $(`workspace-tab-${key}`).addEventListener('keydown', handleWorkspaceTabKeydown);
+    }
+    $('workspace-setup-action').addEventListener('click', workspaceSetupAction);
+    $('marker-size').addEventListener('change', () => { markerSizeTouched = true; });
+    setWorkspacePanel('route');
     updateNavigationUI();
     pollNavigation();
     pollHome();

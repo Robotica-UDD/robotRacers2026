@@ -42,17 +42,17 @@ Para probar una webcam real sin simulador ni ROS 2, ejecuta
 http://127.0.0.1:8010/ con detección del marcador y orientación del robot.
 Consulta [montaje del marcador y prueba de cámara](docs/prueba-webcam.md).
 
-La tarjeta **Robot** permite enlazar la ESP32 por Wi-Fi y ejecutar un único
+La pestaña **Conexión** permite enlazar la ESP32 por Wi-Fi y ejecutar un único
 avance con PWM 100/100 durante 1000 ms. La configuración inicial se envía por
 USB desde el mismo panel. [Cómo configurar y probar el control Wi-Fi](docs/prueba-control-wifi.md).
 
-La tarjeta **Navegación** permite calibrar el centro y el frente con dos clics,
+La pestaña **Recorrido** permite calibrar el centro y el frente con dos clics,
 marcar varios puntos en la imagen y pulsar **Iniciar recorrido**. Los recorre en
 orden y **Borrar puntos** detiene y vacía la lista. La selección nunca
 inicia movimiento. Esta prueba usa corrección visual y Wi-Fi, y el firmware
-regula velocidades en mm/s con los encoders. La herramienta **Dibujar obstáculo**
-permite marcar polígonos de cuatro lados y calcular desvíos con margen para el
-robot completo. **Borrar obstáculos** conserva los puntos de destino. La precisión del perfil de movimiento actual
+regula velocidades en mm/s con los encoders. La herramienta **Perímetro**
+permite marcar vértices y cerrar en A: la línea es la barrera y su interior queda
+libre. **Borrar perímetros** conserva los puntos de destino. La precisión del perfil de movimiento actual
 está pendiente de validación física. La corrección durante el avance está filtrada y amortiguada. Una pérdida breve
 del marcador conserva el último mando con un presupuesto de tiempo y movimiento cuando no hay obstáculos;
 no confirma llegadas sin visión. Ante pérdida prolongada de imagen o Wi-Fi, espera con los motores a cero y

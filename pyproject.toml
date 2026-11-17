@@ -32,7 +32,7 @@ include = ["simulation.service*", "simulation.adapters*", "simulation.tools*", "
 namespaces = true
 
 [tool.setuptools.package-data]
-"simulation.webcam" = ["static/*.html", "assets/*.pdf", "assets/*.png"]
+"simulation.webcam" = ["static/*.html", "assets/*.pdf", "assets/*.png", "assets/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["simulation/tests"]

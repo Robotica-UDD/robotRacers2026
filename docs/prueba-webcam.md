@@ -17,17 +17,24 @@ dejando libres el hueco de la turbina, las ruedas y los conectores.
 La ilustración indica una ubicación aproximada; no es una plantilla dimensional
 del soporte ni el archivo que se debe imprimir.
 
-Imprime [el PDF del marcador](../simulation/webcam/assets/apriltag-0-40mm.pdf)
-al **100 %, tamaño real**, desactivando ajustar a página. Comprueba con una regla
-la referencia de 40 mm. El patrón negro mide 40 × 40 mm y tiene 5 mm de margen
-blanco en cada lado. La tarjeta mide 50 × 62 mm porque incluye una franja
-adicional para la flecha de orientación, fuera del margen blanco del patrón.
-Recórtala por el borde exterior de puntos y fija la flecha **FRENTE** hacia el
-frente real del robot. Usa una impresión mate, sin reflejos ni curvaturas.
+La tarjeta nueva mide **65 × 65 mm en total**, con un patrón negro de
+**52 × 52 mm** y **6,5 mm blancos por cada lado**. Imprime
+[el PDF A4 de 65 mm](../simulation/webcam/assets/apriltag-0-65mm-a4.pdf)
+al **100 %, tamaño real**, sin ajustar a página. Comprueba su barra de 50 mm
+con una regla. Recorta sin reducir el margen blanco; la flecha de orientación
+queda fuera de la tarjeta y solo indica qué borde debe apuntar al frente.
+Usa una impresión mate, sin reflejos ni curvaturas.
 
-El [PNG original con margen](../simulation/webcam/assets/apriltag-0-margen.png)
-también está disponible. Su tamaño físico depende de la configuración de
-impresión; el PDF es la opción recomendada para conservar los 40 mm.
+En **Cámara → Marcador y escala**, selecciona **Nueva: tarjeta de 65 mm**
+y vuelve a **Calibrar robot** con sus dos clics. El programa usa los **52 mm
+del patrón**, no los 65 mm del papel, para calcular distancias. Cambiar la
+selección no modifica la calibración guardada ni envía órdenes de movimiento.
+El tamaño queda asociado a la calibración al confirmar el centro y el frente.
+
+El [PDF anterior de patrón de 40 mm](../simulation/webcam/assets/apriltag-0-40mm.pdf)
+y su [PNG con margen](../simulation/webcam/assets/apriltag-0-margen.png) siguen
+disponibles. Mantén **Anterior: patrón de 40 mm** mientras uses esa impresión.
+Una calibración existente conserva su tamaño hasta que la reemplaces.
 
 ## Abrir la prueba
 
@@ -40,11 +47,11 @@ uv sync --frozen
 
 También puedes hacer doble clic en `simulation/webcam/run.command`. El panel se
 abre en **http://127.0.0.1:8010/**. La captura permanece apagada hasta pulsar
-**Iniciar**. No hace falta instalar los componentes del simulador, Node ni Webots.
+**Iniciar cámara**. No hace falta instalar los componentes del simulador, Node ni Webots.
 Para usar otro puerto: `./simulation/webcam/run.command --port 8012`.
 
 1. Conecta la webcam y sitúala fija encima del área de prueba, mirando al suelo.
-2. En macOS, selecciona la webcam por su **nombre** y pulsa **Iniciar**. El panel
+2. En macOS, selecciona la webcam por su **nombre** y pulsa **Iniciar cámara**. El panel
    recomienda una cámara USB cuando la encuentra. Si acabas de conectarla, pulsa
    **Actualizar cámaras** con la captura detenida. El nombre también aparece
    sobre la imagen. Si no se pueden consultar los nombres, se muestran índices
@@ -54,16 +61,46 @@ Para usar otro puerto: `./simulation/webcam/run.command --port 8012`.
    seguridad → Cámara y cierra otras aplicaciones que estén usando la webcam.
 4. Sitúa el robot a la vista. El recuadro delimita el marcador; el punto señala
    su centro y la flecha indica el frente del robot.
-5. Pulsa **Detener** para liberar la cámara. Cierra el servidor con Ctrl+C en su
+5. Pulsa **Detener cámara** para liberar la cámara. Cierra el servidor con Ctrl+C en su
    terminal antes de abrir una nueva instancia en el mismo puerto.
 
 La página y sus recursos funcionan sin Internet después de instalar dependencias.
 No se guardan fotografías ni vídeos. La captura se hace con OpenCV en Python,
 no con la cámara del navegador. Un permiso del navegador no reemplaza el de macOS.
 
+## Panel de operación
+
+**Iniciar recorrido** y **Detener robot** permanecen en la cabecera; en
+pantallas pequeñas aparecen fijos abajo. Las herramientas **Puntos**,
+**Perímetro**, **Casa** y **Calibrar robot** están junto a la imagen.
+
+- **Recorrido:** velocidades de avance y giro, gestión de puntos y ajustes de
+  perímetros. **Casa y manos** despliega sus reacciones y parámetros.
+- **Cámara:** selección de webcam, captura, iluminación y tamaño del marcador.
+- **Conexión:** estado del enlace, configuración Wi-Fi por USB y prueba manual
+  de motores dentro de un desplegable separado.
+
+Las pestañas admiten flechas izquierda/derecha y las teclas Inicio/Fin, con foco
+visible. Cambiar de pestaña, abrir ayudas o elegir el tamaño del marcador no
+inicia movimiento. Un aviso junto a la imagen indica el siguiente paso necesario.
+
+**Detener robot** solicita en paralelo cancelar la navegación y detener los
+motores; también desarma la reacción a manos. Permanece disponible si se pierde
+la cámara o el enlace. Si falta la confirmación física, el panel lo indica sin
+afirmar que el robot se detuvo. **Detener cámara** solo libera la captura;
+**Cancelar recorrido** cancela la misión y **Borrar puntos** además vacía sus
+destinos. El control local y la planificación no cambian al reorganizar el panel.
+
+Se aplican jerarquía visual, agrupación por tarea, divulgación progresiva,
+controles de al menos 44 px en las acciones principales, contraste y foco
+visible. Son decisiones basadas en las [heurísticas de Nielsen](https://www.nngroup.com/articles/ten-usability-heuristics/),
+la [ley de Fitts](https://www.nngroup.com/articles/fitts-law/) y criterios de
+[WCAG 2.2](https://www.w3.org/WAI/WCAG22/Understanding/). La revisión no constituye
+una certificación de accesibilidad: el dibujo sobre la imagen requiere puntero.
+
 ## Iluminación, sombras y reflejos
 
-En **Captura**, pulsa **Optimizar iluminación** para activar la compensación
+En la pestaña **Cámara**, pulsa **Optimizar iluminación** para activar la compensación
 digital automática y el contraste local. El cambio se aplica al vídeo y a las
 imágenes candidatas del detector AprilTag, sin reiniciar la webcam, recortar,
 girar ni desplazar la imagen. El detector conserva también el original como

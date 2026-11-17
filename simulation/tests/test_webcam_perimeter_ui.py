@@ -249,6 +249,7 @@ renderObstacleTools();
 assert.equal($('navigation-obstacle-mode').disabled,true);
 """)
     html = PAGE.read_text()
-    assert '>Dibujar perímetro</button>' in html
+    assert 'aria-label="Dibujar perímetro"' in html
+    assert '>Perímetro</button>' in html
     assert '>Borrar perímetros</button>' in html
     assert 'con cuatro clics' not in html
