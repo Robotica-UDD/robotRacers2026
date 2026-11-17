@@ -49,6 +49,67 @@ def test_straight_vision_noise_is_filtered_without_stopping_or_large_wheel_corre
     assert all(not result["blocked"] for result in outputs)
 
 
+def test_alternating_three_degree_camera_yaw_does_not_steer_or_interrupt_a_straight():
+    follower = PathFollower()
+    outputs = []
+    for i in range(100):
+        measured_yaw = math.radians(3. if i % 2 else -3.)
+        outputs.append(follower.update(local_path([(0., 0.), (1., 0.)], 0., 0., measured_yaw),
+            1. + i * .05, {"forward_mm_s": 420, "turn_deg_s": 57},
+            previous_wheels=(420., 420.), sequence=i))
+    assert all(result["phase"] == "advancing" and not result["blocked"] for result in outputs)
+    assert all(result["left"] > 0 and result["right"] > 0 for result in outputs)
+    assert min(result["linear_mm_s"] for result in outputs) > 400.
+    assert max(abs(result["left"] - result["right"]) for result in outputs) < 8.
+    assert max(abs(result["angular_deg_s"]) for result in outputs[15:]) < .5
+
+
+def test_straight_damping_still_corrects_a_persistent_small_heading_error():
+    follower = PathFollower()
+    outputs = []
+    for i in range(60):
+        outputs.append(follower.update(local_path([(0., 0.), (1., 0.)], 0., 0., math.radians(6.)),
+            1. + i * .05, {"forward_mm_s": 420, "turn_deg_s": 57},
+            previous_wheels=(420., 420.), sequence=i))
+    assert -10.5 < outputs[-1]["angular_deg_s"] < -2.
+    assert all(result["linear_mm_s"] > 400 for result in outputs)
+
+
+def test_420_mm_s_straight_with_visual_yaw_noise_remains_uniform_and_reaches_goal():
+    follower = PathFollower()
+    route = [(-.4, 0.), (2., 0.)]
+    x, y, yaw = 0., .006, math.radians(2.)
+    previous = (0., 0.)
+    trace = []
+    dt = .05
+    for i in range(160):
+        noise = math.radians(3.) * math.sin(2. * math.pi * 4. * i * dt)
+        result = follower.update(local_path(route, x, y, yaw + noise), 1. + i * dt,
+            {"forward_mm_s": 420, "turn_deg_s": 57}, previous_wheels=previous,
+            sequence=i, goal_covered=math.hypot(x - 2., y) < .035)
+        if result["done"]:
+            break
+        assert not result["blocked"]
+        # Same acceleration/braking envelope as Navigation, without IO.
+        applied = []
+        for current, target in zip(previous, (result["left"], result["right"])):
+            effective = 0. if current * target < 0 else target
+            step = (900. if abs(effective) < abs(current) else 600.) * dt
+            applied.append(current + max(-step, min(step, effective - current)))
+        x, y, yaw = move(x, y, yaw, *applied, dt)
+        previous = tuple(applied)
+        trace.append((x, y, math.degrees((applied[1] - applied[0]) / TRACK_WIDTH_MM), result))
+    assert result["done"]
+    assert math.hypot(x - 2., y) < .035
+    assert max(abs(row[1]) for row in trace) < .020
+    steady = [row for row in trace if .15 < row[0] < 1.7]
+    assert steady
+    angular_rms = math.sqrt(sum(row[2] ** 2 for row in steady) / len(steady))
+    assert angular_rms < 8.
+    assert sum(row[3]["linear_mm_s"] for row in steady) / len(steady) > 350.
+    assert all(row[3]["left"] > 0 and row[3]["right"] > 0 for row in trace)
+
+
 @pytest.mark.parametrize("observed_yaw", [math.radians(20.), math.radians(-20.), math.radians(179.)])
 def test_bearing_filter_does_not_delay_the_robots_observed_rotation(observed_yaw):
     follower = PathFollower()

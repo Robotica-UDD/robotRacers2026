@@ -655,3 +655,27 @@ Para repetir las pruebas locales:
   simulation/tests/test_webcam_point_navigation.py \
   simulation/tests/test_webcam_robot_link.py
 ```
+
+## Corrección fina de rectas: revisión del 17-11-2026
+
+El seguimiento continuo distingue una recta alineada de una curva planificada.
+En la recta aplica una corrección proporcional-derivativa (PD) con filtrado de
+120 ms, filtrado de la derivada de 150 ms y una banda de indiferencia de 1,5°.
+La ganancia de seguimiento fino es la mitad de la persecución normal; la
+corrección se limita a 10°/s y su variación a 25°/s². Una pequeña alternancia de
+signo ya no ordena detener el avance: ambas ruedas siguen avanzando mientras
+corrigen suavemente.
+
+La mezcla con el control normal es gradual. Se desvanece al aumentar el error
+angular entre 12° y 32°, al salir del corredor lateral entre 15 y 35 mm,
+al acercarse a un codo de la ruta o si queda una rotación importante del giro
+anterior. Los pivotes, los giros planificados y las comprobaciones del arco de
+colisión conservan su control completo. Las máximas seleccionadas en el panel
+siguen siendo las solicitadas por el usuario.
+
+Las pruebas incluyen ruido alternante de orientación, corrección de un error
+persistente de 6°, avance de 2 m a 420 mm/s con máximo de giro de 57°/s y los
+recorridos completos de 200/100 y 600/1600. En la planta sintética con ruido de
+±3° a 4 Hz, el avance medio fue aproximadamente 416 mm/s y el valor eficaz de la
+velocidad angular fue 4,16°/s. Estas cifras verifican el controlador de software; todavía
+requieren contraste con el comportamiento físico del robot y la cámara.

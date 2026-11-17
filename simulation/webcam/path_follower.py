@@ -43,6 +43,12 @@ class PathFollower:
     Cuando la primera propuesta no cabe, se prueban hasta doce movimientos de
     menor alcance o giros locales mediante is_clear(left, right, horizon).
     Un giro no necesita un período de confirmación parado antes de avanzar.
+
+    En rectas ya alineadas, un PD de corrección menor rechaza el ruido de
+    orientación sin recortar la máxima de avance. Se mezcla progresivamente
+    con la persecución normal al salir del corredor, acercarse a un codo o
+    quedar una rotación importante de la consigna anterior. No limita los
+    pivotes ni sustituye la comprobación de colisiones.
     """
 
     HALF_TRACK_MM = TRACK_WIDTH_MM / 2.
@@ -60,6 +66,13 @@ class PathFollower:
     MIN_PIVOT_RAD_S = math.radians(12.)
     HORIZON_SECONDS = .20
     MAX_CANDIDATES = 12
+    STRAIGHT_FILTER_SECONDS = .12
+    STRAIGHT_DERIVATIVE_SECONDS = .15
+    STRAIGHT_GAIN = .5
+    STRAIGHT_DERIVATIVE_GAIN = .12
+    STRAIGHT_DEADBAND_RAD = math.radians(1.5)
+    STRAIGHT_MAX_RATE_RAD_S = math.radians(10.)
+    STRAIGHT_MAX_SLEW_RAD_S2 = math.radians(25.)
 
     def __init__(self):
         self.reset()
@@ -74,6 +87,11 @@ class PathFollower:
         self._linear = 0.
         self._pivoting = False
         self._pivot_sign = 1.
+        self._straight_bearing = None
+        self._straight_stamp = None
+        self._straight_sequence = None
+        self._straight_derivative = 0.
+        self._straight_rate = 0.
 
     @staticmethod
     def _result(left=0, right=0, *, phase="advancing", done=False, blocked=False,
@@ -146,6 +164,79 @@ class PathFollower:
             return speed * horizon, 0., angle
         return (speed / angular_rad_s * math.sin(angle),
                 speed / angular_rad_s * (1. - math.cos(angle)), angle)
+
+    @staticmethod
+    def _smoothstep(value):
+        value = _clamp(value, 0., 1.)
+        return value * value * (3. - 2. * value)
+
+    def _straight_weight(self, points, lookahead, error):
+        """Suavizar realimentación pequeña, sin recortar curvas planificadas."""
+        alignment = 1. - self._smoothstep((abs(error) - math.radians(12.)) / math.radians(20.))
+        if alignment <= 0 or len(points) < 2:
+            return alignment
+        index = min(self._segment, len(points) - 2)
+        a, b = points[index:index + 2]
+        projected, cross_track, _ = self._projection(a, b)
+        if math.hypot(b[0] - a[0], b[1] - a[1]) <= 1e-8:
+            return 0.
+        corridor = 1. - self._smoothstep((cross_track - .015) / .020)
+        if corridor <= 0:
+            return 0.
+        heading = math.atan2(b[1] - a[1], b[0] - a[0])
+        distance = math.hypot(b[0] - projected[0], b[1] - projected[1])
+        corner_weight = 1.
+        for c, d in zip(points[index + 1:], points[index + 2:]):
+            length = math.hypot(d[0] - c[0], d[1] - c[1])
+            if length <= 1e-8:
+                continue
+            next_heading = math.atan2(d[1] - c[1], d[0] - c[0])
+            if abs(_wrap(next_heading - heading)) > math.radians(3.):
+                # La transición termina antes de que el punto adelantado
+                # cruce el codo: el giro intencional conserva su controlador.
+                corner_weight = self._smoothstep((distance - lookahead) / max(.04, lookahead * .5))
+                break
+            distance += length
+        return alignment * corridor * corner_weight
+
+    def _straight_correction(self, bearing, stamp, sequence, linear_mm_s,
+                             target_distance, max_angular):
+        """PD de corrección sobre mediciones: el ruido de yaw no es una orden."""
+        cap = min(max_angular, self.STRAIGHT_MAX_RATE_RAD_S,
+                  linear_mm_s * .15 / self.HALF_TRACK_MM)
+        if self._straight_bearing is None:
+            self._straight_bearing = bearing
+            self._straight_stamp, self._straight_sequence = stamp, sequence
+            self._straight_derivative = self._straight_rate = 0.
+            return 0.
+        if sequence is not None and sequence == self._straight_sequence:
+            return _clamp(self._straight_rate, -cap, cap)
+        seconds = stamp - self._straight_stamp
+        if seconds <= 0:
+            return _clamp(self._straight_rate, -cap, cap)
+        if seconds > .5:
+            self._straight_bearing = bearing
+            self._straight_derivative = self._straight_rate = 0.
+            self._straight_stamp, self._straight_sequence = stamp, sequence
+            return 0.
+        alpha = -math.expm1(-seconds / self.STRAIGHT_FILTER_SECONDS)
+        increment = alpha * _wrap(bearing - self._straight_bearing)
+        self._straight_bearing = _wrap(self._straight_bearing + increment)
+        derivative_alpha = -math.expm1(-seconds / self.STRAIGHT_DERIVATIVE_SECONDS)
+        self._straight_derivative += derivative_alpha * (increment / seconds - self._straight_derivative)
+        self._straight_stamp, self._straight_sequence = stamp, sequence
+        corrected = math.copysign(max(0., abs(self._straight_bearing) - self.STRAIGHT_DEADBAND_RAD),
+                                  self._straight_bearing)
+        gain = self.STRAIGHT_GAIN * 2. * linear_mm_s / 1000. / max(target_distance, .025)
+        proportional = gain * corrected
+        derivative = _clamp(self.STRAIGHT_DERIVATIVE_GAIN * self._straight_derivative,
+                            -abs(proportional) * .6, abs(proportional) * .6)
+        desired = _clamp(proportional + derivative, -cap, cap)
+        self._straight_rate += _clamp(desired - self._straight_rate,
+                                     -self.STRAIGHT_MAX_SLEW_RAD_S2 * seconds,
+                                     self.STRAIGHT_MAX_SLEW_RAD_S2 * seconds)
+        self._straight_rate = _clamp(self._straight_rate, -cap, cap)
+        return self._straight_rate
 
     def update(self, path_local_m, now, speeds, *, is_clear=None, goal_covered=False,
                sequence=None, previous_wheels=None, stop_at_index=None, start_at_index=0):
@@ -274,6 +365,20 @@ class PathFollower:
                                  max(self.MIN_FORWARD_MM_S, braking_speed))
             desired_linear *= max(.25, math.cos(error))
             desired_angular = _clamp(desired_linear / 1000. * curvature, -max_angular, max_angular)
+        straight_weight = (0. if self._pivoting else
+                           self._straight_weight(active_points, lookahead, error))
+        # No confundir el final de un giro rápido con ruido de una recta:
+        # mientras quede rotación importante conserva el transporte observado
+        # y el frenado angular original, sin añadir la fase de este PD suave.
+        straight_weight *= 1. - self._smoothstep(
+            (abs(previous_angular) - self.STRAIGHT_MAX_RATE_RAD_S) / math.radians(20.))
+        if straight_weight > 0:
+            correction = self._straight_correction(bearing, stamp, sequence,
+                                                   desired_linear, target_distance, max_angular)
+            desired_angular = (1. - straight_weight) * desired_angular + straight_weight * correction
+        else:
+            self._straight_bearing = self._straight_stamp = self._straight_sequence = None
+            self._straight_derivative = self._straight_rate = 0.
         # El robot es diferencial: una rueda puede invertir su sentido mientras
         # el centro sigue avanzando. Limitar primero ambas ruedas con el mismo
         # factor conserva el radio solicitado, incluso por debajo de la semitrocha.
@@ -286,12 +391,16 @@ class PathFollower:
         desired_angular *= desired_scale
         angular_change = self.ANGULAR_ACCELERATION_RAD_S2 * dt
         angular = _clamp(desired_angular, previous_angular - angular_change, previous_angular + angular_change)
-        if desired_linear > 0 and angular * desired_angular < 0:
+        gentle_motion = (straight_weight >= .8 and
+                         max(abs(previous_angular), abs(desired_angular)) <= self.STRAIGHT_MAX_RATE_RAD_S * 1.5)
+        # Una pequeña corrección de recta puede cambiar de signo sin pedir
+        # una detención. La regla de frenado se conserva para giros amplios.
+        if desired_linear > 0 and angular * desired_angular < 0 and not gentle_motion:
             # Frenar el giro anterior antes de avanzar hacia el lado opuesto.
             # Mantener toda la velocidad lineal durante esa inversión crea un
             # arco que se aleja del punto adelantado y puede cerrar una vuelta.
             desired_linear = 0.
-        elif (desired_linear > 0 and abs(desired_angular) > 1e-8
+        elif (not gentle_motion and desired_linear > 0 and abs(desired_angular) > 1e-8
                 and abs(angular) < abs(desired_angular)):
             # Al aumentar la velocidad angular, no avanzar a una velocidad que
             # convierta el giro previsto en un arco mucho más abierto.
