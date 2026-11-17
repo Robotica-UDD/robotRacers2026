@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.tests.test_webcam_point_navigation import (FakeCamera, FakeRobot, wait_for,
                                                           goal_under_body, scale_path_clock)
 from simulation.webcam.navigation import Navigation, NavigationError
@@ -77,7 +78,7 @@ def penetration_mm(x, y, yaw, polygons):
 
 
 class SignedWheelPlant(FakeRobot):
-    """Planta diferencial exacta para mandos constantes y entre ejes de 190 mm."""
+    """Planta diferencial exacta con la separación vigente entre ruedas."""
 
     def __init__(self, camera, start, polygons):
         super().__init__()
@@ -91,7 +92,7 @@ class SignedWheelPlant(FakeRobot):
         super().drive_velocity_navigation(left, right)
         previous_pose = (self.x, self.y, self.yaw)
         dt = .020
-        speed, angular = (left + right) / 2000.0, (right - left) / 190.0
+        speed, angular = (left + right) / 2000.0, (right - left) / TRACK_WIDTH_MM
         delta = angular * dt
         if abs(angular) > 1e-9:
             self.x += speed / angular * (math.sin(self.yaw + delta) - math.sin(self.yaw))
@@ -160,11 +161,14 @@ def assert_forward_route(steps):
 
 
 def test_zero_margin_preview_accepts_oriented_start_rejected_by_a_circle_without_arming():
-    with synthetic_scene() as (camera, robot, nav):
+    # La parte trasera queda hacia la barrera: hay 22 mm libres con la huella
+    # actual, aunque su círculo de giro de 89,1 mm rechazaría el centro a 75 mm.
+    with synthetic_scene(start=(0., 0., -math.pi / 2),
+                         polygons=obstacle(.075)) as (camera, robot, nav):
         state = select(nav)
         distances = point_clearances_mm(camera.state()["marker_corners"], nav._calibration,
                                         state["center_px"], state["obstacles_px"])
-        assert distances["obstacle_mm"] == pytest.approx(100.0, abs=.01)
+        assert distances["obstacle_mm"] == pytest.approx(75.0, abs=.01)
         assert distances["obstacle_mm"] < ROBOT_RADIUS_MM
         assert state["collision_model"] == "oriented_footprint"
         assert state["planning_status"] == "ready", state["planning_message"]
@@ -222,7 +226,7 @@ def test_full_wall_still_has_no_path_and_never_arms():
         assert robot.starts == 0 and robot.drives == []
 
 
-@pytest.mark.parametrize("obstacle_y", [.100, .080])
+@pytest.mark.parametrize("obstacle_y", [.086, .080])
 def test_signed_wheel_feedback_completes_detour_and_shallow_contact_escape(obstacle_y, monkeypatch):
     scale_path_clock(monkeypatch)
     # La planta avanza 20 ms por ciclo de 1 ms: filtros y rampas usan el mismo factor 20.
@@ -247,8 +251,9 @@ def test_signed_wheel_feedback_completes_detour_and_shallow_contact_escape(obsta
             assert backwards
         else:
             # Puede liberar un giro bloqueado sin que exista contacto en la
-            # orientación inicial: a cero grados, la rueda invadiría la barrera.
-            assert penetration_mm(0.0, 0.0, 0.0, polygons) > 0.0
+            # orientación inicial: una postura intermedia del giro invade la
+            # barrera, aunque ambos extremos del cuarto de vuelta quepan.
+            assert penetration_mm(0., 0., math.pi / 4, polygons) > 0.
         assert all(row["kind"] == "escape" and row["step"]["direction"] < 0
                    for row in backwards)
         normal_drive_seen = False

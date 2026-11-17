@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.webcam.navigation import (Navigation, NavigationError, make_navigation_router,
                                          INT32_MAX, MAX_TURN_DEG_S, _velocity_mm_s)
 from simulation.webcam.detector import Detection
@@ -110,7 +111,7 @@ class FakeRobot:
 class ClosedLoopRobot(FakeRobot):
     """Planta diferencial virtual: cada mando produce una imagen nueva.
 
-    Integra ruedas ideales separadas 190 mm a pasos simulados de 20 ms. Las
+    Integra ruedas ideales con la separación configurada a pasos simulados de 20 ms. Las
     coordenadas físicas X/Y son derecha/arriba; la cámara las proyecta en píxeles.
     Este modelo comprueba realimentación y signos, no valida la dinámica real.
     """
@@ -122,7 +123,7 @@ class ClosedLoopRobot(FakeRobot):
 
     def drive_velocity_navigation(self, left, right):
         super().drive_velocity_navigation(left, right)
-        dt, wheelbase = .02, .19
+        dt, wheelbase = .02, TRACK_WIDTH_MM / 1000.
         left_mps, right_mps = left / 1000, right / 1000
         speed = (left_mps + right_mps) / 2
         angular_speed = (right_mps - left_mps) / wheelbase
@@ -267,8 +268,8 @@ def test_commands_are_bounded_physical_wheel_velocities(bearing):
     for mode in ("turning", "advancing"):
         left, right = Navigation._wheel_commands(mode, bearing, .1, .3)
         assert -100 <= left <= 100 and -100 <= right <= 100
-    assert Navigation._wheel_commands("turning", .5, .1, 0) == (-38, 38)
-    assert Navigation._wheel_commands("turning", -.5, .1, 0) == (38, -38)
+    assert Navigation._wheel_commands("turning", .5, .1, 0) == (-33, 33)
+    assert Navigation._wheel_commands("turning", -.5, .1, 0) == (33, -33)
     if bearing > 0:
         left, right = Navigation._wheel_commands("advancing", bearing, .1, .3)
         assert left < right
@@ -281,7 +282,7 @@ def test_speed_reduces_with_distance_and_angle_continuously():
     assert Navigation._wheel_commands("advancing", 0, .3, .3) == (100, 100)
     near = Navigation._wheel_commands("advancing", 0, .03, .3)
     assert near == (60, 60)
-    assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-53, 53)
+    assert Navigation._wheel_commands("turning", math.radians(40), .3, .3) == (-46, 46)
     assert Navigation._wheel_commands("turning", math.radians(10), .3, .3) == (-20, 20)
 
 
@@ -628,7 +629,7 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, pr
         # el reloj real: el primer valor puede variar con la carga del proceso.
         # El invariante es el sentido y el límite del perfil seleccionado;
         # la pendiente de la rampa se comprueba por separado con tiempos fijos.
-        turn_limit = math.ceil(95 * math.radians(profile[1]))
+        turn_limit = math.ceil(HALF_TRACK_MM * math.radians(profile[1]))
         if abs(initial_bearing) <= 8:
             assert 0 < first_left <= profile[0] and 0 < first_right <= profile[0]
         elif abs(initial_bearing) < 80:
@@ -642,7 +643,7 @@ def test_closed_loop_camera_robot_reaches_forward_side_and_behind_goals(goal, pr
         assert any(left > 0 and right > 0 for left, right in robot.drives)
         assert robot.drives[-1] == (0, 0) and robot.stops == 1 and robot.starts == 1
         assert all(abs(left) <= profile[0] and abs(right) <= profile[0] for left, right in robot.drives)
-        assert robot.required_caps == [max(profile[0], math.ceil(95 * math.radians(profile[1])))]
+        assert robot.required_caps == [max(profile[0], math.ceil(HALF_TRACK_MM * math.radians(profile[1])))]
         assert result["last_left"] == 0 and result["last_right"] == 0
         assert result["elapsed_ms"] > 0 and result["sequence"] > 1
     finally:
@@ -913,15 +914,15 @@ def test_metric_acceleration_ramp_and_reverse_require_an_intermediate_zero():
 def test_physical_targets_use_geometry_and_do_not_limit_motor_pwm_from_visual_speed(rig):
     _, _, nav = rig
     assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (100, 100)
-    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-53, 53)
+    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-46, 46)
     for visual_speed in (-1., 0., .05, .1, 1.):
         nav._measured_speed = visual_speed  # Diagnóstico; no modifica la consigna física.
         assert nav._wheel_commands("advancing", 0., .3, 0.) == (100, 100)
         left, right = nav._wheel_commands("advancing", .1, .3, 0.)
         assert 0 <= left < right <= 100
-    # 53 mm/s por rueda opuesta equivale a ~32°/s con ejes a190 mm.
+    # 46 mm/s por rueda opuesta equivale a ~32°/s con ejes a163 mm.
     left, right = nav._wheel_commands("turning", math.pi / 2, .3, 0.)
-    assert math.degrees((right - left) / 190.) == pytest.approx(32., abs=.2)
+    assert math.degrees((right - left) / TRACK_WIDTH_MM) == pytest.approx(32., abs=.4)
 
 
 def test_visual_velocity_estimate_uses_distinct_frames_and_metric_tag_scale(rig):
@@ -1107,8 +1108,8 @@ def test_brief_hold_never_confirms_arrival_and_manual_stop_overrides_it(rig):
 def test_moderate_speed_increase_keeps_precision_floor():
     assert Navigation._wheel_commands("advancing", 0., .3, 0.) == (100, 100)
     assert Navigation._wheel_commands("advancing", 0., 0., 0.) == (50, 50)
-    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-53, 53)
-    assert math.degrees(106. / 190.) == pytest.approx(32., abs=.2)
+    assert Navigation._wheel_commands("turning", math.pi / 2, .3, 0.) == (-46, 46)
+    assert math.degrees(92. / TRACK_WIDTH_MM) == pytest.approx(32., abs=.4)
 
 
 def test_forward_floor_does_not_clamp_inner_wheel_and_distort_steering():
@@ -1310,10 +1311,10 @@ def test_old_firmware_capacity_fallback_and_turn_conversion_are_explicit(rig):
     _, robot, nav = rig
     with robot.lock:
         robot.value.pop("max_velocity_mm_s")
-    nav.set_speeds(50, 60)  # 60°/s requiere aproximadamente99,5 mm/s por rueda.
+    nav.set_speeds(50, 70)  # 70°/s requiere aproximadamente99,6mm/s por rueda.
     with pytest.raises(NavigationError, match="firmware"):
-        nav.set_speeds(50, 61)
-    assert nav.get_speeds() == {"forward_mm_s": 50, "turn_deg_s": 60}
+        nav.set_speeds(50, 71)
+    assert nav.get_speeds() == {"forward_mm_s": 50, "turn_deg_s": 70}
     assert robot.starts == robot.stops == 0 and robot.drives == []
 
 

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 import numpy as np
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, wait_for
 from simulation.webcam.navigation import Navigation, NavigationError, make_navigation_router
 from simulation.webcam.pose_obstacle_planner import check_pose
@@ -54,7 +55,7 @@ class PerimeterWheelPlant(FakeRobot):
 
     def drive_velocity_navigation(self, left, right):
         super().drive_velocity_navigation(left, right)
-        speed, angular = (left + right) / 2000., (right - left) / 190.
+        speed, angular = (left + right) / 2000., (right - left) / TRACK_WIDTH_MM
         origin_x, origin_y, origin_yaw = self.x, self.y, self.yaw
         for fraction in (.25, .5, .75, 1.):
             delta = angular * .020 * fraction

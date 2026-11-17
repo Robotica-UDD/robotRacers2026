@@ -1,14 +1,16 @@
 """Corrección suave del rumbo durante el avance, independiente del hardware.
 
 El error positivo indica que el objetivo queda a la izquierda. La salida es una
-velocidad angular en rad/s; para una separación de ruedas de 190 mm corresponde
-a una corrección diferencial de ``95 * salida`` mm/s por rueda. Este controlador
+velocidad angular en rad/s; para una separación de ruedas de 163 mm corresponde
+a una corrección diferencial de ``81.5 * salida`` mm/s por rueda. Este controlador
 no calcula giros en el sitio ni determina la llegada al objetivo.
 """
 from __future__ import annotations
 
 import math
 from numbers import Integral, Real
+
+from .robot_footprint import TRACK_WIDTH_MM
 
 
 def _finite(value):
@@ -46,7 +48,7 @@ class StraightControl:
     BEARING_FILTER_SECONDS = .12
     DERIVATIVE_FILTER_SECONDS = .15
     MAX_SAMPLE_GAP_SECONDS = .5
-    HALF_TRACK_MM = 95.
+    HALF_TRACK_MM = TRACK_WIDTH_MM / 2.
     MAX_WHEEL_CORRECTION_FRACTION = .25
     MAX_DERIVATIVE_FRACTION = .6
 

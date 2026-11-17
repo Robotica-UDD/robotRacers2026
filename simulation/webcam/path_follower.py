@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 from numbers import Real
 
+from .robot_footprint import TRACK_WIDTH_MM
+
 
 _INT32_MAX = 2_147_483_647
 
@@ -43,7 +45,7 @@ class PathFollower:
     Un giro no necesita un período de confirmación parado antes de avanzar.
     """
 
-    HALF_TRACK_MM = 95.
+    HALF_TRACK_MM = TRACK_WIDTH_MM / 2.
     LOOKAHEAD_MIN_M = .070
     LOOKAHEAD_MAX_M = .180
     LOOKAHEAD_SECONDS = .20
@@ -66,6 +68,7 @@ class PathFollower:
         self._last_now = None
         self._segment = 0
         self._path_size = None
+        self._path_heading = None
         self._bearing = None
         self._angular = 0.
         self._linear = 0.
@@ -85,7 +88,7 @@ class PathFollower:
                 "goal_remaining_m": remaining if goal_remaining is None else goal_remaining,
                 "path_index": index, "candidate_count": checks,
                 "linear_mm_s": (left + right) / 2.,
-                "angular_deg_s": math.degrees((right - left) / 190.)}
+                "angular_deg_s": math.degrees((right - left) / TRACK_WIDTH_MM)}
 
     def _invalid(self, message):
         self.reset()
@@ -187,6 +190,7 @@ class PathFollower:
         active_points = points[:limit_index + 1]
         if self._path_size is not None and self._path_size != len(points):
             self._segment = 0
+            self._path_heading = None
         self._path_size = len(points)
         dt = .05 if self._last_now is None else _clamp(stamp - self._last_now, 0., .10)
         self._last_now = stamp
@@ -200,7 +204,7 @@ class PathFollower:
                 if len(previous) != 2 or any(value is None for value in previous):
                     return self._invalid("La consigna anterior no es válida.")
                 previous_linear = (previous[0] + previous[1]) / 2.
-                previous_angular = (previous[1] - previous[0]) / 190.
+                previous_angular = (previous[1] - previous[0]) / TRACK_WIDTH_MM
             except TypeError:
                 return self._invalid("La consigna anterior no es válida.")
         lookahead = _clamp(self.LOOKAHEAD_MIN_M + max(0., previous_linear) / 1000. * self.LOOKAHEAD_SECONDS,
@@ -224,11 +228,24 @@ class PathFollower:
                                 remaining=remaining, goal_remaining=goal_remaining,
                                 lookahead=lookahead)
         bearing = math.atan2(target[1], target[0])
+        path_heading = next((math.atan2(b[1] - a[1], b[0] - a[0])
+                             for a, b in zip(points, points[1:])
+                             if math.hypot(b[0] - a[0], b[1] - a[1]) > 1e-8), None)
+        frame_rotation = (0. if path_heading is None or self._path_heading is None
+                          else _wrap(self._path_heading - path_heading))
+        self._path_heading = path_heading
         if self._bearing is None:
             self._bearing = bearing
         else:
+            # El error se expresa en el marco móvil del robot. Antes de
+            # filtrar una nueva imagen hay que retirar el giro observado:
+            # filtrar directamente ambos ángulos retrasa también la propia
+            # rotación y mantiene la corrección cuando el rumbo ya la alcanzó.
+            # Una arista fija de la ruta proporciona esa rotación entre
+            # imágenes, sin asumir que las ruedas ejecutaron la consigna.
+            predicted_bearing = _wrap(self._bearing - frame_rotation)
             alpha = -math.expm1(-dt / self.BEARING_FILTER_SECONDS)
-            self._bearing = _wrap(self._bearing + alpha * _wrap(bearing - self._bearing))
+            self._bearing = _wrap(predicted_bearing + alpha * _wrap(bearing - predicted_bearing))
         error = self._bearing
         if self._pivoting:
             self._pivoting = abs(error) > self.PIVOT_EXIT_RAD
@@ -259,7 +276,7 @@ class PathFollower:
             desired_angular = _clamp(desired_linear / 1000. * curvature, -max_angular, max_angular)
         # El robot es diferencial: una rueda puede invertir su sentido mientras
         # el centro sigue avanzando. Limitar primero ambas ruedas con el mismo
-        # factor conserva el radio solicitado, incluso por debajo de95mm.
+        # factor conserva el radio solicitado, incluso por debajo de la semitrocha.
         desired_limit = (forward if desired_linear > 0 else
                          max(forward, self.HALF_TRACK_MM * max_angular))
         wheel_peak = max(abs(desired_linear - self.HALF_TRACK_MM * desired_angular),
@@ -331,7 +348,7 @@ class PathFollower:
                 if pair is None:
                     continue
                 actual_linear = sum(pair) / 2.
-                actual_angular = (pair[1] - pair[0]) / 190.
+                actual_angular = (pair[1] - pair[0]) / TRACK_WIDTH_MM
                 x, y, angle = self._prediction(actual_linear, actual_angular, self.HORIZON_SECONDS)
                 distance = math.hypot(target[0] - x, target[1] - y)
                 cross_track = min(self._projection(a, b, (x, y))[1]
@@ -350,7 +367,7 @@ class PathFollower:
                 lookahead=lookahead, remaining=remaining, goal_remaining=goal_remaining,
                 index=index, checks=checks)
         self._linear = sum(chosen) / 2.
-        self._angular = (chosen[1] - chosen[0]) / 190.
+        self._angular = (chosen[1] - chosen[0]) / TRACK_WIDTH_MM
         if self._pivoting and selected_half_turn_sign is not None:
             # Solo cambiar de hemisferio cuando la predicción haya elegido
             # expresamente el pivote alternativo. La velocidad residual de un

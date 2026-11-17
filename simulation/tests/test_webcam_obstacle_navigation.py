@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 import simulation.webcam.navigation as navigation_module
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.webcam.navigation import INT32_MAX, Navigation, NavigationError
 from simulation.webcam.obstacle_planner import point_clearance_mm, point_clearances_mm, segment_is_clear
 from simulation.webcam.robot_footprint import ROBOT_RADIUS_MM
@@ -311,7 +312,7 @@ def test_local_speed_budget_reserves_reaction_and_braking_space_without_changing
     assert forward and max(forward) <= math.floor(limit) < 300
     assert nav._obstacle_speed_limit(required + 10, required) == 0.
     assert nav._obstacle_speed_limit(1000., required) > nav._obstacle_speed_limit(required + 40, required)
-    assert nav._wheel_commands("turning", math.pi / 2, .5, 0.) == (-53, 53)
+    assert nav._wheel_commands("turning", math.pi / 2, .5, 0.) == (-46, 46)
 
 
 def test_closed_loop_detours_through_subpoints_without_entering_physical_clearance(monkeypatch):
@@ -325,7 +326,7 @@ def test_closed_loop_detours_through_subpoints_without_entering_physical_clearan
         def drive_velocity_navigation(self, left, right):
             super().drive_velocity_navigation(left, right)
             dt = .02
-            speed, angular = (left + right) / 2000., (right - left) / 190.
+            speed, angular = (left + right) / 2000., (right - left) / TRACK_WIDTH_MM
             delta = angular * dt
             if abs(angular) > 1e-9:
                 self.x += speed / angular * (math.sin(self.heading + delta) - math.sin(self.heading))
@@ -491,10 +492,13 @@ def corridor(upper, lower):
             [[600., lower], [700., lower], [700., 959.], [600., 959.]]]
 
 
-def test_zero_margin_fits_a_real_360mm_corridor_while_positive_margin_blocks(scene):
+def test_zero_margin_fits_a_260mm_corridor_while_positive_margin_blocks(scene):
     _, robot, nav = scene
     goal(nav)
-    state = obstacles(nav, corridor(372., 588.))  # 216px / 0.6px/mm =360mm.
+    # Las ruedas ocupan 170 mm; el círculo con 30 mm de margen y 40 mm de
+    # seguimiento exige 318,2 mm. Un pasillo de 260 mm distingue ambos modelos.
+    assert 170. < 260. < 2 * (ROBOT_RADIUS_MM + 30. + 40.)
+    state = obstacles(nav, corridor(402., 558.))  # 156 px / 0,6 px/mm = 260 mm.
     assert state["planning_status"] == "blocked"
     zero = nav.set_obstacle_settings(0, nav.state()["route_revision"])
     assert zero["planning_status"] == "ready", zero["planning_message"]

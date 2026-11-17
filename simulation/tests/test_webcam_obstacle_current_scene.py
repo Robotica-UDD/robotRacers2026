@@ -49,17 +49,17 @@ def assert_route_free(result, corners, center, goal):
                                 clearance_mm=ROBOT_RADIUS_MM, camera_clearance_mm=view)
 
 
-def test_actual_footprint_finds_left_detour_where_old_150mm_circle_rejected_start():
+def test_narrow_wheels_allow_direct_left_route_where_old_150mm_circle_rejected_start():
     cal = calibration()
     distances = point_clearances_mm(CORNERS, cal, CENTER, OBSTACLES)
-    assert ROBOT_RADIUS_MM == pytest.approx(116.1)
+    assert ROBOT_RADIUS_MM == pytest.approx(89.1)
     assert 140 < distances['obstacle_mm'] < 150  # Libre con la envolvente real.
     with pytest.raises(ValueError, match='El robot.*obstáculo'):
         route(radius=150.)
     result = route()
-    assert len(result['path_px']) == 3
-    assert result['path_length_m'] == pytest.approx(.338, abs=.015)
-    assert result['path_px'][1][0] < CENTER[0] - 20  # Primer rodeo hacia la izquierda.
+    assert len(result['path_px']) == 2
+    assert result['path_length_m'] == pytest.approx(.33144, abs=.005)
+    assert result['path_px'][1][0] < CENTER[0] - 20  # La huella nueva cabe directamente.
     assert_route_free(result, CORNERS, CENTER, GOAL)
 
 

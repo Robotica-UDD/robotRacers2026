@@ -76,14 +76,15 @@ def test_endpoint_with_turning_space_is_preferred_to_a_reverse_only_slot():
     assert world.plane.point_clearances(point)[1] >= world.radius
     assert check_swept_motion(corners, calibration, target, 0.,
         target, math.pi, walls)["clear"]
-    # La primera ranura orientada estaba en x≈279 mm y solo admitía un rumbo
-    # hacia atrás. La alternativa conserva el progreso, con espacio al llegar.
-    assert project((.15, 0.))[0] < target[0] < project((.25, 0.))[0]
+    # Conserva el progreso sin pegarse a la pared: debe reservar el radio de
+    # giro del modelo actual, que cambió con las ruedas y el ancho medidos.
+    assert project((.15, 0.))[0] < target[0] < project((.35 - world.radius, 0.))[0]
 
 
 def test_turning_circle_is_a_preference_and_never_excludes_a_narrow_corridor():
     corners, calibration, project = scene()
-    walls = perimeter(project, [(-.95, -.09), (.95, -.09), (.95, .09), (-.95, .09)])
+    # 174 mm permite la huella de170mm, pero no su círculo de178,2mm.
+    walls = perimeter(project, [(-.95, -.087), (.95, -.087), (.95, .087), (-.95, .087)])
     first, last = project((.62, .05)), project((.70, -.05))
     result = interest_goal.choose_interest_point(corners, calibration,
         [first[0], first[1], last[0], last[1]], walls, 100.)

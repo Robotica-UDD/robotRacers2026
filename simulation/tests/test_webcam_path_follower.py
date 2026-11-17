@@ -5,6 +5,7 @@ import math
 
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.webcam.path_follower import PathFollower
 
 
@@ -18,7 +19,7 @@ def local_path(points, x, y, yaw):
 
 
 def move(x, y, yaw, left, right, dt):
-    speed, angular = (left + right) / 2000., (right - left) / 190.
+    speed, angular = (left + right) / 2000., (right - left) / TRACK_WIDTH_MM
     angle = angular * dt
     if abs(angular) > 1e-9:
         x += speed / angular * (math.sin(yaw + angle) - math.sin(yaw))
@@ -46,6 +47,23 @@ def test_straight_vision_noise_is_filtered_without_stopping_or_large_wheel_corre
     assert all(result["left"] > 0 and result["right"] > 0 for result in outputs)
     assert max(abs(result["left"] - result["right"]) for result in outputs) < 10
     assert all(not result["blocked"] for result in outputs)
+
+
+@pytest.mark.parametrize("observed_yaw", [math.radians(20.), math.radians(-20.), math.radians(179.)])
+def test_bearing_filter_does_not_delay_the_robots_observed_rotation(observed_yaw):
+    follower = PathFollower()
+    route = [(0., 0.), (.4, .4)]
+    follower.update(local_path(route, 0., 0., 0.), 1., SPEEDS,
+                    previous_wheels=(0., 0.))
+    result = follower.update(local_path(route, 0., 0., observed_yaw), 1.02, SPEEDS,
+                             previous_wheels=(0., 0.))
+    # El camino no cambió en el mundo: la rotación visible debe actualizar el
+    # rumbo sin el retraso del filtro de ruido, incluso al cruzar ±180°.
+    # Las ruedas anteriores son cero para no confundir observación y consigna.
+    expected = math.atan2(math.sin(math.pi / 4. - observed_yaw),
+                          math.cos(math.pi / 4. - observed_yaw))
+    assert follower._bearing == pytest.approx(expected)
+    assert not result["blocked"] and not result["done"]
 
 
 def test_ninety_degree_corner_is_followed_continuously_without_stopping_at_the_vertex():
@@ -200,7 +218,7 @@ def test_out_and_back_body_coverage_does_not_create_repeated_revolutions():
         assert (result["left"], result["right"]) != (0, 0)
         assert result["left"] + result["right"] >= 0
         previous = (result["left"], result["right"])
-        rotation += abs((previous[1] - previous[0]) / 190. * .02)
+        rotation += abs((previous[1] - previous[0]) / TRACK_WIDTH_MM * .02)
         x, y, yaw = move(x, y, yaw, *previous, .02)
     assert visited == [1, 2]
     assert rotation < 2. * math.pi
@@ -299,7 +317,7 @@ def test_a_free_clockwise_half_turn_is_used_and_latched_when_counterclockwise_is
 
 def test_residual_opposite_angular_velocity_does_not_choose_the_long_half_turn():
     follower = PathFollower()
-    previous = (-190., 190.)  # Todavía gira a la izquierda antes de frenar.
+    previous = (-TRACK_WIDTH_MM, TRACK_WIDTH_MM)  # Todavía gira a2rad/s antes de frenar.
     route = [[0., 0.], [-.4, -.05]]  # El nuevo giro corto va a la derecha.
     angular_rates = []
     for i in range(45):
@@ -315,7 +333,7 @@ def test_residual_opposite_angular_velocity_does_not_choose_the_long_half_turn()
 def test_opposite_angular_slew_brakes_before_moving_toward_a_new_forward_curve():
     follower = PathFollower()
     result = follower.update([[0., 0.], [.4, .1]], 1., SPEEDS,
-                             previous_wheels=(190., -190.))
+                             previous_wheels=(TRACK_WIDTH_MM, -TRACK_WIDTH_MM))
     assert result["left"] > 0 > result["right"]  # Desacelera el giro anterior.
     assert result["linear_mm_s"] == 0.
     assert -math.degrees(2.) < result["angular_deg_s"] < 0.

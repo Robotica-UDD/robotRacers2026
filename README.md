@@ -1,6 +1,6 @@
 # RobotRacers
 
-Robot diferencial con PCB RevQ, dos motores Pololu #5178 de 6 V, ruedas de 23 × 40 mm, batería LiPo 2S y control ESP32-S3. Incluye simulación local con cámara cenital, localización AprilTag y corrección por encoders.
+Robot diferencial con PCB RevQ, dos motores Pololu #5178 de 6 V, ruedas de 33 × 7 mm, batería LiPo 2S y control ESP32-S3. Incluye simulación local con cámara cenital, localización AprilTag y corrección por encoders.
 
 ## Ejecutar
 
@@ -75,9 +75,9 @@ El actualizador compila, comprueba el reposo y carga sin borrar la red guardada.
 | PCB | RevQ, 130 × 70 × 1,6 mm | Archivos de fabricación |
 | Tracción | 2 × Pololu #5178, 6 V, reducción 4,995:1 | Fabricante y montaje |
 | Driver | 2 × DRV8874, PH/EN | PCB |
-| Ruedas | 23 mm de diámetro, 40 mm de ancho | Ja-Bots |
+| Ruedas actuales | 33 mm de diámetro, 7 mm de ancho | Usuario, 17-11-2026 |
 | Encoder | 59,94 cuentas por vuelta de rueda | 12 × 4,995; ya incluye cuadratura |
-| Separación entre centros | 190 mm | Inferida del ancho exterior; ajustable |
+| Separación entre centros | 163 mm | Ancho exterior aproximado de 170 mm menos 7 mm de rueda; usuario, 17-11-2026 |
 | Batería | LiPo 2S, 400 mAh | Usuario |
 | Masa inicial | 180 g | Estimación editable |
 | Contacto adicional | Patín deslizante | Usuario |

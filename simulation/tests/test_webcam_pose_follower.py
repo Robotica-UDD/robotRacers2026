@@ -3,6 +3,7 @@ import math
 
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.webcam.pose_follower import PoseFollower
 
 
@@ -45,7 +46,7 @@ def test_turn_hold_restarts_after_heading_leaves_tolerance_or_step_changes():
 @pytest.mark.parametrize("flag", ["escape", "escaping"])
 def test_escape_turn_is_capped_at_thirty_degrees_per_second(flag):
     result = PoseFollower().update(step("turn", **{flag: True}), observation(), math.pi / 2, 1., SPEEDS)
-    assert 0 < result["right"] <= math.ceil(95 * math.radians(30))
+    assert 0 < result["right"] <= math.ceil(HALF_TRACK_MM * math.radians(30))
     assert result["left"] == -result["right"]
 
 
@@ -106,7 +107,7 @@ def test_escape_is_cautious_and_keeps_both_wheels_in_the_planned_direction(direc
                                  None, 1. + index * .05, SPEEDS)
     assert 0 < abs(result["left"]) <= 80 and 0 < abs(result["right"]) <= 80
     assert result["left"] * direction > 0 and result["right"] * direction > 0
-    assert abs(math.degrees((result["right"] - result["left"]) / 190.)) <= 30
+    assert abs(math.degrees((result["right"] - result["left"]) / TRACK_WIDTH_MM)) <= 30
 
 
 def test_repeated_camera_sequence_does_not_integrate_an_old_bearing():

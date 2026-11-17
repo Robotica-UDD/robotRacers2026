@@ -61,7 +61,8 @@ def test_oriented_hull_fits_where_circle_would_falsely_reject():
 
 def test_rotating_changes_real_hull_collision_without_circle_test():
     corners, cal, p = scene()
-    obstacle = [rectangle(p, .1, -.04, .2, .04)]
+    # El frente llega a83,15mm; al girar90° la rueda alcanza85mm enX.
+    obstacle = [rectangle(p, .084, -.04, .2, .04)]
     assert check_pose(corners, cal, p(0., 0.), 0., obstacle)['clear']
     assert not check_pose(corners, cal, p(0., 0.), math.pi / 2., obstacle)['clear']
     assert not check_swept_motion(corners, cal, p(0., 0.), 0., p(0., 0.), math.pi / 2., obstacle)['clear']
@@ -108,9 +109,12 @@ def test_rectangle_detour_is_fast_and_all_sweeps_are_valid():
 def test_free_corner_recovery_can_join_an_orthogonal_detour(jitter_m):
     corners, cal, p = scene()
     obstacles = [rectangle(p, -.18, .1, .18, .25)]
-    start = p(-.01475246 + jitter_m, -.01242430)
+    # La pared queda ahora junto a la huella de170mm; la posición grabada
+    # anterior dejaba libre cualquier giro con las ruedas nuevas.
+    start = p(-.01475246 + jitter_m, .0145)
     goal, heading = p(-.4, .3), math.radians(159.329)
     assert check_pose(corners, cal, start, heading, obstacles)['clear']
+    assert not check_swept_motion(corners, cal, start, heading, start, math.pi, obstacles)['clear']
     began = time.monotonic()
     result = plan_pose_path(corners, cal, start, goal, obstacles,
                             start_heading_rad=heading)
@@ -230,7 +234,7 @@ def test_collision_goal_is_not_accepted_as_an_escape():
         plan_pose_path(corners, cal, p(0., 0.), p(.2, 0.), obstacle, start_heading_rad=0.)
 
 
-@pytest.mark.parametrize('wall_y', [.100, .085, .080])
+@pytest.mark.parametrize('wall_y', [.088, .085, .080])
 def test_head_on_close_wall_uses_short_reverse_before_detouring_in_under_one_second(wall_y):
     scale = 800.
     p = lambda x, y: [640. + scale * x, 480. - scale * y]

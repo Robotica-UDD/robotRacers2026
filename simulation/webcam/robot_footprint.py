@@ -4,22 +4,21 @@ El origen es el centro del eje de las ruedas; X apunta al frente e Y a la
 izquierda. Es el mismo centro que se selecciona en la calibración de la webcam,
 no el centro del AprilTag ni el centro de masa.
 
-Procedencia: proyección convexa de ``assets/robot/body.obj`` y ``wheel.obj``;
-sus vértices coinciden con los archivos ``.inc.wbt``. ``tools/build_world.py``
-desplaza el cuerpo +13,15 mm en X y coloca las ruedas en (0, ±95, 11,5) mm.
-Las ruedas ya tienen eje local Y; la rotación X de -pi/2 pertenece únicamente
-al cilindro de colisión de Webots. Se incluye su barrido completo alrededor de
-Y: cada vértice (x, y, z) ocupa X entre ±hypot(x, z). También se incluye el
-portador simulado de 52 × 52 mm, centrado en (-26,85, 0) mm.
+Procedencia: proyección del cuerpo RevQ, desplazado +13,15 mm en X, y ruedas
+actualizadas a las medidas comunicadas por el usuario el 17-11-2026: diámetro
+33 mm, ancho 7 mm y ancho exterior total 170 mm. La separación entre centros
+es 170 - 7 = 163 mm. Cada rueda barre X entre ±16,5 mm y se centra en Y =
+±81,5 mm. Se conserva el portador simulado de 52 × 52 mm centrado en
+(-26,85, 0) mm; el planificador añade la tarjeta física en su posición calibrada.
 
 La huella evita combinar los extremos independientes de la caja delimitadora:
-la esquina (83,15, 115,9) mm está vacía. El radio se deriva de la huella y se
+la esquina (83,15, 85) mm está vacía. El radio se deriva de la huella y se
 redondea hacia arriba a 0,1 mm; no incorpora un margen adicional de separación.
 
-Es una reconstrucción dimensional, no una medición del robot ensamblado. La
-separación de ruedas se infirió de los 230 mm exteriores nominales; los tacos
-modelados añaden 0,9 mm por lado. Batería, cables, patín y soporte del marcador
-son aproximados. La posición real del marcador depende de su calibración y no
+Es una reconstrucción dimensional, no un escaneado del robot ensamblado.
+Batería, cables, patín y soporte del marcador son aproximados. No se añaden los
+tacos laterales del modelo de rueda anterior. La posición real del marcador
+depende de su calibración y no
 debe sustituirse por la posición simulada al proyectar el robot en la imagen.
 Este módulo no lee archivos de ejecución ni altera la calibración.
 """
@@ -29,26 +28,25 @@ import math
 from numbers import Real
 
 
-# En el extremo lateral, el taco tiene (x, z) = (4,29282, 2,5) mm.
-# Al girar la rueda, su máxima proyección longitudinal es hypot(x, z).
-_WHEEL_SIDE_SWEEP_X_MM = math.hypot(4.29282, 2.5)
+WHEEL_DIAMETER_MM = 33.0
+WHEEL_WIDTH_MM = 7.0
+TRACK_WIDTH_MM = 163.0
+HALF_TRACK_MM = TRACK_WIDTH_MM / 2.0
+_WHEEL_RADIUS_MM = WHEEL_DIAMETER_MM / 2.0
+_WHEEL_OUTER_Y_MM = HALF_TRACK_MM + WHEEL_WIDTH_MM / 2.0
 
-# Orden antihorario. La precisión de las coordenadas procede de las mallas
-# serializadas; 11,500001 cubre el extremo radial a Y = ±115 mm.
+# Orden antihorario: unión convexa del cuerpo, portador simulado y barrido de
+# las ruedas. Las posiciones del cuerpo respecto al eje no cambian de montaje.
 ROBOT_FOOTPRINT_MM: tuple[tuple[float, float], ...] = (
     (-52.85, -26.0),
-    (-11.500001, -115.0),
-    (-_WHEEL_SIDE_SWEEP_X_MM, -115.9),
-    (_WHEEL_SIDE_SWEEP_X_MM, -115.9),
-    (11.500001, -115.0),
+    (-_WHEEL_RADIUS_MM, -_WHEEL_OUTER_Y_MM),
+    (_WHEEL_RADIUS_MM, -_WHEEL_OUTER_Y_MM),
     (70.15, -54.5),
     (83.15, -32.0),
     (83.15, 32.0),
     (70.15, 54.5),
-    (11.500001, 115.0),
-    (_WHEEL_SIDE_SWEEP_X_MM, 115.9),
-    (-_WHEEL_SIDE_SWEEP_X_MM, 115.9),
-    (-11.500001, 115.0),
+    (_WHEEL_RADIUS_MM, _WHEEL_OUTER_Y_MM),
+    (-_WHEEL_RADIUS_MM, _WHEEL_OUTER_Y_MM),
     (-52.85, 26.0),
 )
 

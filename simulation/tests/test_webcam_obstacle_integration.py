@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 import simulation.webcam.navigation as navigation_module
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.webcam.navigation import Navigation, INT32_MAX
 from simulation.webcam.navigation_geometry import _homographies, _project, observe_robot
 from simulation.webcam.obstacle_planner import point_clearances_mm
@@ -130,7 +131,7 @@ def test_recorded_scene_checks_oriented_footprints_in_plan_runtime_and_arrival(m
             step_index = nav._pose_step_index
             step = nav._pose_steps[step_index] if step_index < len(nav._pose_steps) else {}
             self.motion_steps.append((left, right, dict(step)))
-            dt, speed, angular = .02, (left + right) / 2000., (right - left) / 190.
+            dt, speed, angular = .02, (left + right) / 2000., (right - left) / TRACK_WIDTH_MM
             delta = angular * dt
             if abs(angular) > 1e-9:
                 self.center += speed / angular * np.array([

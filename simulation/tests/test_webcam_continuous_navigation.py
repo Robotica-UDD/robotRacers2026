@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.tests.test_webcam_point_navigation import FakeCamera, FakeRobot, ClosedLoopRobot, calibrate, wait_for
 from simulation.webcam.navigation import Navigation, INT32_MAX
 from simulation.webcam.navigation_geometry import Calibration, _homographies, _project, observe_robot
@@ -71,12 +72,13 @@ def test_six_wall_free_start_can_recover_instead_of_reporting_no_motion_sequence
     validate_recorded_route(CORNERS)
 
 
-def test_free_pose_near_the_corner_can_turn_then_back_up_before_resuming():
+def test_free_pose_near_the_corner_has_a_valid_forward_route_with_narrow_wheels():
     pose = SCENE["free_following_recovery_pose"]
     result = validate_recorded_route(CORNERS, start=pose["center_px"],
                                     heading=pose["heading_rad"], minimum_gap_mm=0.)
-    first_reverse = next(i for i, step in enumerate(result["steps"]) if step["direction"] < 0)
-    assert any(step["kind"] == "turn" for step in result["steps"][:first_reverse])
+    # Esta pose grabada exigía liberación con el ancho anterior de 230 mm.
+    # El montaje de 170 mm permite un recorrido de frente con barrido válido.
+    assert all(step["direction"] == 1 for step in result["steps"])
 
 
 @pytest.mark.parametrize("seed", [3, 17])
@@ -97,7 +99,7 @@ def test_a_five_mm_recovery_is_not_mistaken_for_an_already_completed_step(direct
 
 
 class RecordedWheelPlant(FakeRobot):
-    """Ruedas ideales separadas 190 mm; proyección fija del marcador de 40 mm."""
+    """Ruedas ideales con trocha vigente; proyección fija del marcador de 40 mm."""
 
     def __init__(self, camera):
         super().__init__()
@@ -132,7 +134,7 @@ class RecordedWheelPlant(FakeRobot):
     def drive_velocity_navigation(self, left, right):
         super().drive_velocity_navigation(left, right)
         dt = .020
-        speed, angular = (left + right) / 2000., (right - left) / 190.
+        speed, angular = (left + right) / 2000., (right - left) / TRACK_WIDTH_MM
         previous, previous_yaw = self.image_pose()
         origin = self.center.copy()
         peak = 0.
@@ -264,7 +266,7 @@ def test_recorded_six_wall_feedback_completes_all_four_destinations_without_dead
         # tramo ya cumplido. Tampoco debe invertirse la elección del giro por
         # la velocidad angular residual y provocar vueltas completas.
         for goal_index in range(4):
-            accumulated_rotation = sum(abs(row["right"] - row["left"]) / 190. * .020
+            accumulated_rotation = sum(abs(row["right"] - row["left"]) / TRACK_WIDTH_MM * .020
                                        for row in robot.trace if row["waypoint_index"] == goal_index)
             assert accumulated_rotation <= 2.5 * math.pi, (goal_index, accumulated_rotation, str(report_path))
         # Son llamadas de apertura/cierre de sesión; las maniobras de salida

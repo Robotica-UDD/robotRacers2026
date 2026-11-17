@@ -11,7 +11,7 @@ import numpy as np
 from .navigation_geometry import _homographies, _project, observe_robot
 from .obstacle_planner import _grid, _grid_anchor
 from .pose_obstacle_planner import _Scene
-from .robot_footprint import ROBOT_RADIUS_MM, ROBOT_FOOTPRINT_MM
+from .robot_footprint import ROBOT_FOOTPRINT_MM
 
 
 def _reachable_component(scene, center_px, deadline):
@@ -76,15 +76,15 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
         return -float(cv2.pointPolygonTest(hand, tuple(map(float, point)), True))
 
     initial_gap = gap(center)
+    scene = _Scene(corners, calibration, obstacles, ROBOT_FOOTPRINT_MM)
     # Reservar la huella en cualquier orientación y los 25 mm de llegada del
     # centro. Cubrir un punto con una rueda no termina esta aproximación.
-    required = (float(stand_off_mm) + ROBOT_RADIUS_MM) / 1000. + arrival_m
+    required = float(stand_off_mm) / 1000. + scene.radius + arrival_m
     if initial_gap <= required + .030:
         raise ValueError("La mano ya está a la distancia de observación.")
     away = center - midpoint
     away /= np.linalg.norm(away)
     deadline = time.monotonic() + .8
-    scene = _Scene(corners, calibration, obstacles, ROBOT_FOOTPRINT_MM)
     observed = observe_robot(corners, calibration)
     heading = math.radians(observed["heading_deg"])
     reachable = _reachable_component(scene, observed["center_px"], deadline) if obstacles else None

@@ -19,7 +19,7 @@ from .navigation_geometry import Calibration, observe_robot, _project
 from .obstacle_planner import (_PlaneMap, _finite, _inside_polygon,
                                 _segment_distance, _point_segment_distance, _segments_intersect,
                                 _grid, _grid_anchor, _astar, _simplify)
-from .robot_footprint import ROBOT_FOOTPRINT_MM
+from .robot_footprint import ROBOT_FOOTPRINT_MM, TRACK_WIDTH_MM
 from .orthogonal_planner import orthogonal_route
 
 POSITION_CELL_M = .0125
@@ -132,7 +132,13 @@ class _Scene:
         rotation = np.array([[math.cos(theta), math.sin(theta)],
                              [-math.sin(theta), math.cos(theta)]])
         self.marker_body = (marker - np.asarray(calibration.center_tag_m)) @ rotation.T
-        carrier = np.array([[-.026, .026], [.026, .026], [.026, -.026], [-.026, -.026]])
+        # La tarjeta de patrón de52mm tiene65mm exteriores; la anterior usa un
+        # portador modelado de52mm. Siempre se conserva su desplazamiento real
+        # respecto al eje, definido por la calibración, no por el simulador.
+        carrier_size = .065 if math.isclose(calibration.marker_size_m, .052, abs_tol=1e-9) else max(.052, calibration.marker_size_m)
+        carrier_half = carrier_size / 2.
+        carrier = np.array([[-carrier_half, carrier_half], [carrier_half, carrier_half],
+                            [carrier_half, -carrier_half], [-carrier_half, -carrier_half]])
         carrier_body = (carrier - np.asarray(calibration.center_tag_m)) @ rotation.T
         self.footprint = cv2.convexHull(np.vstack((self.footprint, carrier_body)).astype(np.float32)).reshape(-1, 2).astype(float)
         self.radius = float(np.max(np.linalg.norm(self.footprint, axis=1)))
@@ -359,7 +365,7 @@ def check_wheel_motion(corners, calibration, left_mm_s, right_mm_s, duration_s=.
     peak = float(np.max(initial_depths, initial=0.))
     ceiling = peak if maximum is None else maximum
     velocity = (left + right) / 2000.
-    omega = (left - right) / 190.
+    omega = (left - right) / TRACK_WIDTH_MM
     count = max(1, math.ceil(seconds / .02), math.ceil(abs(omega) * seconds / math.radians(5.)),
                 math.ceil(abs(velocity) * seconds / .01))
     if count > 500:

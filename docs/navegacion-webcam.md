@@ -77,7 +77,7 @@ ese estado o abrir el panel no envía órdenes al robot.
 
 ## Marcar un recorrido y moverse
 
-**Configuración probada en el robot real:** avance máximo de **240 mm/s** y
+**Referencia probada con las ruedas anteriores:** avance máximo de **240 mm/s** y
 giro máximo de **90°/s**. El usuario confirmó que con estos valores el robot
 funciona bien. Queda como referencia escrita en el panel; la nota no modifica
 los valores elegidos en los controles.
@@ -375,10 +375,46 @@ de marcha al arrancar y frenar.
 El arranque comienza en PWM 35 y aumenta hasta un máximo de 160, de manera
 independiente para cada rueda, hasta registrar dos cuentas en el sentido pedido.
 Después pasa al controlador de velocidad, con transición gradual. Utiliza las
-polaridades verificadas, rueda de 23 mm y 59,94 cuentas por vuelta. Si una rueda
+polaridades verificadas, rueda de 33 mm y 59,94 cuentas por vuelta. Si una rueda
 no entrega progreso correcto durante cinco segundos con una orden activa, el
 firmware cancela el movimiento y requiere un nuevo inicio; no sigue aumentando
 la potencia indefinidamente. Una inversión espera a que la rueda frene.
+
+### Ruedas actuales: actualización del 17-11-2026
+
+El usuario cambió a ruedas de **33 mm de diámetro y 7 mm de ancho** y midió
+aproximadamente **170 mm entre sus extremos exteriores**. La separación entre
+centros usada en la cinemática es **170 - 7 = 163 mm**. El diámetro convierte las
+cuentas en distancia: **π × 33 / 59,94 = 1,729605565 mm por cuenta**. Los encoders
+y la reducción del motor conservan sus especificaciones.
+
+Para un giro sobre el centro de 90°, cada rueda recorre aproximadamente
+**π × 163 / 4 = 128,02 mm**, en sentidos contrarios. Las consignas y predicciones
+de avance, curvas y giros usan la misma separación; el contorno de colisión
+incluye los nuevos neumáticos y tiene **170 mm de ancho nominal**. El centro y
+el frente seleccionados con la cámara se conservan; las ruedas nuevas no
+cambian por sí solas el desplazamiento horizontal del marcador.
+
+El firmware actualiza la conversión del encoder y transforma por **23/33** los
+coeficientes de anticipación de velocidad, proporcional e integral. Esto
+conserva su acción para velocidades angulares equivalentes del motor, sin
+inventar una nueva medición de fricción. Se conservan el impulso de arranque,
+el límite de PWM y las rampas de aceleración/frenado. La referencia anterior
+240 mm/s y 90°/s permanece como antecedente; falta comprobar físicamente el
+perfil con estos neumáticos. La separación de 163 mm procede de una medida
+aproximada y puede afinarse después de medir los giros reales.
+
+La corrección visual también reexpresa el ángulo filtrado cuando gira el
+robot. Una arista fija del recorrido permite observar la rotación entre dos
+imágenes y transportar la estimación anterior al nuevo marco antes de combinar
+la observación actual. Así el filtro de ruido no arrastra una orientación que
+ya fue corregida por el propio giro. Esta corrección se comprobó con recorridos
+cerrados y distintas velocidades, conservando las rampas y las comprobaciones
+de colisión.
+
+El cambio de diámetro debe cargarse en la ESP32: reiniciar solamente el panel
+no cambia cómo el microcontrolador convierte los pulsos en velocidad. El estado
+del firmware actualizado informa `wheel_diameter_mm: 33` para comprobarlo.
 
 Para cargar esta versión, conecta el robot por USB y ejecuta
 `./simulation/webcam/upload_robot.command`. El actualizador comprueba que haya

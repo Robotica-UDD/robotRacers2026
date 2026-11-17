@@ -4,6 +4,7 @@ import time
 
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.tests.test_webcam_continuous_tracking import live_frames
 from simulation.tests.test_webcam_point_navigation import wait_for
 from simulation.tests.test_webcam_pose_navigation import (
@@ -38,7 +39,7 @@ def arc_subposes(row):
     """Cuatro posiciones de 5 ms sobre el arco real, no solo sus extremos."""
     x, y, yaw = row["previous_pose"]
     speed = (row["left"] + row["right"]) / 2000.
-    angular = (row["right"] - row["left"]) / 190.
+    angular = (row["right"] - row["left"]) / TRACK_WIDTH_MM
     for fraction in (.25, .5, .75, 1.):
         elapsed = .020 * fraction
         angle = angular * elapsed

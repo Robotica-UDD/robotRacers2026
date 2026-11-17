@@ -128,7 +128,7 @@
               <button id="navigation-turn-expand" class="speed-scale-action" type="button" disabled>Ampliar escala ×2</button>
             </div>
             <p id="navigation-speed-note" class="speed-note">Máximas: el robot reduce al acercarse al destino.</p>
-            <p id="navigation-tested-settings" class="speed-note home-baseline">Configuración probada: avance 240 mm/s · giro máximo 90°/s.</p>
+            <p id="navigation-tested-settings" class="speed-note home-baseline">Referencia con ruedas anteriores: avance 240 mm/s · giro máximo 90°/s.</p>
             <p id="navigation-speed-status" class="speed-status" role="status"></p>
             <p id="navigation-speed-error" class="error" role="alert" hidden></p>
           </div>
@@ -1246,7 +1246,8 @@
     }
     function robotSupportsSpeedSettings() {
       const capability = Number.isFinite(robotState?.max_velocity_mm_s) && robotState.max_velocity_mm_s > 0 ? robotState.max_velocity_mm_s : 100;
-      const required = Math.max(confirmedSpeeds.forward_mm_s, Math.ceil(95 * Math.PI / 180 * confirmedSpeeds.turn_deg_s));
+      const track = Number.isFinite(navigationState?.track_width_mm) && navigationState.track_width_mm > 0 ? navigationState.track_width_mm : 163;
+      const required = Math.max(confirmedSpeeds.forward_mm_s, Math.ceil(track / 2 * Math.PI / 180 * confirmedSpeeds.turn_deg_s));
       return required <= capability;
     }
     function canStartNavigation() {

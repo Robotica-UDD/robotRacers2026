@@ -10,6 +10,7 @@ import math
 from numbers import Integral, Real
 
 from .straight_control import StraightControl
+from .robot_footprint import TRACK_WIDTH_MM
 
 
 _INT32_MAX = 2_147_483_647
@@ -47,7 +48,7 @@ class PoseFollower:
     TURN_TOLERANCE_RAD = math.radians(3.)
     TURN_HOLD_SECONDS = .10
     MAX_DRIVE_ERROR_RAD = math.radians(18.)
-    HALF_TRACK_MM = 95.
+    HALF_TRACK_MM = TRACK_WIDTH_MM / 2.
     BRAKING_MM_S2 = 450.
     ESCAPE_SPEED_MM_S = 80.
     ESCAPE_TURN_DEG_S = 30.

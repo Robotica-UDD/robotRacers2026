@@ -20,7 +20,8 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 
 from .navigation_geometry import Calibration, calibrate_robot, observe_robot, _homographies, _project
-from .robot_footprint import ROBOT_RADIUS_MM, ROBOT_FOOTPRINT_MM, point_under_robot
+from .robot_footprint import (ROBOT_RADIUS_MM, ROBOT_FOOTPRINT_MM, TRACK_WIDTH_MM,
+                              HALF_TRACK_MM, point_under_robot)
 from .pose_follower import PoseFollower
 from .path_follower import PathFollower
 from .pose_obstacle_planner import (plan_pose_path, check_pose, check_swept_motion,
@@ -31,7 +32,7 @@ from .obstacle_planner import (plan_path, segment_is_clear, point_clearances_mm,
                                camera_visibility_margin_mm, validate_obstacles)
 
 INT32_MAX = 2_147_483_647
-MAX_TURN_DEG_S = math.floor(INT32_MAX * 180. / (95. * math.pi))
+MAX_TURN_DEG_S = math.floor(INT32_MAX * 180. / (HALF_TRACK_MM * math.pi))
 
 
 class NavigationError(RuntimeError):
@@ -522,7 +523,7 @@ class Navigation:
     @staticmethod
     def _required_velocity(speeds):
         values = Navigation._validated_speeds(speeds["forward_mm_s"], speeds["turn_deg_s"])
-        required = max(values["forward_mm_s"], math.ceil(95. * math.radians(values["turn_deg_s"])))
+        required = max(values["forward_mm_s"], math.ceil(HALF_TRACK_MM * math.radians(values["turn_deg_s"])))
         if required > INT32_MAX:
             raise NavigationError("La velocidad por rueda excede la representación de 32 bits.", 422)
         return required
@@ -899,6 +900,7 @@ class Navigation:
                     "obstacle_settings": self._obstacle_settings(),
                     "clearance_info": self._clearance_info,
                     "collision_model": "oriented_footprint" if self._uses_oriented_footprint() else "circle",
+                    "track_width_mm": TRACK_WIDTH_MM,
                     "robot_footprint_px": footprint,
                     "maneuver": (self._pose_steps[self._pose_step_index] if self._pose_steps and
                                  self._pose_step_index < len(self._pose_steps) else None),
@@ -1469,7 +1471,7 @@ class Navigation:
             if wheel_speed > 0:
                 window = min(window, self.CONTINUATION_MAX_TRAVEL_MM / wheel_speed,
                              remaining / wheel_speed)
-        angular_deg_s = abs(math.degrees((right - left) / 190.))
+        angular_deg_s = abs(math.degrees((right - left) / TRACK_WIDTH_MM))
         if angular_deg_s > 0:
             window = min(window, self.CONTINUATION_MAX_SWEEP_DEG / angular_deg_s)
         if wheel_speed > 0:
@@ -1484,13 +1486,13 @@ class Navigation:
             angle = abs(math.degrees(bearing))
             braking_rate = math.sqrt(2. * 240. * max(0., angle - 8.))
             target_rate = max(12., min(turn_deg_s, angle * turn_deg_s / 40., braking_rate))
-            magnitude = max(20., min(95. * math.radians(turn_deg_s), 95. * math.radians(target_rate)))
+            magnitude = max(20., min(HALF_TRACK_MM * math.radians(turn_deg_s), HALF_TRACK_MM * math.radians(target_rate)))
             sign = 1 if bearing > 0 else -1
             return _velocity_mm_s(-sign * magnitude), _velocity_mm_s(sign * magnitude)
         speed = Navigation._advance_speed(distance, forward_mm_s)
         angular_rate = (max(-math.radians(8), min(math.radians(8), bearing * .8))
                         if steering_rate is None else steering_rate)
-        correction = 95. * angular_rate
+        correction = HALF_TRACK_MM * angular_rate
         left, right = speed - correction, speed + correction
         scale = min(1., forward_mm_s / max(abs(left), abs(right)))
         return _velocity_mm_s(left * scale), _velocity_mm_s(right * scale)

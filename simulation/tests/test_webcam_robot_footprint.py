@@ -9,6 +9,9 @@ import pytest
 from simulation.webcam.robot_footprint import (
     ROBOT_FOOTPRINT_MM,
     ROBOT_RADIUS_MM,
+    TRACK_WIDTH_MM,
+    WHEEL_DIAMETER_MM,
+    WHEEL_WIDTH_MM,
     robot_radius_mm,
 )
 
@@ -19,7 +22,9 @@ def cross(a, b, point):
 
 
 def inside(point, tolerance=1e-5):
-    return all(cross(a, b, point) >= -tolerance for a, b in
+    # Tolerancia de distancia en mm, no de área del producto vectorial; cubre
+    # el redondeo de coordenadas a float32 al serializar las mallas.
+    return all(cross(a, b, point) >= -tolerance * math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in
                zip(ROBOT_FOOTPRINT_MM, ROBOT_FOOTPRINT_MM[1:] + ROBOT_FOOTPRINT_MM[:1]))
 
 
@@ -32,21 +37,23 @@ def vertices(name):
 
 def test_radius_is_derived_and_rounded_up_to_the_next_tenth_mm():
     measured = max(math.hypot(x, y) for x, y in ROBOT_FOOTPRINT_MM)
-    assert measured == pytest.approx(116.00641492414287, abs=1e-8)
-    assert ROBOT_RADIUS_MM == robot_radius_mm() == 116.1
+    assert measured == pytest.approx(math.hypot(83.15, 32.0), abs=1e-8)
+    assert ROBOT_RADIUS_MM == robot_radius_mm() == 89.1
     assert measured <= ROBOT_RADIUS_MM < measured + .1
 
 
 def test_hull_is_convex_and_contains_axle_origin_with_correct_dimensions():
     points = ROBOT_FOOTPRINT_MM
-    assert len(points) == 14
+    assert len(points) == 10
     assert all(cross(points[i - 2], points[i - 1], point) > 0
                for i, point in enumerate(points))
     assert inside((0.0, 0.0))
     assert min(x for x, _ in points) == pytest.approx(-52.85)
     assert max(x for x, _ in points) == pytest.approx(83.15)
-    assert max(y for _, y in points) - min(y for _, y in points) == pytest.approx(231.8)
-    assert not inside((83.15, 115.9))  # Esquina vacía de la caja delimitadora.
+    assert WHEEL_DIAMETER_MM == 33.0 and WHEEL_WIDTH_MM == 7.0
+    assert TRACK_WIDTH_MM == 163.0
+    assert max(y for _, y in points) - min(y for _, y in points) == pytest.approx(170.0)
+    assert not inside((83.15, 85.0))  # Esquina vacía de la caja delimitadora.
 
 
 def test_hull_covers_body_mesh_in_its_axle_frame():
@@ -58,7 +65,7 @@ def test_hull_covers_body_mesh_in_its_axle_frame():
 def test_hull_covers_the_full_rotation_of_both_wheel_meshes():
     for x, y, z in vertices("wheel"):
         sweep = math.hypot(x, z)
-        for wheel_y in (-95.0, 95.0):
+        for wheel_y in (-81.5, 81.5):
             assert inside((-sweep, y + wheel_y))
             assert inside((sweep, y + wheel_y))
             assert math.hypot(sweep, y + wheel_y) <= ROBOT_RADIUS_MM
@@ -76,7 +83,31 @@ def test_physical_marker_carrier_example_uses_calibrated_axle_origin():
             projected.append((1000 * (c * dx + s * dy),
                               1000 * (-s * dx + c * dy)))
     assert max(math.hypot(x, y) for x, y in projected) == pytest.approx(92.05381719748496)
-    assert all(math.hypot(x, y) < ROBOT_RADIUS_MM for x, y in projected)
-    # El portador físico no está necesariamente dentro de la huella simulada,
-    # pero en este ejemplo sí queda cubierto por el radio compartido.
+    # Al reducirse las ruedas, el radio nominal ya no garantiza cubrir una
+    # tarjeta desplazada: el planificador debe añadirla desde su calibración.
+    assert any(math.hypot(x, y) > ROBOT_RADIUS_MM for x, y in projected)
     assert any(not inside(point) for point in projected)
+
+
+@pytest.mark.parametrize("marker_size,carrier_size", [(.040, .052), (.052, .065)])
+def test_physical_card_keeps_calibrated_center_front_and_known_outer_size(marker_size, carrier_size):
+    import cv2
+    import numpy as np
+    from simulation.webcam.navigation_geometry import Calibration
+    from simulation.webcam.pose_obstacle_planner import _Scene
+
+    calibration = Calibration((-.044136176834403615, .03362232769425596),
+                              -.04239146511652292, "fixture", 1280, 960, marker_size)
+    before = calibration.to_dict()
+    corners = [[600, 440], [680, 440], [680, 520], [600, 520]]
+    scene = _Scene(corners, calibration, [], ROBOT_FOOTPRINT_MM)
+    theta = calibration.front_angle_rad
+    rotation = np.array([[math.cos(theta), math.sin(theta)],
+                         [-math.sin(theta), math.cos(theta)]])
+    half = carrier_size / 2.
+    for x in (-half, half):
+        for y in (-half, half):
+            point = rotation @ (np.array([x, y]) - calibration.center_tag_m)
+            assert cv2.pointPolygonTest(scene.footprint.astype(np.float32), tuple(point), True) >= -1e-7
+    assert calibration.to_dict() == before
+    assert scene.calibration is calibration

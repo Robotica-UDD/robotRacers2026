@@ -462,3 +462,18 @@ robotStopBusy=true;updateRobotButtons();assert.equal($('robot-stop').disabled,tr
 robotStopBusy=false;robotPulsePending=false;
 updateRobotButtons();assert.equal($('robot-stop').disabled,true);
 """, prelude=prelude, names=("updateRobotButtons",))
+
+
+def test_turn_capability_uses_the_current_track_from_navigation():
+    node(r"""
+assert.equal(robotSupportsSpeedSettings(),true); // 90°/s exige128mm/s por rueda.
+navigationState.track_width_mm=190;
+assert.equal(robotSupportsSpeedSettings(),false); // La trocha anterior exigía150mm/s.
+navigationState={};
+assert.equal(robotSupportsSpeedSettings(),true); // Respaldo local de163mm.
+""", prelude=r"""
+const assert=require('node:assert/strict');
+const robotState={max_velocity_mm_s:130};
+const confirmedSpeeds={forward_mm_s:50,turn_deg_s:90};
+let navigationState={track_width_mm:163};
+""", names=("robotSupportsSpeedSettings",))

@@ -25,7 +25,7 @@ assert.equal($('home-cancel').hidden,true);
     html = PAGE.read_text()
     assert 'Una mano lejana durante 2 s despierta curiosidad.' in html
     assert 'Elige un punto a unos 10 cm y mantiene el destino aunque la mano desaparezca.' in html
-    assert 'Configuración probada: avance 240 mm/s · giro máximo 90°/s.' in html
+    assert 'Referencia con ruedas anteriores: avance 240 mm/s · giro máximo 90°/s.' in html
 
 
 def test_observation_counter_is_bounded_and_has_a_valid_two_second_default():

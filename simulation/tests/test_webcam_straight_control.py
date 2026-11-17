@@ -5,6 +5,7 @@ import math
 
 import pytest
 
+from simulation.webcam.robot_footprint import TRACK_WIDTH_MM, HALF_TRACK_MM
 from simulation.webcam.straight_control import StraightControl
 
 
@@ -70,7 +71,7 @@ def test_angular_output_slew_is_bounded_through_direction_changes():
 def test_forward_wheels_remain_positive_and_differential_correction_is_moderate(speed, bearing):
     rates = signal(StraightControl(), [bearing] * 50, speed=speed)
     for rate in rates:
-        correction = 95. * rate
+        correction = HALF_TRACK_MM * rate
         assert abs(correction) <= speed * .25 + 1e-10
         assert speed - correction >= speed * .75 - 1e-10
         assert speed + correction >= speed * .75 - 1e-10
@@ -82,7 +83,7 @@ def test_approach_and_speed_drop_reduce_curvature_even_for_a_repeated_frame():
     near = controller.update(.3, 1.5, 29, 100., .025)
     slow = controller.update(.3, 1.5, 29, 1., .025)
     assert 0 < slow < near < steady
-    assert abs(95 * slow) <= .25 + 1e-10
+    assert abs(HALF_TRACK_MM * slow) <= .25 + 1e-10
     assert controller.update(.3, 1.55, 30, 0., .025) == 0.
 
 

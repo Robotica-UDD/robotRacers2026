@@ -62,7 +62,7 @@ def run(script, *, prelude="", extra=()):
 
 def test_configuration_note_is_written_without_replacing_current_speed_values():
     html = PAGE.read_text()
-    assert "Configuración probada: avance 240 mm/s · giro máximo 90°/s." in html
+    assert "Referencia con ruedas anteriores: avance 240 mm/s · giro máximo 90°/s." in html
     run(r"""
 const draftSpeeds={forward_mm_s:330, turn_deg_s:460};
 renderHomeUI();
