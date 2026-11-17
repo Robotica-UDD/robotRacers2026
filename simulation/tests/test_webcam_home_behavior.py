@@ -131,15 +131,17 @@ def test_stale_invalid_or_wrong_camera_hand_results_never_trigger(rig, change):
     assert rig[2].state()['phase'] == 'waiting_detector'
 
 
-def test_far_or_low_confidence_hands_do_not_trigger(rig):
+def test_far_hand_does_not_trigger_fear_and_low_confidence_cannot_confirm_interest(rig):
     prepare(rig)
     sample(rig, box=(1150., 440., 1250., 520.))
     rig[3].advance()
-    sample(rig, 2, box=(1150., 440., 1250., 520.))
+    confirming = sample(rig, 2, box=(1150., 440., 1250., 520.))
     rig[3].advance()
-    sample(rig, 3, confidence=.4)
+    state = sample(rig, 3, confidence=.4)
     assert not rig[1].returns
-    assert rig[2].state()['phase'] == 'watching'
+    assert state['phase'] == 'observing_hand' and not state['curious']
+    assert state['far_hand_seconds'] == confirming['far_hand_seconds'] == .2
+    assert state['curiosity_count'] == state['curiosity_attempt_count'] == 0
 
 
 def test_missing_marker_never_uses_an_old_robot_pose(rig):

@@ -71,9 +71,10 @@ def test_two_seconds_of_a_far_hand_choose_a_single_fixed_point(rig):
     assert gap == 100. and not rig[1].returns
 
 
-def test_curiosity_wait_and_spacing_stay_outside_a_larger_fear_threshold(rig):
+def test_curiosity_wait_and_standoff_stay_independent_of_a_larger_fear_threshold(rig):
     state = rig[2].set_distance(450.)
-    assert state['curiosity_distance_mm'] == 500.
+    assert state['curiosity_distance_mm'] == state['curiosity_min_distance_mm'] == 450.
+    assert state['curiosity_max_distance_mm'] is None
     assert state['interest_stand_off_mm'] == 100.
     assert state['curiosity_wait_seconds'] == 2.
 
@@ -248,25 +249,26 @@ def test_a_gap_without_any_results_does_not_invent_hand_presence(rig):
     assert state['far_hand_seconds'] == .2 and not state['curious']
 
 
-def test_an_intermediate_distance_is_neither_fear_nor_curiosity(rig):
+def test_the_former_gap_between_fear_and_curiosity_now_confirms_interest(rig):
     for sequence in range(30):
         sample(rig, sequence, box=(850., 420., 930., 500.))
         rig[3].advance(.2)
-    assert not rig[1].approaches and not rig[1].returns
-    assert not rig[2].state()['curious']
+    assert len(rig[1].approaches) == 1 and not rig[1].returns
+    assert rig[2].state()['curious']
 
 
-def test_the_gap_between_fear_and_curiosity_is_reported_instead_of_silently_watching(rig):
+def test_a_hand_outside_fear_zone_begins_confirmation_without_an_extra_distance_gap(rig):
     state = sample(rig, 1, box=(850., 420., 930., 500.))
-    assert state['curiosity_status'] == 'too_close'
-    assert state['curiosity_distance_mm'] == 200.
+    assert state['curiosity_status'] == 'confirming'
+    assert state['curiosity_distance_mm'] == 150.
     assert 150. < state['nearest_hand_mm'] < 200.
-    assert '200' in state['message'] and state['far_hand_seconds'] == 0.
+    assert state['far_hand_seconds'] == 0. and not rig[1].approaches
 
 
-def test_threshold_jitter_does_not_reset_a_hand_already_being_confirmed(rig):
+def test_distance_jitter_outside_the_fear_zone_does_not_reset_hand_confirmation(rig):
     for sequence in range(1, 12):
-        # Comienza por encima de 200 mm y oscila a 192 mm, dentro de la histéresis.
+        # La variación de unos 12 mm sigue fuera del miedo de150 mm y no
+        # cambia la identidad de la mano ni reinicia sus dos segundos.
         left = 870. if sequence % 2 else 860.
         state = sample(rig, sequence, box=(left, 420., left + 80., 500.))
         rig[3].advance(.2)

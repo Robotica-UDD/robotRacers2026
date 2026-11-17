@@ -95,7 +95,11 @@ def choose_interest_point(corners, calibration, box, obstacles, stand_off_mm, *,
     # construir listas cuyo tamaño dependa de la escala del plano visible.
     step = .05
     while desired < initial_gap - .030:
-        for degrees in (0., -15., 15., -30., 30., -45., 45., -60., 60., -90., 90.):
+        # Priorizar la cara próxima al robot y explorar también la cara
+        # opuesta: una pared cóncava puede obligar a rodear la mano aunque
+        # esta permanezca dentro del mismo recinto.
+        for degrees in (0., -15., 15., -30., 30., -45., 45., -60., 60., -90., 90.,
+                        -120., 120., -150., 150., 180.):
             if time.monotonic() >= deadline:
                 if oriented_fallback is not None:
                     return oriented_fallback

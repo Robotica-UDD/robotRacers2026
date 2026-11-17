@@ -86,15 +86,15 @@ assert.equal($('home-hand-reason').textContent.includes('distancia máxima'),fal
 """)
 
 
-def test_hand_between_fear_and_curiosity_shows_the_actual_distance_and_required_distance():
+def test_near_hand_label_describes_refuge_instead_of_a_curiosity_range_limit():
     run(r"""
 homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='too_close';
-homeState.nearest_hand_mm=180;homeState.curiosity_distance_mm=200;
+homeState.nearest_hand_mm=120;homeState.distance_mm=150;
 renderHomeUI();
 assert.equal($('home-hand-status').hidden,false);
-assert.equal($('home-hand-status').textContent,'Mano a 180 mm · Curiosidad desde 200 mm');
-homeState.curiosity_distance_mm=300;renderHomeUI();
-assert.equal($('home-hand-status').textContent,'Mano a 180 mm · Curiosidad desde 300 mm');
+assert.equal($('home-hand-status').textContent,'Mano a 120 mm · Zona de refugio: 150 mm');
+homeState.distance_mm=300;renderHomeUI();
+assert.equal($('home-hand-status').textContent,'Mano a 120 mm · Zona de refugio: 300 mm');
 """)
 
 
@@ -143,7 +143,7 @@ def test_missing_or_invalid_diagnostic_values_do_not_produce_nan_or_a_false_fail
 homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='too_close';
 homeState.nearest_hand_mm=NaN;homeState.curiosity_distance_mm=Infinity;homeState.distance_mm=NaN;
 homeState.curiosity_blocked_reason='   ';renderHomeUI();
-assert.equal($('home-hand-status').textContent,'Mano detectada · Curiosidad desde 200 mm');
+assert.equal($('home-hand-status').textContent,'Mano detectada · Zona de refugio: 150 mm');
 assert.equal($('home-hand-reason').hidden,true);
 homeState.curiosity_status='retrying';homeState.curiosity_retry_in_s=NaN;renderHomeUI();
 assert.equal($('home-hand-status').textContent,'Buscando acercamiento · preparando reintento…');
@@ -250,4 +250,14 @@ assert.equal(requests[0][0],'/api/home/settings');
 assert.deepEqual(requests[0][1],{enabled:false});
 assert.equal(requests[0][2]['X-Requested-With'],'XMLHttpRequest');
 assert.equal(homeState.curious,false);
+""")
+
+
+def test_hand_outside_the_perimeter_has_a_distinct_scope_message():
+    run(r"""
+homeState.enabled=true;homeState.phase='watching';homeState.curiosity_status='outside_arena';
+homeState.nearest_hand_mm=9000;renderHomeUI();
+assert.equal($('home-hand-status').hidden,false);
+assert.equal($('home-hand-status').textContent,'Mano fuera del área marcada');
+assert.equal($('home-cancel').hidden,true);
 """)

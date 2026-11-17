@@ -1,6 +1,6 @@
 # Detección de manos, curiosidad y regreso a Casa
 
-Configuración confirmada por el usuario en el robot real: **240 mm/s de avance
+Referencia confirmada por el usuario con las ruedas anteriores: **240 mm/s de avance
 máximo y 90°/s de giro máximo**. El panel conserva esa referencia escrita sin
 sobrescribir los controles de velocidad.
 
@@ -15,12 +15,15 @@ sobrescribir los controles de velocidad.
 4. Una mano cercana confirmada en al menos dos imágenes y durante 150 ms
    interrumpe el recorrido y activa el regreso a Casa. Se usa la ruta calculada
    alrededor de los obstáculos dibujados y el control por encoders existente.
-5. Si una mano permanece lejos durante **2 segundos**, el robot fija un
-   **punto de interés** para acercarse. Se considera lejana a partir de
-   **200 mm** desde la huella del robot; si aumentas la distancia de reacción,
-   ese umbral será como mínimo la distancia de reacción más 50 mm.
-   Una tolerancia de continuidad de 20 mm evita reiniciar el contador por ruido
-   alrededor del umbral; nunca desactiva la prioridad de una mano cercana.
+5. Si una mano permanece visible durante **2 segundos**, fuera de la zona de
+   refugio y **dentro del mismo perímetro que el robot**, fija un **punto de
+   interés** para acercarse. No existe distancia máxima mano-robot ni un umbral
+   adicional de 200 mm: una mano a 3, 5 o 10 m sigue siendo candidata si la
+   cámara puede detectarla y existe una ruta interior válida. Sin perímetro
+   guardado se considera el área visible de la imagen. La pertenencia se
+   comprueba por la palma (o el centro del recuadro), permitiendo que parte del
+   recuadro sobresalga. La reacción de refugio conserva prioridad cuando una
+   mano está cerca, incluso si está al otro lado del perímetro.
 6. El punto de interés reserva **100 mm de separación mínima estimada entre
    la huella del robot y el recuadro de la mano**. El tamaño completo del robot
    y la tolerancia de llegada pueden dejar algo más de separación. Se comprueba
@@ -51,10 +54,11 @@ viendo la mano ya asociada. Se usa la geometría anterior solo para asociar su
 palma en la cámara fija; iniciar el viaje siempre exige una posición actual
 y válida del robot. La ausencia real de mano pausa el tiempo acumulado.
 
-El panel distingue confirmación, espera por visión o enlace y reintentos. Muestra
-la distancia estimada y el umbral de curiosidad: con la reacción de miedo inicial
-de 150 mm, una mano a 120 mm corresponde a Casa; la curiosidad comienza desde
-200 mm. El recuadro completo de la mano puede estar mucho más cerca que su palma.
+El panel distingue confirmación, espera por visión o enlace y reintentos.
+La distancia de reacción corresponde al refugio; no limita el alcance de la
+curiosidad. Una mano fuera del área marcada tiene un estado propio y no acumula
+la confirmación de acercamiento. El recuadro completo de la mano puede estar
+más cerca que su palma, por lo que se conserva para comprobar la proximidad.
 
 **Cancelar regreso**, **Cancelar acercamiento**, **Detener** y **D48** tienen prioridad. Desactivar o borrar
 Casa invalida también una orden pendiente durante el cálculo de ruta. Al
@@ -105,7 +109,8 @@ ruta válida con la huella orientada. Así no se agota el tiempo probando primer
 puntos que están fuera del recinto del robot.
 
 La curiosidad **no tiene distancia máxima entre la mano y el robot**. La mano
-puede estar al otro lado de una pared y requerir un rodeo. Se eliminó la
+puede estar al otro lado de una pared interior y requerir un rodeo, siempre
+dentro del recinto del robot. Se eliminó la
 preaprobación de ruta limitada a 180 ms en la elección del punto: ahora esa fase
 elige un extremo libre y la navegación calcula y valida la trayectoria completa
 antes de permitir movimiento. También se eliminó el máximo de 350 mm adicionales
@@ -113,7 +118,9 @@ para elegir una posición de observación; la búsqueda se adapta al campo visib
 Elegir un punto de interés no significa que exista paso para la huella: una C
 con un cuello menor que el ancho real del robot puede seguir sin ruta válida.
 El perímetro, la separación y las comprobaciones de las ruedas se conservan.
-Se prefieren extremos con espacio para orientarse. Si el círculo de giro no
+La búsqueda de extremos recorre los 360° alrededor de la mano, priorizando
+la cara más próxima al robot. Así una pared cóncava no restringe la aproximación
+a un único semiplano. Se prefieren extremos con espacio para orientarse. Si el círculo de giro no
 cabe, un extremo con la huella orientada libre sigue siendo candidato al
 planificador completo; esa preferencia no prohíbe los pasillos estrechos.
 
@@ -167,3 +174,16 @@ escenario de velocidad alta; este ajuste no cambia el controlador de movimiento.
 El ajuste de selección sin distancia máxima superó 132 pruebas específicas de
 curiosidad, interfaz, acercamiento y perímetros, incluidas manos a más de un
 metro y el rechazo de movimientos si la trayectoria completa no es válida.
+
+Revisión del 17 de noviembre de 2026: la confirmación se limita al recinto
+marcado, sin el umbral artificial de 200 mm ni una separación adicional de
+50 mm respecto a la zona de miedo. Las pruebas incluyen manos interiores a
+3, 5 y 10 m, manos exteriores sin activar acercamiento y cajas que solapan la
+pared con su palma dentro. El destino conserva la separación de observación;
+no es un radio máximo de detección. La pertenencia se calcula con los lazos del
+perímetro en la imagen y no con una rejilla cuyo tamaño dependa de la distancia.
+
+El escenario de estrés mencionado en la revisión del 11 de noviembre se
+volvió a comprobar el 17 de noviembre: pasó con la corrección del marco angular
+y también después de incorporar la respuesta suave de rectas. Se conserva la
+nota anterior como registro de la limitación observada en aquella versión.

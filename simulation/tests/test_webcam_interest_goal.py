@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from simulation.tests.test_webcam_curiosity_navigation import HAND, STAND_OFF_MM
-from simulation.tests.test_webcam_obstacle_planner import scene
+from simulation.tests.test_webcam_obstacle_planner import scene, rectangle
 from simulation.tests.test_webcam_perimeter_geometry import perimeter
 from simulation.tests.test_webcam_pose_navigation import projected_obstacles, synthetic_scene
 from simulation.webcam import interest_goal
@@ -113,3 +113,23 @@ def test_component_filter_leaves_an_unanchorable_start_to_the_exact_planner():
     walls = perimeter(project, [(-.35, -.5), (.35, -.5), (.35, .5), (-.35, .5)])
     world = _Scene(corners, calibration, walls, ROBOT_FOOTPRINT_MM)
     assert interest_goal._reachable_component(world, project((.35, 0.)), time.monotonic() + 1.) is None
+
+
+def test_hand_behind_a_c_shape_can_be_approached_from_its_opposite_side():
+    corners, calibration, project = scene(scale=400.)
+    # La mano está en un hueco abierto hacia la derecha; su cara que mira al
+    # robot queda oculta por tres paredes. Acercarse desde la cara opuesta
+    # evita reservar un destino lejano solo por el semiplano de búsqueda.
+    walls = [rectangle(project, .25, -.60, .80, .60),
+             rectangle(project, .80, .15, 1.15, .60),
+             rectangle(project, .80, -.60, 1.15, -.15)]
+    first, last = project((.87, .03)), project((.93, -.03))
+    result = interest_goal.choose_interest_point(corners, calibration,
+        [first[0], first[1], last[0], last[1]], walls, 100.)
+    target = result['target_px']
+    assert target[0] > project((1.10, 0.))[0]
+    assert abs(target[1]-project((0.,0.))[1]) < 30.
+    plan = plan_pose_path(corners, calibration, project((0., 0.)), target, walls,
+                          start_heading_rad=0., max_seconds=2.)
+    assert check_pose(corners, calibration, target,
+        plan['steps'][-1]['heading_rad'], walls)['clear']

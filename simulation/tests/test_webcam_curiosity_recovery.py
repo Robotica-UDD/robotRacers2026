@@ -13,9 +13,10 @@ def hand_result(clock, sequence):
 
 
 def test_hand_confirmation_survives_marker_flicker_and_drives_to_an_accessible_interest_point():
-    # La mano está fuera del recinto, pero se puede acercar por dentro sin
-    # cruzar la pared. No se conecta ningún transporte ni se abren cámaras.
-    vertices = [(-.35, -.5), (.35, -.5), (.35, .5), (-.35, .5)]
+    # Mano y robot pertenecen al mismo recinto. El parpadeo del marcador no
+    # debe reiniciar la confirmación ni impedir completar el acercamiento.
+    # No se conecta ningún transporte ni se abren cámaras.
+    vertices = [(-.35, -.5), (.78, -.5), (.78, .5), (-.35, .5)]
     walls = [[pixel(point), pixel(vertices[(index + 1) % len(vertices)])]
              for index, point in enumerate(vertices)]
     with synthetic_scene(start=(0., 0., 0.), polygons=[], plant=True) as (camera, robot, nav):
@@ -41,8 +42,8 @@ def test_hand_confirmation_survives_marker_flicker_and_drives_to_an_accessible_i
             assert nav.state()["behavior_purpose"] == "curiosity"
             wait_for(lambda: not nav.state()["active"], timeout=8.)
             assert nav.state()["phase"] == "arrived", nav.state()["message"]
-            assert .10 < robot.x < .35
-            assert all(-.35 < row["position"][0] < .35 and
+            assert .30 < robot.x < .70
+            assert all(-.35 < row["position"][0] < .78 and
                        -.5 < row["position"][1] < .5 for row in robot.trace)
             assert robot.starts == 1
         finally:
