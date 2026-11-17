@@ -12,6 +12,7 @@ import pytest
 
 SCENARIOS = (
     "reset_and_idle",
+    "wheel_geometry_and_angular_control",
     "startup_ramp",
     "two_counts_and_smooth_transfer",
     "wrong_encoder_direction_does_not_learn",

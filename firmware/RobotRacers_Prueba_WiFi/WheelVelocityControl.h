@@ -8,7 +8,16 @@ namespace robotracers {
 // Entradas: cuentas físicas (positivo hacia delante), segundos y mm/s.
 // No depende de Arduino, de red ni de periféricos. Una instancia por rueda.
 struct WheelVelocityControl {
-  static constexpr double MM_PER_COUNT = 3.14159265358979323846 * 23.0 / 59.94;
+  static constexpr double WHEEL_DIAMETER_MM = 33.0;
+  static constexpr double ENCODER_COUNTS_PER_REVOLUTION = 59.94;
+  static constexpr double MM_PER_COUNT = 3.14159265358979323846 * WHEEL_DIAMETER_MM / ENCODER_COUNTS_PER_REVOLUTION;
+  // Los coeficientes originales se ajustaron con ruedas de 23 mm. Convertir
+  // su dependencia de mm/s conserva la acción por velocidad angular del motor;
+  // no supone una medición nueva del rozamiento de las ruedas de 33 mm.
+  static constexpr double GEOMETRY_GAIN_SCALE = 23.0 / WHEEL_DIAMETER_MM;
+  static constexpr double VELOCITY_FEEDFORWARD = .125 * GEOMETRY_GAIN_SCALE;
+  static constexpr double PROPORTIONAL_GAIN = .10 * GEOMETRY_GAIN_SCALE;
+  static constexpr double INTEGRAL_GAIN = 1.0 * GEOMETRY_GAIN_SCALE;
   static constexpr int PWM_MAX = 160;
   // Límite del formato de consigna, sin techo adicional de la aplicación.
   static constexpr int MAX_VELOCITY_MM_S = std::numeric_limits<int32_t>::max();
@@ -105,7 +114,7 @@ struct WheelVelocityControl {
     }
     const double referenceMagnitude = std::fabs(reference_);
     const double error = referenceMagnitude - direction_ * speed_;
-    const double feedforward = 35.0 + .125 * referenceMagnitude;
+    const double feedforward = 35.0 + VELOCITY_FEEDFORWARD * referenceMagnitude;
     if (starting_) {
       if ((count - startupCount_) * direction_ < 2) {
         startupPwm_ = std::fmin(double(PWM_MAX), 35.0 + STARTUP_PWM_RISE_PER_S * (now_s - startupTime_));
@@ -115,12 +124,12 @@ struct WheelVelocityControl {
       starting_ = false;
       // Transferencia validada: no conservar todo el esfuerzo de fricción
       // estática en el integrador. La rampa de PWM evita un escalón al salir.
-      integral_ = limit(.40 * (std::fabs(double(pwm_)) - feedforward - .10 * error), -120., 125.);
+      integral_ = limit(.40 * (std::fabs(double(pwm_)) - feedforward - PROPORTIONAL_GAIN * error), -120., 125.);
     }
-    const double free = feedforward + .10 * error + integral_;
+    const double free = feedforward + PROPORTIONAL_GAIN * error + integral_;
     if ((free > 0 && free < PWM_MAX) || (free >= PWM_MAX && error < 0) || (free <= 0 && error > 0))
-      integral_ = limit(integral_ + error * dt, -120.0, 125.0);
-    double output = limit(feedforward + .10 * error + integral_, 0.0, double(PWM_MAX));
+      integral_ = limit(integral_ + INTEGRAL_GAIN * error * dt, -120.0, 125.0);
+    double output = limit(feedforward + PROPORTIONAL_GAIN * error + integral_, 0.0, double(PWM_MAX));
     if (reversing_) output = std::fmin(output, std::fabs(double(pwm_)));
     const double pwmRate = output < std::fabs(double(pwm_)) ? PWM_FALL_PER_S : PWM_RISE_PER_S;
     output = approach(std::fabs(double(pwm_)), output, pwmRate * dt);

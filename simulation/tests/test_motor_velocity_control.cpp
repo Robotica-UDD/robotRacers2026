@@ -47,6 +47,21 @@ void reset_and_idle() {
   CHECK(rig.control.target() == -1000);
 }
 
+void wheel_geometry_and_angular_control() {
+  const double pi = std::acos(-1.);
+  const double distance_per_count = pi * 33. / 59.94;
+  CHECK(std::abs(WheelVelocityControl::MM_PER_COUNT - distance_per_count) < 1e-12);
+  // Sesenta cuentas por segundo tienen esta velocidad física con las ruedas
+  // nuevas; la medición pasa por el estimador real del firmware.
+  Rig rig;
+  for (int second = 1; second <= 12; ++second) rig.step(second * 60, 1.);
+  CHECK(std::abs(rig.control.speed() - 60. * distance_per_count) < 1e-8);
+  const double same_angular_speed = 33. / 23.;
+  CHECK(std::abs(WheelVelocityControl::VELOCITY_FEEDFORWARD * (100. * same_angular_speed) - .125 * 100.) < 1e-10);
+  CHECK(std::abs(WheelVelocityControl::PROPORTIONAL_GAIN * (20. * same_angular_speed) - .10 * 20.) < 1e-10);
+  CHECK(std::abs(WheelVelocityControl::INTEGRAL_GAIN * (20. * same_angular_speed) - 20.) < 1e-10);
+}
+
 void startup_ramp() {
   Rig rig;
   rig.control.setTarget(100);
@@ -415,6 +430,7 @@ int main(int argc, char** argv) {
   CHECK(argc == 2);
   const std::string scenario = argv[1];
   if (scenario == "reset_and_idle") reset_and_idle();
+  else if (scenario == "wheel_geometry_and_angular_control") wheel_geometry_and_angular_control();
   else if (scenario == "startup_ramp") startup_ramp();
   else if (scenario == "two_counts_and_smooth_transfer") two_counts_and_smooth_transfer();
   else if (scenario == "wrong_encoder_direction_does_not_learn") wrong_encoder_direction_does_not_learn();
