@@ -5825,53 +5825,52 @@
     },
     "bounds_m": [
       [
-        -0.0115,
-        -0.0209,
-        -0.0115
+        -0.0165,
+        -0.0035,
+        -0.0165
       ],
       [
-        0.0115,
-        0.0209,
-        0.0115
+        0.0165,
+        0.0035,
+        0.0165
       ]
     ],
     "parts": {
-      "Silicone_tire_23x40": {
+      "Wheel_tire_33x7": {
         "first_vertex": 0,
-        "kind": "nominal Ja-Bots silicone geometry",
-        "diameter_m": 0.023,
-        "width_m": 0.04,
-        "hardness": "10A per vendor, not a calibrated friction coefficient",
+        "kind": "user supplied outer dimensions; material and hardness unmeasured",
+        "diameter_m": 0.033,
+        "width_m": 0.007,
+        "source": "User dimensions, 2026-11-17",
         "vertex_count": 6936,
         "bounds_m": [
           [
-            -0.0115,
-            -0.02,
-            -0.0115
+            -0.0165,
+            -0.0035,
+            -0.0165
           ],
           [
-            0.0115,
-            0.02,
-            0.0115
+            0.0165,
+            0.0035,
+            0.0165
           ]
         ]
       },
       "Aluminium_hub": {
         "first_vertex": 6936,
-        "kind": "dimensioned hub reconstruction",
-        "rim_diameter_m": 0.015,
+        "kind": "schematic hub retained from prior reconstruction; replacement hub not measured",
         "shaft_diameter_m": 0.003,
-        "source": "https://ja-bots.com/producto/llantas-seguidor-de-linea-largas-23x40-negro/",
+        "source": "Motor shaft interface; replacement wheel outer dimensions only",
         "vertex_count": 7584,
         "bounds_m": [
           [
             -0.0075,
-            -0.0209,
+            -0.0035,
             -0.0075
           ],
           [
             0.0075,
-            0.0209,
+            0.0035,
             0.0075
           ]
         ]
@@ -5881,12 +5880,12 @@
   "wheel_placement_in_body_frame_m": {
     "left": [
       -0.01315,
-      0.095,
+      0.0815,
       0.0115
     ],
     "right": [
       -0.01315,
-      -0.095,
+      -0.0815,
       0.0115
     ]
   },
@@ -5895,12 +5894,12 @@
     1,
     0
   ],
-  "wheel_radius_m": 0.0115,
-  "wheel_width_m": 0.04,
+  "wheel_radius_m": 0.0165,
+  "wheel_width_m": 0.007,
   "body_translation_for_axle_origin_m": [
     0.01315,
     0,
-    0
+    0.005
   ],
   "marker_platform": {
     "generated_by": "supervisor/world, not body mesh",
@@ -5917,8 +5916,8 @@
     "battery_bottom_m": 0.02,
     "maximum_PCB_component_top_m": 0.01654,
     "wheel_inner_edges_y_m": [
-      -0.075,
-      0.075
+      -0.078,
+      0.078
     ],
     "motor_case_inner_edge_abs_y_m": 0.033,
     "motor_case_bottom_m": 0.0065
@@ -5978,11 +5977,6 @@
       "licence": "KiCad library licence supplied in sources/reference"
     },
     {
-      "item": "Rim/tire",
-      "source": "https://ja-bots.com/producto/llantas-seguidor-de-linea-largas-23x40-negro/",
-      "notes": "Nominal23x40 geometry; no CAD or mass supplied"
-    },
-    {
       "item": "Reflectance sensors",
       "source": "https://www.pololu.com/product/4401",
       "notes": "Reconstructed dimensions; positions provisional; no fictitious range sensor"
@@ -5992,6 +5986,11 @@
       "source": "Project discussion and dimensioned provisional reconstruction",
       "licence": "Generated project meshes; MIT",
       "notes": "Not measured final assembled geometry, mass or aerodynamic calibration"
+    },
+    {
+      "item": "Rim/tire",
+      "source": "User, 2026-11-17",
+      "notes": "33 mm diameter, 7 mm width; total outside wheel span approximately 170 mm -> track 163 mm. Hub, mass and material unmeasured; previous mass/friction estimates retained."
     }
   ],
   "unknown_mechanical_parameters": [
@@ -6006,5 +6005,6 @@
     "support final CAD"
   ],
   "rebuild": "python3 simulation/tools/build_assets.py; Pillow needed only for CAD texture bake",
-  "integration": "Insert body.inc.wbt Group literally under Transform translation0.01315 0 0 in Robot PROTO. Insert wheel.inc.wbt at each joint; wheel local axis Y. Texture URL is relative to simulation/webots/protos."
+  "integration": "Insert body.inc.wbt Group literally under Transform translation0.01315 0 0 in Robot PROTO. Insert wheel.inc.wbt at each joint; wheel local axis Y. Texture URL is relative to simulation/webots/protos.",
+  "wheel_dimensions_updated": "2026-11-17"
 }

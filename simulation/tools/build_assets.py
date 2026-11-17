@@ -25,6 +25,8 @@ OUTPUT = ASSETS / 'robot'
 MM = .001
 PCB_BOTTOM, PCB_TOP = .004, .0056
 CAD_CENTRE = (65.15, 34.95)
+# Unchanged axle datum of the original body/CAD reconstruction. Replacement
+# wheel radius is read from robot.json; its 5 mm increase lifts this body pose.
 AXLE_X, AXLE_Z = -.01315, .0115
 DNP = {'C5', 'C6', 'J40', 'J41'}
 
@@ -443,28 +445,50 @@ def additions(mesh):
                   mounting='provisional forward support; not measured assembled CAD')
 
 
-def wheel():
-    m=Mesh();m.start_part('Silicone_tire_23x40')
-    m.cylinder((0,0,0),.0115,.040,'rubber','y',96,inner=.0075)
+def wheel(parameters=None):
+    parameters = parameters or json.loads((ROOT/'simulation/config/robot.json').read_text())
+    radius, width = parameters['wheel_radius_m'], parameters['wheel_width_m']
+    half = width/2
+    # Only exterior dimensions were supplied for the replacement. Retain a
+    # schematic hub; do not attribute the former tyre's material or hardness.
+    hub_radius = .0075
+    m=Mesh();m.start_part('Wheel_tire_33x7')
+    m.cylinder((0,0,0),radius,width,'rubber','y',96,inner=hub_radius)
     # Thin edge rings and an asymmetric seam make wheel rotation observable.
-    for y in [-.0198,.0198]:m.cylinder((0,y,0),.01145,.0004,'black','y',96,inner=.0108)
+    for y in [-half+.0002,half-.0002]:m.cylinder((0,y,0),radius-.00005,.0004,'black','y',96,inner=radius-.0007)
     for a in [0,math.pi/2,math.pi,3*math.pi/2]:
-        r=.0115001
-        points=[(r*math.cos(t),y,r*math.sin(t))for t,y in [(a-.009,-.018),(a+.009,-.018),(a+.009,.018),(a-.009,.018)]]
+        r=radius
+        points=[(r*math.cos(t),y,r*math.sin(t))for t,y in [(a-.009,-half+.0005),(a+.009,-half+.0005),(a+.009,half-.0005),(a-.009,half-.0005)]]
         m.face(list(reversed(points)),'black')
-    m.end_part(kind='nominal Ja-Bots silicone geometry',diameter_m=.023,width_m=.040,hardness='10A per vendor, not a calibrated friction coefficient')
+    m.end_part(kind='user supplied outer dimensions; material and hardness unmeasured',diameter_m=2*radius,width_m=width,source='User dimensions, 2026-11-17')
     m.start_part('Aluminium_hub')
-    m.cylinder((0,0,0),.0075,.0396,'chip','y',64,inner=.0015)
-    for y in [-.0200,.0200]:
-        m.cylinder((0,y,0),.0074,.00045,'aluminium','y',64,inner=.0015)
-        m.cylinder((0,y*1.025,0),.0032,.0006,'chip','y',32,inner=.0015)
+    m.cylinder((0,0,0),hub_radius,width-.0004,'chip','y',64,inner=.0015)
+    for sign in [-1,1]:
+        y=sign*(half-.00025)
+        m.cylinder((0,y,0),.0074,.0005,'aluminium','y',64,inner=.0015)
+        m.cylinder((0,y,0),.0032,.0005,'chip','y',32,inner=.0015)
         for i in range(4):
             a=i*math.pi/2+.25
-            m.cylinder((.005*math.cos(a),y*1.018,.005*math.sin(a)),.0008,.0001,'black','y',12)
+            m.cylinder((.005*math.cos(a),sign*(half-.00005),.005*math.sin(a)),.0008,.0001,'black','y',12)
         # Set-screw head, offset from axle, provides an orientation cue.
-        m.cylinder((.0036,y*1.035,.0021),.0008,.0004,'silver','y',12)
-    m.end_part(kind='dimensioned hub reconstruction',rim_diameter_m=.015,shaft_diameter_m=.003,source='https://ja-bots.com/producto/llantas-seguidor-de-linea-largas-23x40-negro/')
+        m.cylinder((.0036,sign*(half-.0002),.0021),.0008,.0004,'silver','y',12)
+    m.end_part(kind='schematic hub retained from prior reconstruction; replacement hub not measured',shaft_diameter_m=.003,source='Motor shaft interface; replacement wheel outer dimensions only')
     return m
+
+
+def update_wheel_manifest(manifest, parameters, wheel_data):
+    """Update the replaceable wheels without regenerating CAD/PCB assets."""
+    radius=parameters['wheel_radius_m'];width=parameters['wheel_width_m'];track=parameters['track_width_m']
+    manifest.update(wheel=wheel_data,wheel_radius_m=radius,wheel_width_m=width,
+                    wheel_dimensions_updated='2026-11-17')
+    manifest['wheel_placement_in_body_frame_m']={'left':[AXLE_X,track/2,AXLE_Z],'right':[AXLE_X,-track/2,AXLE_Z]}
+    manifest['body_translation_for_axle_origin_m']=parameters['cad_body_offset_m']
+    inner=track/2-width/2
+    manifest['clearances']['wheel_inner_edges_y_m']=[-inner,inner]
+    manifest['provenance']=[v for v in manifest['provenance'] if v.get('item')!='Rim/tire']
+    manifest['provenance'].append({'item':'Rim/tire','source':'User, 2026-11-17',
+        'notes':'33 mm diameter, 7 mm width; total outside wheel span approximately 170 mm -> track 163 mm. Hub, mass and material unmeasured; previous mass/friction estimates retained.'})
+    return manifest
 
 
 def prepare_sources(source_root):
@@ -505,14 +529,16 @@ def prepare_sources(source_root):
 
 def verify_assets(manifest):
     """Validate serialized meshes against Webots R2025a geometry restrictions."""
+    parameters=json.loads((ROOT/'simulation/config/robot.json').read_text())
     checks={
         'mounted_count_210':manifest['mounted_components']==210,
         'removed_parts_absent':not(set(manifest['body']['parts'])&{'C5','C6','U30','S5','S6','J40','J41'}),
         'units_m':manifest['units']=='m',
         'PCB_dimensions_correct':manifest['body']['parts']['PCB_RevQ']['board_dimensions_m']==[.13,.07,.0016],
         'turbine_hole_32mm':manifest['body']['parts']['PCB_RevQ']['central_cutout_diameter_m']==.032,
-        'wheel_radius_11_5mm':manifest['wheel_radius_m']==.0115,
-        'wheel_width_40mm':manifest['wheel_width_m']==.040,
+        'wheel_radius_matches_configuration':manifest['wheel_radius_m']==parameters['wheel_radius_m'],
+        'wheel_width_matches_configuration':manifest['wheel_width_m']==parameters['wheel_width_m'],
+        'wheel_track_matches_configuration':manifest['wheel_placement_in_body_frame_m']['left'][1]*2==parameters['track_width_m'],
         'wheel_axis_y':manifest['wheel_axis']==[0,1,0],
         'battery_over_component_height':manifest['clearances']['battery_bottom_m']>manifest['clearances']['maximum_PCB_component_top_m'],
         'texture_path_resolves':(ROOT/'simulation/webots/protos/../../assets/robot/pcb_top.png').resolve().is_file(),
@@ -540,7 +566,9 @@ def verify_assets(manifest):
         vrml_faces=[f.strip().replace(',',' ').split()for block in re.findall(r'coordIndex\s*\[([^\]]+)\]',include)for f in block.split('-1')if f.strip().strip(',')]
         checks[name+'_VRML_triangles_only']=len(vrml_faces)==len(faces) and all(len(f)==3 for f in vrml_faces)
         exported[name]={'triangle_count':len(faces),'minimum_twice_triangle_area_m2':min_area2,'sha256':hashlib.sha256((OUTPUT/f'{name}.inc.wbt').read_bytes()).hexdigest()}
-        if name=='wheel':checks['wheel_radius_geometry']=max(math.hypot(x,z)for x,y,z in vertices)<=.0115002
+        if name=='wheel':
+            checks['wheel_radius_geometry']=max(math.hypot(x,z)for x,y,z in vertices)<=parameters['wheel_radius_m']+.0000002
+            checks['wheel_width_geometry']=abs(max(y for x,y,z in vertices)-min(y for x,y,z in vertices)-parameters['wheel_width_m'])<1e-8
     checks['files_under_GitHub_limit']=max(p.stat().st_size for p in ASSETS.rglob('*')if p.is_file())<100*1024*1024
     report={'checks':checks,'passed':sum(checks.values()),'failed':sum(not x for x in checks.values()),'exported_geometry':exported,
             'schema_reference':'Webots R2025a Contents/Resources/nodes/IndexedFaceSet.wrl: ccw supported; solid is not a field',
@@ -553,7 +581,16 @@ def verify_assets(manifest):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source-root',type=Path,default=ROOT.parent)
+    parser.add_argument('--wheels-only',action='store_true',help='Update only wheel meshes, manifest and validation; preserve body/CAD/PCB assets')
     args=parser.parse_args()
+    parameters=json.loads((ROOT/'simulation/config/robot.json').read_text())
+    if args.wheels_only:
+        manifest=json.loads((ASSETS/'manifest.json').read_text())
+        update_wheel_manifest(manifest,parameters,wheel(parameters).write('wheel'))
+        (ASSETS/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
+        verification=verify_assets(manifest)
+        print(json.dumps({'wheel_radius_m':parameters['wheel_radius_m'],'wheel_width_m':parameters['wheel_width_m'],'track_width_m':parameters['track_width_m'],'validation_failed':verification['failed']},indent=2))
+        return
     sources=prepare_sources(args.source_root)
     r=ET.parse(SOURCES/'pcb/RobotRacers_RevQ.brd').getroot().find('./drawing/board')
     packages={(l.get('name'),p.get('name')):p for l in r.findall('./libraries/library')for p in l.findall('./packages/package')}
@@ -564,16 +601,16 @@ def main():
     body=Mesh();board(body,r)
     for e in mounted:component(body,e,packages[(e.get('library'),e.get('package'))])
     additions(body)
-    body_data=body.write('body');wheel_data=wheel().write('wheel')
+    body_data=body.write('body');wheel_data=wheel(parameters).write('wheel')
     manifest={
         'revision':'RobotRacers PCB RevQ / visual reconstruction 1',
         'units':'m','frame':{'x':'forward; CAD+y','y':'left; CAD-x','z':'up'},
         'cad_centre_mm':CAD_CENTRE,'pcb_bottom_m':PCB_BOTTOM,'pcb_top_m':PCB_TOP,
         'mounted_components':210,'pcb_elements':214,'excluded_bodies':sorted(DNP|{'U30','S5','S6'}),
         'body':body_data,'wheel':wheel_data,
-        'wheel_placement_in_body_frame_m':{'left':[AXLE_X,.095,AXLE_Z],'right':[AXLE_X,-.095,AXLE_Z]},
-        'wheel_axis':[0,1,0],'wheel_radius_m':.0115,'wheel_width_m':.040,
-        'body_translation_for_axle_origin_m':[.01315,0,0],
+        'wheel_placement_in_body_frame_m':{'left':[AXLE_X,parameters['track_width_m']/2,AXLE_Z],'right':[AXLE_X,-parameters['track_width_m']/2,AXLE_Z]},
+        'wheel_axis':[0,1,0],'wheel_radius_m':parameters['wheel_radius_m'],'wheel_width_m':parameters['wheel_width_m'],
+        'body_translation_for_axle_origin_m':parameters['cad_body_offset_m'],
         'marker_platform':{'generated_by':'supervisor/world, not body mesh','centre_in_body_frame_m':[-.040,0,.023],'size_m':.040,'carrier_size_m':.052},
         'physical_colliders':'NONE: visual only; root simulator owns separate simplified collision geometry',
         'clearances':{'battery_bottom_m':.020,'maximum_PCB_component_top_m':max(d['bounds_m'][1][2]for d in body.parts.values()if d.get('kind')=='PCB component'),'wheel_inner_edges_y_m':[-.075,.075],'motor_case_inner_edge_abs_y_m':.033,'motor_case_bottom_m':.0065},
@@ -583,7 +620,7 @@ def main():
             {'item':'Motor and encoder dimensions','source':'https://www.pololu.com/product/5178/specs','notes':'Dimensioned visual reconstruction, not converted official CAD'},
             {'item':'Bracket dimensional reference','source':'https://www.pololu.com/file/0J1712/micro-metal-gearmotor-extended-with-1089-extended-bracket.step','notes':'Reference for bracket and holes; old extended-shaft motor is not presented as exact5178 CAD','licence':'Manufacturer reference; keep attribution; not relicensed MIT'},
             {'item':'ESP32 STEP reference','source':'https://github.com/espressif/kicad-libraries','licence':'KiCad library licence supplied in sources/reference'},
-            {'item':'Rim/tire','source':'https://ja-bots.com/producto/llantas-seguidor-de-linea-largas-23x40-negro/','notes':'Nominal23x40 geometry; no CAD or mass supplied'},
+            {'item':'Rim/tire','source':'User dimensions, 2026-11-17','notes':'Nominal33x7 exterior; hub, material and mass unmeasured'},
             {'item':'Reflectance sensors','source':'https://www.pololu.com/product/4401','notes':'Reconstructed dimensions; positions provisional; no fictitious range sensor'},
             {'item':'Battery, turbine, cables, support, custom sensor bar','source':'Project discussion and dimensioned provisional reconstruction','licence':'Generated project meshes; MIT','notes':'Not measured final assembled geometry, mass or aerodynamic calibration'}
         ],
@@ -591,6 +628,7 @@ def main():
         'rebuild':'python3 simulation/tools/build_assets.py; Pillow needed only for CAD texture bake',
         'integration':'Insert body.inc.wbt Group literally under Transform translation0.01315 0 0 in Robot PROTO. Insert wheel.inc.wbt at each joint; wheel local axis Y. Texture URL is relative to simulation/webots/protos.'
     }
+    update_wheel_manifest(manifest,parameters,wheel_data)
     (ASSETS/'manifest.json').write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+'\n')
     verification=verify_assets(manifest)
     print(json.dumps({'mounted_components':210,'body_vertices':body_data['vertices'],'body_faces':body_data['faces'],'wheel_faces':wheel_data['faces'],'body_bounds_m':body_data['bounds_m'],'validation_passed':verification['passed'],'validation_failed':verification['failed'],'output':str(OUTPUT)},indent=2))

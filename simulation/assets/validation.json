@@ -5,8 +5,9 @@
     "units_m": true,
     "PCB_dimensions_correct": true,
     "turbine_hole_32mm": true,
-    "wheel_radius_11_5mm": true,
-    "wheel_width_40mm": true,
+    "wheel_radius_matches_configuration": true,
+    "wheel_width_matches_configuration": true,
+    "wheel_track_matches_configuration": true,
     "wheel_axis_y": true,
     "battery_over_component_height": true,
     "texture_path_resolves": true,
@@ -27,9 +28,10 @@
     "wheel_Webots_R2025a_fields": true,
     "wheel_VRML_triangles_only": true,
     "wheel_radius_geometry": true,
+    "wheel_width_geometry": true,
     "files_under_GitHub_limit": true
   },
-  "passed": 28,
+  "passed": 30,
   "failed": 0,
   "exported_geometry": {
     "body": {
@@ -39,8 +41,8 @@
     },
     "wheel": {
       "triangle_count": 4840,
-      "minimum_twice_triangle_area_m2": 4.141100153340871e-08,
-      "sha256": "5977fe4d05670a66a48ee60c6a9ac95241b50a17d9310032d4d8c9f63269e2f3"
+      "minimum_twice_triangle_area_m2": 4.141100153340907e-08,
+      "sha256": "1975358719a707ccd20d5079c37f5de837e62a47a1d972ea3d03f1b666eb7a47"
     }
   },
   "schema_reference": "Webots R2025a Contents/Resources/nodes/IndexedFaceSet.wrl: ccw supported; solid is not a field",

@@ -2,9 +2,9 @@
   "name": "RobotRacers",
   "revision": "RevQ",
   "mass_kg": 0.18,
-  "wheel_radius_m": 0.0115,
-  "wheel_width_m": 0.04,
-  "track_width_m": 0.19,
+  "wheel_radius_m": 0.0165,
+  "wheel_width_m": 0.007,
+  "track_width_m": 0.163,
   "body_width_m": 0.13,
   "body_length_m": 0.07,
   "encoder_counts_per_revolution": 59.94,
@@ -25,8 +25,8 @@
   ],
   "provenance": {
     "mass_kg": "estimated",
-    "track_width_m": "inferred from user outer width 230 mm minus wheel width 40 mm",
-    "wheel_dimensions": "Ja-Bots 23x40",
+    "track_width_m": "2026-11-17 user: approximately 170 mm total exterior width including two 7 mm wheels; centre separation = 170 - 7 = 163 mm",
+    "wheel_dimensions": "2026-11-17 user: 33 mm outer diameter, 7 mm axial width; replaces previous Ja-Bots 23x40 reference",
     "motor": "Pololu #5178 manufacturer",
     "encoder": "12 x 4.995; already quadrature",
     "friction": "estimated",
@@ -34,19 +34,20 @@
     "fan_force_n": "unmeasured; disabled",
     "body_center_of_mass_m": "estimated; body only, wheels separate",
     "body_inertia_kg_m2": "estimated diagonal at 156g body mass; scales with body mass",
-    "wheel_mass_kg": "estimated per assembled wheel"
+    "wheel_mass_kg": "previous estimated per-wheel mass retained; replacement wheel mass not measured",
+    "wheel_height_change_m": "5 mm derived from radius change 11.5 to 16.5 mm; body-relative mounting geometry retained, not a new height measurement"
   },
-  "marker_height_m": 0.023,
+  "marker_height_m": 0.028,
   "cad_body_offset_m": [
     0.01315,
     0,
-    0
+    0.005
   ],
   "wheel_mass_kg": 0.012,
   "body_center_of_mass_m": [
     0.01315,
     0,
-    0.013
+    0.018
   ],
   "body_inertia_kg_m2": [
     0.00015,
@@ -59,12 +60,12 @@
       0.08315
     ],
     "y": [
-      -0.115,
-      0.115
+      -0.085,
+      0.085
     ],
     "z": [
       0,
-      0.0353
+      0.0403
     ]
   }
 }

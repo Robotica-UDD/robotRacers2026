@@ -8,7 +8,7 @@ namespace robotracers {
 constexpr double pi = 3.14159265358979323846;
 inline double limit(double x, double lo, double hi) { return std::max(lo, std::min(hi, x)); }
 struct Parameters {
-  double radius = .0115, track = .19, counts_per_turn = 59.94;
+  double radius = .0165, track = .163, counts_per_turn = 59.94;
   double voltage = 6., no_load_rpm = 6500., no_load_current = .17;
   double stall_current = 1.5, stall_torque = .008825985;
   double max_current = 1.53, acceleration = 1.0;

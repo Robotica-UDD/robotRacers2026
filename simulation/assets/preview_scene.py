@@ -1,5 +1,6 @@
 """Optional Blender preview of the generated visual; no simulation behaviour."""
 import bpy
+import json
 from mathutils import Vector
 from pathlib import Path
 
@@ -10,9 +11,10 @@ def imported(name, location=(0,0,0)):
     selected=list(bpy.context.selected_objects)
     for ob in selected: ob.location=Vector(ob.location)+Vector(location)
     return selected
-imported('body')
-imported('wheel',(-.01315,.095,.0115))
-imported('wheel',(-.01315,-.095,.0115))
+parameters=json.loads((here.parent/'config/robot.json').read_text())
+imported('body',(0,0,parameters['cad_body_offset_m'][2]))
+imported('wheel',(-.01315,parameters['track_width_m']/2,parameters['wheel_radius_m']))
+imported('wheel',(-.01315,-parameters['track_width_m']/2,parameters['wheel_radius_m']))
 bpy.ops.mesh.primitive_plane_add(size=200, location=(0,0,-.0005))
 ground=bpy.context.object;ground.name='Preview_ground'
 mat=bpy.data.materials.new('Preview_white');mat.diffuse_color=(.74,.76,.79,1);ground.data.materials.append(mat)

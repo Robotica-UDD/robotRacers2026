@@ -4,6 +4,8 @@
 using namespace robotracers;
 int main() {
   Drive drive;
+  assert(std::abs(drive.p.radius-.0165)<1e-12);
+  assert(std::abs(drive.p.track-.163)<1e-12);
   assert(std::abs(drive.torque(255,0)-drive.p.stall_torque)<1e-10);
   assert(std::abs(drive.torque(-255,0)+drive.p.stall_torque)<1e-10);
   assert(drive.torque(0,30)<0 && drive.torque(0,-30)>0);

@@ -70,7 +70,8 @@ def test_service_bridge_commands_require_motion_flag_rearm_and_fresh_data():
     assert bridge.command({**base,"seq":2,"mode":"idle"})
     assert bridge.command({**base,"seq":3})
     packet=transport.sent[-1]
-    assert packet["left_mps"]==pytest.approx(.105) and packet["right_mps"]==pytest.approx(.295)
+    # v +/- omega*b/2, with the user's 163 mm wheel-centre separation.
+    assert packet["left_mps"]==pytest.approx(.1185) and packet["right_mps"]==pytest.approx(.2815)
     assert packet["ttl_ms"]==250
     assert not bridge.command(base)
     assert not bridge.command({**base,"seq":4,"stamp":9.})

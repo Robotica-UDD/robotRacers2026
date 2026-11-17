@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate a fully local Webots world from the checked-in RevQ geometry."""
 from pathlib import Path
+import argparse
 import json
 import math
 import sys
@@ -31,12 +32,14 @@ def plane_tag(identifier, cx,cy,z,side,robot=False):
       geometry IndexedFaceSet {{ coord Coordinate {{ point [{coords}] }} coordIndex [0,3,2,1,-1]
       texCoord TextureCoordinate {{ point [0 1,1 1,1 0,0 0] }} texCoordIndex [0,3,2,1,-1] ccw TRUE }} }}'''
 
-def generate():
+def generate(*, proto_only=False):
     (SIM/'webots/protos').mkdir(parents=True,exist_ok=True)
     markers=SIM/'assets/markers';markers.mkdir(parents=True,exist_ok=True)
-    for i in range(5): marker_texture(i, markers/f'tag_{i}.png')
+    if not proto_only:
+        for i in range(5): marker_texture(i, markers/f'tag_{i}.png')
     p=json.loads((SIM/'config/robot.json').read_text())
     radius=p['wheel_radius_m'];width=p['wheel_width_m'];track=p['track_width_m'];wheel_mass=p['wheel_mass_kg']
+    body_lift=p['cad_body_offset_m'][2]
     wheel_inertia_radial=wheel_mass*(3*radius**2+width**2)/12
     wheel_inertia_axial=wheel_mass*radius**2/2
     center=' '.join(map(str,p['body_center_of_mass_m']))
@@ -46,6 +49,8 @@ def generate():
     if not body_path.exists() or not wheel_path.exists():
         raise SystemExit('Generate RevQ assets first: python simulation/tools/build_assets.py')
     body=body_path.read_text();wheel=wheel_path.read_text()
+    manifest=json.loads((SIM/'assets/manifest.json').read_text())
+    mesh_radius=manifest['wheel_radius_m'];mesh_width=manifest['wheel_width_m']
     # Native child fragments carry exactly the generated CAD geometry, including materials.
     body='\n'.join(x for x in body.splitlines() if not x.startswith('#VRML'))
     wheel='\n'.join(x for x in wheel.splitlines() if not x.startswith('#VRML'))
@@ -53,10 +58,10 @@ def generate():
     for name,y in [('left',track/2),('right',-track/2)]:
         wheels.append(f'''HingeJoint {{ jointParameters HingeJointParameters {{ axis 0 1 0 anchor 0 {y} {radius} dampingConstant 0 staticFriction .00001 }}
         device [ RotationalMotor {{ name "{name}_motor" maxVelocity 800 maxTorque .015 }} PositionSensor {{ name "{name}_encoder" }} ]
-        endPoint Solid {{ translation 0 {y} {radius} children [Transform {{ scale {radius/.0115} {width/.04} {radius/.0115} children [{wheel}] }}] name "{name}_wheel" contactMaterial "rubber"
+        endPoint Solid {{ translation 0 {y} {radius} children [Transform {{ scale {radius/mesh_radius} {width/mesh_width} {radius/mesh_radius} children [{wheel}] }}] name "{name}_wheel" contactMaterial "rubber"
           boundingObject Pose {{ rotation 1 0 0 -1.57079632679 children [ Cylinder {{ radius {radius} height {width} subdivision 32 }} ] }}
           physics Physics {{ density -1 mass {wheel_mass} centerOfMass [0 0 0] inertiaMatrix [{wheel_inertia_radial} {wheel_inertia_axial} {wheel_inertia_radial} 0 0 0] }} }} }}''')
-    tag=plane_tag(0,-.02685,0,.023,.04,True)
+    tag=plane_tag(0,*p['marker_offset_m'],p['marker_height_m'],p['marker_size_m'],True)
     line_sensors='\n'.join(f'''DistanceSensor {{ translation .079 {(.028-i*.003733333):.8f} .0045 rotation 0 1 0 1.57079632679 name "line_reflectance_{i}" type "infra-red" lookupTable [0 1000 0,.01 500 .02,.03 0 .05] }}''' for i in range(16))
     proto=f'''#VRML_SIM R2025a utf8
 # Copyright Robotica UDD. MIT. Generated from RevQ; dynamics are provisional.
@@ -64,25 +69,32 @@ PROTO RobotRacers [ field SFVec3f translation -.6 .55 0 field SFRotation rotatio
   Robot {{ translation IS translation rotation IS rotation name "RobotRacers" controller "robot_driver"
     contactMaterial "skid" synchronization TRUE
     children [
-      Pose {{ translation .01315 0 0 children [ {body} ] }}
+      Pose {{ translation .01315 0 {body_lift} children [ {body} ] }}
       DEF ROBOT_MARKER Pose {{ translation IS markerShift children [{tag}] }}
+      Pose {{ translation 0 0 {body_lift} children [
       LED {{ translation -.018 .039 .012 name "status_rgb" color [] children [ Shape {{ appearance PBRAppearance {{ baseColor .02 .15 .04 emissiveColor .01 .8 .1 metalness 0 roughness .5 }} geometry Sphere {{ radius .0016 subdivision 1 }} }} ] }}
       DistanceSensor {{ translation .052 .055 .005 rotation 0 1 0 1.57079632679 name "reflectance_left" type "infra-red" lookupTable [0 1000 0,.01 500 .02,.03 0 .05] numberOfRays 3 aperture .15 }}
       DistanceSensor {{ translation .052 -.055 .005 rotation 0 1 0 1.57079632679 name "reflectance_right" type "infra-red" lookupTable [0 1000 0,.01 500 .02,.03 0 .05] numberOfRays 3 aperture .15 }}
       {line_sensors}
+      ] }}
       {''.join(wheels)}
     ]
     boundingObject Group {{ children [
+      Pose {{ translation 0 0 {body_lift} children [ Group {{ children [
       # Conservative envelope of PCB, motors, connectors, battery and sensor bar.
       # Its lower surface stays above the floor: only wheels and skid support weight.
       Pose {{ translation .01515 0 .01965 children [Box {{ size .136 .15 .0313 }}] }}
       Pose {{ translation .065 0 .001 children [Cylinder {{ radius .0045 height .002 subdivision 16 }}] }}
+      ] }} ] }}
     ] }}
     physics Physics {{ density -1 mass IS bodyMass centerOfMass [{center}] inertiaMatrix IS bodyInertia }}
   }}
 }}
 '''
     (SIM/'webots/protos/RobotRacers.proto').write_text(proto)
+    if proto_only:
+        print('Robot PROTO generated; existing user world preserved:',SIM/'webots/protos/RobotRacers.proto')
+        return
     scale=1.0
     # Boundary of the free H-shaped corridor. Each edge is a static wall.
     vertices=[(-.85,-.8),(-.35,-.8),(-.35,-.25),(.35,-.25),(.35,-.8),(.85,-.8),(.85,.8),(.35,.8),(.35,.25),(-.35,.25),(-.35,.8),(-.85,.8)]
@@ -120,4 +132,7 @@ DEF ARENA_SUPERVISOR Robot {{ name "arena_camera" controller "arena_camera" supe
     (SIM/'webots/worlds/robotracers.wbt').write_text(world)
     print('World generated:',SIM/'webots/worlds/robotracers.wbt')
 
-if __name__=='__main__': generate()
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--proto-only',action='store_true',help='Rebuild robot geometry without writing the world or marker textures')
+    generate(proto_only=parser.parse_args().proto_only)

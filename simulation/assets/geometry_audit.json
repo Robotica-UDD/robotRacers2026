@@ -4,33 +4,33 @@
   "scope": "Bounds and configuration consistency only. Not measured assembled CAD, PCBA clearance certification or a calibrated digital twin.",
   "source_sha256": {
     "simulation/assets/robot/body.obj": "13773c205012ab6a911c12e781623cca0943d9011e054a60de4c8697beea66b0",
-    "simulation/assets/manifest.json": "6e5f9f63476bb9efa35fd5b684943adb37f0b489d2bf42c0e31a182b2882095a",
-    "simulation/config/robot.json": "69f243585206ce27f270fd29ab7f2cd42844876691686efb76d49b6457968248",
-    "simulation/tools/build_world.py": "6a647d5f02ffac4aa534c2fd2fbeaed3230c4f35267e21a09c075152db6a1a29"
+    "simulation/assets/manifest.json": "df733bed08a77c0fa0b1795de8c0815002033ea04b2005fb3ef1c364ec3a8d5b",
+    "simulation/config/robot.json": "5b610032219cb158a2e7d42a57e13dd85ae9d779ac8cb1b0a20b189c684a5477",
+    "simulation/tools/build_world.py": "611cb18015d6c0c1a6a03e01362e5d92d1153ec6181b7cdb7e2ee0f902e177a2"
   },
   "collision_boxes_from_generator_m": {
     "main": [
       [
         -0.05285000000000001,
         -0.075,
-        0.004
+        0.009000000000000001
       ],
       [
         0.08315,
         0.075,
-        0.0353
+        0.040299999999999996
       ]
     ],
     "front_support": [
       [
         0.060500000000000005,
         -0.0045,
-        0.0
+        0.005
       ],
       [
         0.0695,
         0.0045,
-        0.002
+        0.007
       ]
     ]
   },
@@ -38,12 +38,12 @@
     [
       -0.05285,
       -0.026000000000000002,
-      0.0222
+      0.027200000000000002
     ],
     [
       -0.0008499999999999966,
       0.026000000000000002,
-      0.0228
+      0.027800000000000002
     ]
   ],
   "marker_carrier_inside_main_box": true,
@@ -54,40 +54,41 @@
     [
       -0.02835,
       -0.075,
-      0.0
+      0.005
     ],
     [
       0.08315,
       0.075,
-      0.035006002
+      0.040006002
     ]
   ],
   "front_support_visual_bounds_in_base_m": [
     [
       0.041,
       -0.0065,
-      0.0
+      0.005
     ],
     [
       0.06949999999999999,
       0.0065,
-      0.005
+      0.01
     ]
   ],
   "front_support_contact_in_base_m": [
     0.065,
     0,
-    0
+    0.005
   ],
   "nominal_clearances_m": {
-    "wheel_inner_surface_to_PCB_edge": 0.009999999999999995,
-    "wheel_inner_surface_to_motor_case_outer_surface": 0.01,
-    "wheel_inner_surface_to_bracket_outer_surface": 0.009,
+    "wheel_inner_surface_to_PCB_edge": 0.012999999999999998,
+    "wheel_inner_surface_to_motor_case_outer_surface": 0.012999999999999998,
+    "wheel_inner_surface_to_bracket_outer_surface": 0.011999999999999997,
     "battery_case_bottom_above_highest_PCB_component": 0.0034600000000000013,
     "battery_case_bottom_above_motor_encoder_top": 0.0032499999999999994,
     "marker_carrier_to_turbine_housing_longitudinal": 0.0019999999999999966,
     "marker_carrier_to_battery_strap_lateral": 0.0024999999999999988,
     "shaft_axial_engagement_in_wheel_mesh": 0.0,
+    "shaft_to_wheel_inner_plane_gap": 0.0030000000000000027,
     "support_disc_outside_support_collider_longitudinal_each_side": 0.0
   },
   "PCB_parametric_bounds_overlap_candidates": [
@@ -133,10 +134,10 @@
   ],
   "estimates": {
     "mass_kg": "estimated",
-    "wheel_mass_kg": "estimated per assembled wheel",
+    "wheel_mass_kg": "previous estimated per-wheel mass retained; replacement wheel mass not measured",
     "body_center_of_mass_m": "estimated; body only, wheels separate",
     "body_inertia_kg_m2": "estimated diagonal at 156g body mass; scales with body mass",
-    "track_width_m": "inferred from user outer width 230 mm minus wheel width 40 mm",
+    "track_width_m": "2026-11-17 user: approximately 170 mm total exterior width including two 7 mm wheels; centre separation = 170 - 7 = 163 mm",
     "friction": "estimated",
     "skid_friction": "estimated",
     "fan_force_n": "unmeasured; disabled"
@@ -153,8 +154,9 @@
   ],
   "inertia_positive_and_triangle_consistent": true,
   "limitations": [
-    "Motor/support locations follow board coordinates; wheel track is inferred, not a mounting measurement.",
-    "Shaft meets wheel inner plane with no modelled insertion. Shaft extension, hub offset and attachment require assembled measurements.",
+    "Wheel track 163 mm derives from the approximately 170 mm exterior span and 7 mm wheel width supplied by the user on 2026-11-17; motor/support meshes retain their prior board-relative positions.",
+    "The existing schematic shaft ends at 75 mm from centre; the replacement wheel inner plane is at 78 mm. The resulting 3 mm model gap is not a measurement of the real attachment; hub offset and actual insertion remain unmeasured.",
+    "Larger wheels raise the body-relative assemblies by 5 mm in the nominal level pose. The unchanged provisional front skid can require pitch/settling; its real height and replacement wheel masses remain unmeasured.",
     "Battery case clears electronics; battery leads intentionally terminate at the XT30 region. Cable routes are illustrative.",
     "The main collision box fills cutouts and gaps conservatively; it is not a triangle-accurate collision mesh.",
     "The support collider, tongue and disc are approximate; thin attachment geometry is not exactly covered by both collision boxes.",

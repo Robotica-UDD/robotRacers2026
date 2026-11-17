@@ -49,6 +49,9 @@ def main():
     parts = manifest["body"]["parts"]
     offset = config["cad_body_offset_m"]
     main_box, skid_box = collision_boxes((SIM / "tools/build_world.py").read_text())
+    body_lift=config['cad_body_offset_m'][2]
+    main_box=translate(main_box,[0,0,body_lift])
+    skid_box=translate(skid_box,[0,0,body_lift])
     body_bounds = {name: translate(part["bounds_m"], offset) for name, part in parts.items()}
     marker_center = [*config["marker_offset_m"], config["marker_height_m"]]
     marker_half_side = config["marker_size_m"] * 1.3 / 2
@@ -77,16 +80,18 @@ def main():
         "visual_parts_not_fully_inside_main_box": below_envelope,
         "body_visual_bounds_in_base_m": translate(manifest["body"]["bounds_m"], offset),
         "front_support_visual_bounds_in_base_m": body_bounds["Front_skid_estimated"],
-        "front_support_contact_in_base_m": parts["Front_skid_estimated"]["physical_base_contact_centre_m"],
+        "front_support_contact_in_base_m": [*parts["Front_skid_estimated"]["physical_base_contact_centre_m"][:2],
+                                            parts["Front_skid_estimated"]["physical_base_contact_centre_m"][2]+body_lift],
         "nominal_clearances_m": {
             "wheel_inner_surface_to_PCB_edge": config["track_width_m"]/2-config["wheel_width_m"]/2-.065,
-            "wheel_inner_surface_to_motor_case_outer_surface": .010,
-            "wheel_inner_surface_to_bracket_outer_surface": .009,
+            "wheel_inner_surface_to_motor_case_outer_surface": config["track_width_m"]/2-config["wheel_width_m"]/2-.065,
+            "wheel_inner_surface_to_bracket_outer_surface": config["track_width_m"]/2-config["wheel_width_m"]/2-.066,
             "battery_case_bottom_above_highest_PCB_component": manifest["clearances"]["battery_bottom_m"]-manifest["clearances"]["maximum_PCB_component_top_m"],
             "battery_case_bottom_above_motor_encoder_top": .020-parts["Pololu5178_left"]["bounds_m"][1][2],
             "marker_carrier_to_turbine_housing_longitudinal": body_bounds["Turbine_32mm"][0][0]-carrier[1][0],
             "marker_carrier_to_battery_strap_lateral": .0285-carrier[1][1],
             "shaft_axial_engagement_in_wheel_mesh": 0.,
+            "shaft_to_wheel_inner_plane_gap": max(0.,config["track_width_m"]/2-config["wheel_width_m"]/2-.075),
             "support_disc_outside_support_collider_longitudinal_each_side": max(0., .0045-(skid_box[1][0]-skid_box[0][0])/2),
         },
         "PCB_parametric_bounds_overlap_candidates": candidates,
@@ -96,8 +101,9 @@ def main():
         "inertia_triangle_margins_kg_m2": inertia_margins,
         "inertia_positive_and_triangle_consistent": min(principal)>0 and min(inertia_margins)>=-1e-12,
         "limitations": [
-            "Motor/support locations follow board coordinates; wheel track is inferred, not a mounting measurement.",
-            "Shaft meets wheel inner plane with no modelled insertion. Shaft extension, hub offset and attachment require assembled measurements.",
+            "Wheel track 163 mm derives from the approximately 170 mm exterior span and 7 mm wheel width supplied by the user on 2026-11-17; motor/support meshes retain their prior board-relative positions.",
+            "The existing schematic shaft ends at 75 mm from centre; the replacement wheel inner plane is at 78 mm. The resulting 3 mm model gap is not a measurement of the real attachment; hub offset and actual insertion remain unmeasured.",
+            "Larger wheels raise the body-relative assemblies by 5 mm in the nominal level pose. The unchanged provisional front skid can require pitch/settling; its real height and replacement wheel masses remain unmeasured.",
             "Battery case clears electronics; battery leads intentionally terminate at the XT30 region. Cable routes are illustrative.",
             "The main collision box fills cutouts and gaps conservatively; it is not a triangle-accurate collision mesh.",
             "The support collider, tongue and disc are approximate; thin attachment geometry is not exactly covered by both collision boxes.",

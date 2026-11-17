@@ -13,7 +13,7 @@ from simulation.service.config import load_configuration
 
 class RosBridgeCore:
     """Transformaciones SI y límites de consigna, comprobables sin una instalación ROS."""
-    def __init__(self,track_width:float=.19,clock=time.monotonic,wheel_radius:float=.0115,counts_per_turn:float=59.94):
+    def __init__(self,track_width:float=.163,clock=time.monotonic,wheel_radius:float=.0165,counts_per_turn:float=59.94):
         self.track=track_width;self.clock=clock;self.x=self.y=self.yaw=0.
         self.previous_time=None;self.previous_counts=None;self.latest_velocity=None;self.command_seq=0
         self.count_distance=2*math.pi*wheel_radius/counts_per_turn
